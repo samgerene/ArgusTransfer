@@ -29,7 +29,7 @@ namespace ArgusTransfer.Sample
     /// <summary>
     /// Entry point for the ArgusTransfer sample application
     /// </summary>
-    public class Program
+    public static class Program
     {
         /// <summary>
         /// Main entry point that configures and runs the sample host
