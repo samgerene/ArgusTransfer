@@ -67,7 +67,7 @@ namespace ArgusTransfer.Routing
                 var templateSegment = templateSegments[i];
                 var routeSegment = routeSegments[i];
 
-                if (templateSegment.StartsWith("{") && templateSegment.EndsWith("}"))
+                if (templateSegment.StartsWith('{') && templateSegment.EndsWith('}'))
                 {
                     var paramContent = templateSegment.Substring(1, templateSegment.Length - 2);
 

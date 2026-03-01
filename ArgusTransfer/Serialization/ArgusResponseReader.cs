@@ -56,7 +56,7 @@ namespace ArgusTransfer.Serialization
             var response = ParseStatusLine(statusLine);
             var contentLength = -1;
 
-            string? line;
+            string line;
 
             while ((line = reader.ReadLine()) != null)
             {
@@ -115,7 +115,7 @@ namespace ArgusTransfer.Serialization
             var response = ParseStatusLine(statusLine);
             var contentLength = -1;
 
-            string? line;
+            string line;
 
             while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
             {

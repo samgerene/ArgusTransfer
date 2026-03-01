@@ -46,6 +46,6 @@ namespace ArgusTransfer.Protocol
         /// <summary>
         /// The body of the message, typically used to carry a payload
         /// </summary>
-        public string? Body { get; set; }
+        public string Body { get; set; }
     }
 }

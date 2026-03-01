@@ -187,9 +187,9 @@ namespace ArgusTransfer.Routing
         /// The <see cref="ArgusHandlerDelegate"/> to invoke when matched
         /// </param>
         /// <returns>
-        /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
+        /// An <see cref="ArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
-        private IArgusEndpointConventionBuilder Map(ArgusVerb verb, string routeTemplate, ArgusHandlerDelegate handler)
+        private ArgusEndpointConventionBuilder Map(ArgusVerb verb, string routeTemplate, ArgusHandlerDelegate handler)
         {
             var endpoint = new ArgusRouteEndpoint
             {

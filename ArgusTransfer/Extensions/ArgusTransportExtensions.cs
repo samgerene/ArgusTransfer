@@ -44,7 +44,7 @@ namespace ArgusTransfer.Extensions
         /// <returns>
         /// The <see cref="IServiceCollection"/> for method chaining
         /// </returns>
-        public static IServiceCollection AddArgusPipeHost(this IServiceCollection services, Action<ArgusPipeHostOptions>? configure = null)
+        public static IServiceCollection AddArgusPipeHost(this IServiceCollection services, Action<ArgusPipeHostOptions> configure = null)
         {
             if (configure != null)
             {
