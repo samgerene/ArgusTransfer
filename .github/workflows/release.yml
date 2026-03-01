@@ -121,7 +121,7 @@ jobs:
           echo "" >> RELEASE_NOTES.md
 
       - name: Pack
-        run: dotnet pack -c Release -o ReleaseBuilds SysML2.NET.sln
+        run: dotnet pack -c Release -o ReleaseBuilds ArgusTransfer.sln
 
       - name: Push to NuGet
         env:
@@ -138,7 +138,7 @@ jobs:
         with:
           draft: true
           prerelease: ${{ env.PRERELEASE }}
-          name: "SysML2.NET ${{ env.VERSION }}"
+          name: "ArgusTransfer ${{ env.VERSION }}"
           tag_name: ${{ env.VERSION }}
           body_path: RELEASE_NOTES.md
         env:

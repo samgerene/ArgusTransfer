@@ -24,6 +24,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.github\workflows\nuget-reference-check.yml = .github\workflows\nuget-reference-check.yml
 		.github\CONTRIBUTING.md = .github\CONTRIBUTING.md
 		.github\PULL_REQUEST_TEMPLATE.md = .github\PULL_REQUEST_TEMPLATE.md
+		.github\workflows\release.yml = .github\workflows\release.yml
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArgusTransfer.Sample", "ArgusTransfer.Sample\ArgusTransfer.Sample.csproj", "{3027E57F-961E-42E5-9C0E-009F0EC45F1E}"
