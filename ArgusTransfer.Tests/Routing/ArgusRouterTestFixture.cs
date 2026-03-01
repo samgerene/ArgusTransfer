@@ -159,5 +159,97 @@ namespace ArgusTransfer.Tests.Routing
 
             Assert.That(response.CorrelationToken, Is.EqualTo(correlationToken));
         }
+
+        [Test]
+        public async Task Verify_that_MapPut_dispatches_to_handler()
+        {
+            this.router.MapPut("/resource", (request, routeValues) =>
+            {
+                return Task.FromResult(new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                });
+            });
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.PUT,
+                Route = "/resource"
+            };
+
+            var response = await this.router.RouteAsync(request);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_MapPatch_dispatches_to_handler()
+        {
+            this.router.MapPatch("/resource", (request, routeValues) =>
+            {
+                return Task.FromResult(new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                });
+            });
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.PATCH,
+                Route = "/resource"
+            };
+
+            var response = await this.router.RouteAsync(request);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_MapHead_dispatches_to_handler()
+        {
+            this.router.MapHead("/resource", (request, routeValues) =>
+            {
+                return Task.FromResult(new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                });
+            });
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.HEAD,
+                Route = "/resource"
+            };
+
+            var response = await this.router.RouteAsync(request);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_MapDelete_dispatches_to_handler()
+        {
+            this.router.MapDelete("/resource", (request, routeValues) =>
+            {
+                return Task.FromResult(new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                });
+            });
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.DELETE,
+                Route = "/resource"
+            };
+
+            var response = await this.router.RouteAsync(request);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
     }
 }

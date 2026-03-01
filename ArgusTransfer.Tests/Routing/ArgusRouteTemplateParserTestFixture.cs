@@ -112,5 +112,70 @@ namespace ArgusTransfer.Tests.Routing
 
             Assert.That(result, Is.False);
         }
+
+        [Test]
+        public void Verify_that_multiple_parameters_are_extracted()
+        {
+            var result = ArgusRouteTemplateParser.TryMatch(
+                "/resource/{type}/{id}",
+                "/resource/widget/42",
+                out var routeValues);
+
+            Assert.That(result, Is.True);
+            Assert.That(routeValues["type"], Is.EqualTo("widget"));
+            Assert.That(routeValues["id"], Is.EqualTo("42"));
+        }
+
+        [Test]
+        public void Verify_that_mixed_literal_and_parameter_segments_match()
+        {
+            var guid = "cfb2e590-b98a-4dbc-8e56-f5d389ac3a8e";
+
+            var result = ArgusRouteTemplateParser.TryMatch(
+                "/api/v1/{resource}/items/{id:Guid}",
+                $"/api/v1/orders/items/{guid}",
+                out var routeValues);
+
+            Assert.That(result, Is.True);
+            Assert.That(routeValues["resource"], Is.EqualTo("orders"));
+            Assert.That(routeValues["id"], Is.EqualTo(guid));
+        }
+
+        [Test]
+        public void Verify_that_root_route_matches()
+        {
+            var result = ArgusRouteTemplateParser.TryMatch(
+                "/",
+                "/",
+                out var routeValues);
+
+            Assert.That(result, Is.True);
+            Assert.That(routeValues, Is.Empty);
+        }
+
+        [Test]
+        public void Verify_that_Guid_constraint_is_case_insensitive()
+        {
+            var guid = "cfb2e590-b98a-4dbc-8e56-f5d389ac3a8e";
+
+            var result = ArgusRouteTemplateParser.TryMatch(
+                "/resource/{id:guid}",
+                $"/resource/{guid}",
+                out var routeValues);
+
+            Assert.That(result, Is.True);
+            Assert.That(routeValues["id"], Is.EqualTo(guid));
+        }
+
+        [Test]
+        public void Verify_that_route_with_trailing_slash_does_not_match_without()
+        {
+            var result = ArgusRouteTemplateParser.TryMatch(
+                "/healthendpoint/",
+                "/healthendpoint",
+                out _);
+
+            Assert.That(result, Is.False);
+        }
     }
 }

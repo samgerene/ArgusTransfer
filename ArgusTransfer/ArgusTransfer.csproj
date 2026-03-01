@@ -25,9 +25,11 @@
         <PackageReleaseNotes>
             [Initial] Version
         </PackageReleaseNotes>
-        <Nullable>enable</Nullable>
+        <Nullable>disable</Nullable>
         <ImplicitUsings>disable</ImplicitUsings>
         <RootNamespace>ArgusTransfer</RootNamespace>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <GenerateSBOM>true</GenerateSBOM>
     </PropertyGroup>
 
     <ItemGroup>
@@ -37,6 +39,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5" PrivateAssets="all" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
