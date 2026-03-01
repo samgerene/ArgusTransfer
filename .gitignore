@@ -403,9 +403,8 @@ FodyWeavers.xsd
 *.msp
 
 # JetBrains Rider
+.idea/
 *.sln.iml
-
-
 
 # Claude
 /.claude/settings.local.json
