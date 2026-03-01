@@ -20,6 +20,8 @@
 
 namespace ArgusTransfer.Sample
 {
+    using System.Diagnostics.CodeAnalysis;
+    
     using ArgusTransfer.Extensions;
     using ArgusTransfer.Routing;
 
@@ -29,6 +31,7 @@ namespace ArgusTransfer.Sample
     /// <summary>
     /// Entry point for the ArgusTransfer sample application
     /// </summary>
+    [ExcludeFromCodeCoverage]
     public static class Program
     {
         /// <summary>

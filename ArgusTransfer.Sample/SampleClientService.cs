@@ -21,6 +21,7 @@
 namespace ArgusTransfer.Sample
 {
     using System;
+    using System.Diagnostics.CodeAnalysis;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -34,6 +35,7 @@ namespace ArgusTransfer.Sample
     /// Background service that acts as a CLI client, executing all CRUD verbs
     /// sequentially against the sample pipe server and printing results
     /// </summary>
+    [ExcludeFromCodeCoverage]
     public class SampleClientService : BackgroundService
     {
         /// <summary>

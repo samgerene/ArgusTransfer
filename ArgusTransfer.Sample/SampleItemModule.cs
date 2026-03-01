@@ -22,6 +22,7 @@ namespace ArgusTransfer.Sample
 {
     using System;
     using System.Collections.Concurrent;
+    using System.Diagnostics.CodeAnalysis;
     using System.Linq;
     using System.Text.Json;
     using System.Threading.Tasks;
@@ -32,6 +33,7 @@ namespace ArgusTransfer.Sample
     /// <summary>
     /// Argus module that registers CRUD routes for <see cref="SampleItem"/> resources
     /// </summary>
+    [ExcludeFromCodeCoverage]
     public class SampleItemModule : IArgusModule
     {
         /// <summary>
