@@ -88,7 +88,7 @@ namespace ArgusTransfer.Server
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                var serverStream = new NamedPipeServerStream(this.options.PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                var serverStream = new NamedPipeServerStream(this.options.PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
                 await serverStream.WaitForConnectionAsync(stoppingToken);
 
                 _ = Task.Run(async () =>
