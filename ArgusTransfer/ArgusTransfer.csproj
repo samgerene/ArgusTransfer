@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Version>0.1.0</Version>
+        <LangVersion>14.0</LangVersion>
+        <Company>Sam Gerené</Company>
+        <Authors>Sam Gerené</Authors>
+        <Copyright>Copyright © Sam Gerené</Copyright>
+        <PackageId>ArgusTransfer</PackageId>
+        <AssemblyTitle>ArgusTransfer</AssemblyTitle>
+        <Title>Argus Transfer</Title>
+        <Description>Argus Transfer is framework that provides routing for named pipes inspired by the HTTP 1.1 request/response protocol that runs over named pipes layer.</Description>
+        <RequireLicenseAcceptance>true</RequireLicenseAcceptance>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <IncludeSource>true</IncludeSource>
+        <IncludeSymbols>true</IncludeSymbols>
+        <RepositoryUrl>https://github.com/samgerene/ArgusTransfer</RepositoryUrl>
+        <RepositoryType>Git</RepositoryType>
+        <NeutralLanguage>en-US</NeutralLanguage>
+        <SatelliteResourceLanguages>en-US</SatelliteResourceLanguages>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageIcon>argus-transfer-ico.png</PackageIcon>
+        <PackageTags>pipe routing argus protocol</PackageTags>
+        <PackageReleaseNotes>
+            [Initial] Version
+        </PackageReleaseNotes>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <RootNamespace>ArgusTransfer</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md" Pack="true" PackagePath="\" />
+        <None Include="..\argus-transfer-ico.png" Pack="true" PackagePath="" />
+        <InternalsVisibleTo Include="ArgusTransfer.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+    </ItemGroup>
+
+</Project>
