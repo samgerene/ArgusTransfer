@@ -2,7 +2,7 @@
 
 ## Introduction
 
-ArgusTransfer is framework that provides routing for named pipes inspired by the HTTP 1.1 request/response protocol that runs over named pipes layer.
+ArgusTransfer is framework that provides routing over named pipes inspired by the HTTP 1.1 request/response protocol. It is typically used to host services running in the background for which you would like to expose a REST like API but running a fully fledged HTTP server is too heavy or not allowed.
 
 ## Code Quality
 
@@ -23,7 +23,7 @@ GitHub actions are used to build and test the Argus Health application
 
 Branch | Build Status
 ------- | :------------
-Master | ![Build Status](https://github.com/samgerene/ArgusTransfer/actions/workflows/CodeQuality.yml/badge.svg?branch=master)
+Main | ![Build Status](https://github.com/samgerene/ArgusTransfer/actions/workflows/CodeQuality.yml/badge.svg?branch=main)
 Development | ![Build Status](https://github.com/samgerene/ArgusTransfer/actions/workflows/CodeQuality.yml/badge.svg?branch=development)
 
 # Software Bill of Materials (SBOM) and Provenance
