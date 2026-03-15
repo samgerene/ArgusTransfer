@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="HealthServiceMessageCommandType.cs">
+//   <copyright file="JsonArgusBodySerializer.cs">
 //
 //     Copyright (c) 2025-2026 Sam Gerené
 //
@@ -18,41 +18,44 @@
 //   </copyright>
 //   ------------------------------------------------------------------------------------------------
 
-namespace ArgusTransfer.Protocol
+namespace ArgusTransfer.Serialization
 {
     /// <summary>
-    /// Enumeration of HTTP-like verbs used in the Argus IPC protocol
+    /// An <see cref="IArgusBodySerializer"/> implementation for JSON content that passes the body through unchanged
     /// </summary>
-    public enum ArgusVerb
+    public class JsonArgusBodySerializer : IArgusBodySerializer
     {
         /// <summary>
-        /// Retrieve a resource or collection of resources
+        /// Gets the MIME content type: "application/json"
         /// </summary>
-        GET,
+        public string ContentType => "application/json";
 
         /// <summary>
-        /// Create a new resource
+        /// Returns the body unchanged (identity serialization)
         /// </summary>
-        POST,
+        /// <param name="body">
+        /// The body string to serialize
+        /// </param>
+        /// <returns>
+        /// The body string, unchanged
+        /// </returns>
+        public string WriteBody(string body)
+        {
+            return body;
+        }
 
         /// <summary>
-        /// Replace an existing resource
+        /// Returns the body unchanged (identity deserialization)
         /// </summary>
-        PUT,
-
-        /// <summary>
-        /// Partially update an existing resource
-        /// </summary>
-        PATCH,
-
-        /// <summary>
-        /// Retrieve metadata about a resource without the body
-        /// </summary>
-        HEAD,
-
-        /// <summary>
-        /// Delete an existing resource
-        /// </summary>
-        DELETE
+        /// <param name="body">
+        /// The raw body string read from the wire
+        /// </param>
+        /// <returns>
+        /// The body string, unchanged
+        /// </returns>
+        public string ReadBody(string body)
+        {
+            return body;
+        }
     }
 }

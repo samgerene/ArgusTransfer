@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------------------------------
 //   <copyright file="ArgusResponseReaderTestFixture.cs">
 //
-//     Copyright (c) 2026 Sam Gerené
+//     Copyright (c) 2025-2026 Sam Gerené
 //
 //     Licensed under the Apache License, Version 2.0 (the "License");
 //     you may not use this file except in compliance with the License.
@@ -31,17 +31,17 @@ namespace ArgusTransfer.Tests.Serialization
     using NUnit.Framework;
 
     /// <summary>
-    /// Suite of tests for the <see cref="ArgusTextResponseSerializer"/> class (read path)
+    /// Suite of tests for the <see cref="ArgusResponseSerializer"/> class (read path)
     /// </summary>
     [TestFixture]
     public class ArgusResponseReaderTestFixture
     {
-        private ArgusTextResponseSerializer serializer;
+        private ArgusResponseSerializer serializer;
 
         [SetUp]
         public void SetUp()
         {
-            this.serializer = new ArgusTextResponseSerializer();
+            this.serializer = new ArgusResponseSerializer();
         }
 
         [Test]
@@ -87,6 +87,17 @@ namespace ArgusTransfer.Tests.Serialization
             var response = this.serializer.Read(text);
 
             Assert.That(response.Headers, Is.Empty);
+        }
+
+        [Test]
+        public void Verify_that_Read_preserves_Content_Type_header()
+        {
+            var text = "ARGUS/1.0 200 OK\r\nContent-Type: application/json\r\nX-Custom: value\r\n\r\n";
+
+            var response = this.serializer.Read(text);
+
+            Assert.That(response.Headers["Content-Type"], Is.EqualTo("application/json"));
+            Assert.That(response.Headers["X-Custom"], Is.EqualTo("value"));
         }
 
         [Test]

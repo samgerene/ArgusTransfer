@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="HealthServiceMessageCommandType.cs">
+//   <copyright file="IArgusBodySerializer.cs">
 //
 //     Copyright (c) 2025-2026 Sam Gerené
 //
@@ -18,41 +18,38 @@
 //   </copyright>
 //   ------------------------------------------------------------------------------------------------
 
-namespace ArgusTransfer.Protocol
+namespace ArgusTransfer.Serialization
 {
     /// <summary>
-    /// Enumeration of HTTP-like verbs used in the Argus IPC protocol
+    /// Defines the contract for serializing and deserializing message body content
     /// </summary>
-    public enum ArgusVerb
+    public interface IArgusBodySerializer
     {
         /// <summary>
-        /// Retrieve a resource or collection of resources
+        /// Gets the MIME content type produced by this serializer (e.g. "application/json")
         /// </summary>
-        GET,
+        string ContentType { get; }
 
         /// <summary>
-        /// Create a new resource
+        /// Serializes the body string for writing to the wire
         /// </summary>
-        POST,
+        /// <param name="body">
+        /// The body string to serialize
+        /// </param>
+        /// <returns>
+        /// The serialized body string
+        /// </returns>
+        string WriteBody(string body);
 
         /// <summary>
-        /// Replace an existing resource
+        /// Deserializes the body string read from the wire
         /// </summary>
-        PUT,
-
-        /// <summary>
-        /// Partially update an existing resource
-        /// </summary>
-        PATCH,
-
-        /// <summary>
-        /// Retrieve metadata about a resource without the body
-        /// </summary>
-        HEAD,
-
-        /// <summary>
-        /// Delete an existing resource
-        /// </summary>
-        DELETE
+        /// <param name="body">
+        /// The raw body string read from the wire
+        /// </param>
+        /// <returns>
+        /// The deserialized body string
+        /// </returns>
+        string ReadBody(string body);
     }
 }

@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------------------------------
 //   <copyright file="ArgusResponseSerializationTestFixture.cs">
 //
-//     Copyright (c) 2026 Sam Gerené
+//     Copyright (c) 2025-2026 Sam Gerené
 //
 //     Licensed under the Apache License, Version 2.0 (the "License");
 //     you may not use this file except in compliance with the License.
@@ -28,17 +28,17 @@ namespace ArgusTransfer.Tests.Serialization
     using NUnit.Framework;
 
     /// <summary>
-    /// Suite of tests for the <see cref="ArgusTextResponseSerializer"/> class (round-trip)
+    /// Suite of tests for the <see cref="ArgusResponseSerializer"/> class (round-trip)
     /// </summary>
     [TestFixture]
     public class ArgusResponseSerializationTestFixture
     {
-        private ArgusTextResponseSerializer serializer;
+        private ArgusResponseSerializer serializer;
 
         [SetUp]
         public void SetUp()
         {
-            this.serializer = new ArgusTextResponseSerializer();
+            this.serializer = new ArgusResponseSerializer();
         }
 
         [Test]
@@ -150,6 +150,23 @@ namespace ArgusTransfer.Tests.Serialization
 
             Assert.That(text, Does.Not.Contain("Content-Length"));
             Assert.That(text, Does.Not.Contain("Content-Type"));
+        }
+
+        [Test]
+        public void Verify_that_Content_Type_round_trips()
+        {
+            var original = new ArgusResponse
+            {
+                StatusCode = ArgusStatusCode.Ok,
+                CorrelationToken = Guid.Parse("cfb2e590-b98a-4dbc-8e56-f5d389ac3a8e"),
+                Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc),
+                Body = "{\"name\":\"test\"}"
+            };
+
+            var text = this.serializer.Write(original);
+            var deserialized = this.serializer.Read(text);
+
+            Assert.That(deserialized.Headers["Content-Type"], Is.EqualTo("application/json"));
         }
     }
 }

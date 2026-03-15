@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------------------------------
 //   <copyright file="ArgusSerializationExtensions.cs">
 //
-//     Copyright (c) 2026 Sam Gerené
+//     Copyright (c) 2025-2026 Sam Gerené
 //
 //     Licensed under the Apache License, Version 2.0 (the "License");
 //     you may not use this file except in compliance with the License.
@@ -31,9 +31,9 @@ namespace ArgusTransfer.Extensions
     public static class ArgusSerializationExtensions
     {
         /// <summary>
-        /// Registers the ARGUS/1.0 text protocol serializers as singletons.
+        /// Registers the <see cref="IArgusBodySerializer"/> as a singleton using <see cref="JsonArgusBodySerializer"/>.
         /// Uses <see cref="ServiceCollectionDescriptorExtensions.TryAddSingleton{TService, TImplementation}(IServiceCollection)"/>
-        /// so that a previously registered alternative format takes precedence.
+        /// so that a previously registered alternative body serializer takes precedence.
         /// </summary>
         /// <param name="services">
         /// The <see cref="IServiceCollection"/> to register services with
@@ -43,8 +43,7 @@ namespace ArgusTransfer.Extensions
         /// </returns>
         public static IServiceCollection AddArgusTextProtocol(this IServiceCollection services)
         {
-            services.TryAddSingleton<IArgusRequestSerializer, ArgusTextRequestSerializer>();
-            services.TryAddSingleton<IArgusResponseSerializer, ArgusTextResponseSerializer>();
+            services.TryAddSingleton<IArgusBodySerializer, JsonArgusBodySerializer>();
 
             return services;
         }

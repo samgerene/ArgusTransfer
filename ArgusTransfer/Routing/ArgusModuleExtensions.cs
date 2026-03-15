@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------------------------------
 //   <copyright file="ArgusModuleExtensions.cs">
 //
-//     Copyright (c) 2026 Sam Gerené
+//     Copyright (c) 2025-2026 Sam Gerené
 //
 //     Licensed under the Apache License, Version 2.0 (the "License");
 //     you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@
 
 namespace ArgusTransfer.Routing
 {
-    using System;
     using System.Linq;
     using System.Reflection;
 

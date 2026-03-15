@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------------------------------
 //   <copyright file="ArgusTransportExtensionsTestFixture.cs">
 //
-//     Copyright (c) 2026 Sam Gerené
+//     Copyright (c) 2025-2026 Sam Gerené
 //
 //     Licensed under the Apache License, Version 2.0 (the "License");
 //     you may not use this file except in compliance with the License.
@@ -76,45 +76,29 @@ namespace ArgusTransfer.Tests.Extensions
         }
 
         [Test]
-        public void Verify_that_AddArgusTextProtocol_registers_request_serializer()
+        public void Verify_that_AddArgusTextProtocol_registers_body_serializer()
         {
             var services = new ServiceCollection();
 
             services.AddArgusTextProtocol();
 
-            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusRequestSerializer));
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusBodySerializer));
 
             Assert.That(descriptor, Is.Not.Null);
-            Assert.That(descriptor.ImplementationType, Is.EqualTo(typeof(ArgusTextRequestSerializer)));
+            Assert.That(descriptor.ImplementationType, Is.EqualTo(typeof(JsonArgusBodySerializer)));
             Assert.That(descriptor.Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
         }
 
         [Test]
-        public void Verify_that_AddArgusTextProtocol_registers_response_serializer()
-        {
-            var services = new ServiceCollection();
-
-            services.AddArgusTextProtocol();
-
-            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusResponseSerializer));
-
-            Assert.That(descriptor, Is.Not.Null);
-            Assert.That(descriptor.ImplementationType, Is.EqualTo(typeof(ArgusTextResponseSerializer)));
-            Assert.That(descriptor.Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
-        }
-
-        [Test]
-        public void Verify_that_AddArgusPipeHost_registers_serializers()
+        public void Verify_that_AddArgusPipeHost_registers_body_serializer()
         {
             var services = new ServiceCollection();
 
             services.AddArgusPipeHost();
 
-            var requestDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusRequestSerializer));
-            var responseDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusResponseSerializer));
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusBodySerializer));
 
-            Assert.That(requestDescriptor, Is.Not.Null);
-            Assert.That(responseDescriptor, Is.Not.Null);
+            Assert.That(descriptor, Is.Not.Null);
         }
     }
 }

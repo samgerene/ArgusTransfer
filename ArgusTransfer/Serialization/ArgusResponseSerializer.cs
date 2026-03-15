@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------------------------------
 //   <copyright file="ArgusTextResponseSerializer.cs">
 //
-//     Copyright (c) 2026 Sam Gerené
+//     Copyright (c) 2025-2026 Sam Gerené
 //
 //     Licensed under the Apache License, Version 2.0 (the "License");
 //     you may not use this file except in compliance with the License.
@@ -32,8 +32,32 @@ namespace ArgusTransfer.Serialization
     /// <summary>
     /// Serializes and deserializes <see cref="ArgusResponse"/> messages using the ARGUS/1.0 text wire format
     /// </summary>
-    public class ArgusTextResponseSerializer : IArgusResponseSerializer
+    public class ArgusResponseSerializer
     {
+        /// <summary>
+        /// The <see cref="IArgusBodySerializer"/> used to serialize and deserialize the message body
+        /// </summary>
+        private readonly IArgusBodySerializer bodySerializer;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ArgusResponseSerializer"/> class
+        /// with the default <see cref="JsonArgusBodySerializer"/>
+        /// </summary>
+        public ArgusResponseSerializer() : this(new JsonArgusBodySerializer())
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ArgusResponseSerializer"/> class
+        /// </summary>
+        /// <param name="bodySerializer">
+        /// The <see cref="IArgusBodySerializer"/> used to serialize and deserialize the message body
+        /// </param>
+        public ArgusResponseSerializer(IArgusBodySerializer bodySerializer)
+        {
+            this.bodySerializer = bodySerializer;
+        }
+
         /// <summary>
         /// Serializes an <see cref="ArgusResponse"/> to its text wire format representation
         /// </summary>
@@ -71,11 +95,14 @@ namespace ArgusTransfer.Serialization
 
             if (!string.IsNullOrEmpty(response.Body))
             {
-                var bodyBytes = Encoding.UTF8.GetByteCount(response.Body);
+                var serializedBody = this.bodySerializer.WriteBody(response.Body);
+                var bodyBytes = Encoding.UTF8.GetByteCount(serializedBody);
 
                 if (!response.Headers.ContainsKey("Content-Type"))
                 {
-                    sb.Append("Content-Type: application/json\r\n");
+                    sb.Append("Content-Type: ");
+                    sb.Append(this.bodySerializer.ContentType);
+                    sb.Append("\r\n");
                 }
 
                 sb.Append("Content-Length: ");
@@ -87,7 +114,7 @@ namespace ArgusTransfer.Serialization
 
             if (!string.IsNullOrEmpty(response.Body))
             {
-                sb.Append(response.Body);
+                sb.Append(this.bodySerializer.WriteBody(response.Body));
             }
 
             return sb.ToString();
@@ -102,7 +129,7 @@ namespace ArgusTransfer.Serialization
         /// <param name="response">
         /// The <see cref="ArgusResponse"/> to serialize
         /// </param>
-        void IArgusResponseSerializer.Write(StreamWriter writer, ArgusResponse response)
+        public void Write(StreamWriter writer, ArgusResponse response)
         {
             writer.Write(this.Write(response));
             writer.Flush();
@@ -160,7 +187,7 @@ namespace ArgusTransfer.Serialization
                     totalRead += read;
                 }
 
-                response.Body = new string(bodyChars, 0, totalRead);
+                response.Body = this.bodySerializer.ReadBody(new string(bodyChars, 0, totalRead));
             }
 
             return response;
@@ -219,7 +246,7 @@ namespace ArgusTransfer.Serialization
                     totalRead += read;
                 }
 
-                response.Body = new string(bodyChars, 0, totalRead);
+                response.Body = this.bodySerializer.ReadBody(new string(bodyChars, 0, totalRead));
             }
 
             return response;
@@ -299,7 +326,7 @@ namespace ArgusTransfer.Serialization
                     contentLength = length;
                 }
             }
-            else if (!string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase))
+            else
             {
                 response.Headers[name] = value;
             }

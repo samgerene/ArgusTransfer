@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------------------------------
 //  <copyright file="ArgusClient.cs">
 //
-//    Copyright (C) 2025 Sam Gerené
+//    Copyright (C) 2025-2026 Sam Gerené
 //
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -42,14 +42,14 @@ namespace ArgusTransfer.Client
         private readonly string pipeName;
 
         /// <summary>
-        /// The <see cref="IArgusRequestSerializer"/> used to serialize outgoing requests
+        /// The <see cref="ArgusRequestSerializer"/> used to serialize outgoing requests
         /// </summary>
-        private readonly IArgusRequestSerializer requestSerializer;
+        private readonly ArgusRequestSerializer requestSerializer;
 
         /// <summary>
-        /// The <see cref="IArgusResponseSerializer"/> used to deserialize incoming responses
+        /// The <see cref="ArgusResponseSerializer"/> used to deserialize incoming responses
         /// </summary>
-        private readonly IArgusResponseSerializer responseSerializer;
+        private readonly ArgusResponseSerializer responseSerializer;
 
         /// <summary>
         /// Tracks whether this instance has been disposed
@@ -62,20 +62,17 @@ namespace ArgusTransfer.Client
         /// <param name="pipeName">
         /// The name of the named pipe to connect to. Defaults to "argus"
         /// </param>
-        /// <param name="requestSerializer">
-        /// An optional <see cref="IArgusRequestSerializer"/>. Defaults to <see cref="ArgusTextRequestSerializer"/>
-        /// </param>
-        /// <param name="responseSerializer">
-        /// An optional <see cref="IArgusResponseSerializer"/>. Defaults to <see cref="ArgusTextResponseSerializer"/>
+        /// <param name="bodySerializer">
+        /// An optional <see cref="IArgusBodySerializer"/>. Defaults to <see cref="JsonArgusBodySerializer"/>
         /// </param>
         public ArgusClient(
             string pipeName = "argus",
-            IArgusRequestSerializer requestSerializer = null,
-            IArgusResponseSerializer responseSerializer = null)
+            IArgusBodySerializer bodySerializer = null)
         {
             this.pipeName = pipeName;
-            this.requestSerializer = requestSerializer ?? new ArgusTextRequestSerializer();
-            this.responseSerializer = responseSerializer ?? new ArgusTextResponseSerializer();
+            var body = bodySerializer ?? new JsonArgusBodySerializer();
+            this.requestSerializer = new ArgusRequestSerializer(body);
+            this.responseSerializer = new ArgusResponseSerializer(body);
         }
 
         /// <summary>

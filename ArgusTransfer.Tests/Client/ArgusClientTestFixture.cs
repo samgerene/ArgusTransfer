@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------------------------------
 //   <copyright file="ArgusClientTestFixture.cs">
 //
-//     Copyright (c) 2026 Sam Gerené
+//     Copyright (c) 2025-2026 Sam Gerené
 //
 //     Licensed under the Apache License, Version 2.0 (the "License");
 //     you may not use this file except in compliance with the License.
@@ -39,15 +39,15 @@ namespace ArgusTransfer.Tests.Client
     [TestFixture]
     public class ArgusClientTestFixture
     {
-        private ArgusTextRequestSerializer requestSerializer;
+        private ArgusRequestSerializer requestSerializer;
 
-        private ArgusTextResponseSerializer responseSerializer;
+        private ArgusResponseSerializer responseSerializer;
 
         [SetUp]
         public void SetUp()
         {
-            this.requestSerializer = new ArgusTextRequestSerializer();
-            this.responseSerializer = new ArgusTextResponseSerializer();
+            this.requestSerializer = new ArgusRequestSerializer();
+            this.responseSerializer = new ArgusResponseSerializer();
         }
 
         [Test]
@@ -75,7 +75,7 @@ namespace ArgusTransfer.Tests.Client
                     Body = """[{"identifier":"cfb2e590-eed6-4223-b2ba-271ed0cb06da","name":"ep1","url":"https://example.com","frequency":30,"timeout":5,"retryCount":3}]"""
                 };
 
-                ((IArgusResponseSerializer)this.responseSerializer).Write(writer, response);
+                this.responseSerializer.Write(writer, response);
             });
 
             using var client = new ArgusClient(pipeName);
@@ -117,7 +117,7 @@ namespace ArgusTransfer.Tests.Client
                     StatusCode = ArgusStatusCode.Ok
                 };
 
-                ((IArgusResponseSerializer)this.responseSerializer).Write(writer, response);
+                this.responseSerializer.Write(writer, response);
             });
 
             using var client = new ArgusClient(pipeName);
@@ -163,7 +163,7 @@ namespace ArgusTransfer.Tests.Client
                     Body = requestBody
                 };
 
-                ((IArgusResponseSerializer)this.responseSerializer).Write(writer, response);
+                this.responseSerializer.Write(writer, response);
             });
 
             using var client = new ArgusClient(pipeName);

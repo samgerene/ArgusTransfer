@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------------------------------
 //   <copyright file="ArgusPipeHostBackgroundService.cs">
 //
-//     Copyright (c) 2026 Sam Gerené
+//     Copyright (c) 2025-2026 Sam Gerené
 //
 //     Licensed under the Apache License, Version 2.0 (the "License");
 //     you may not use this file except in compliance with the License.
@@ -56,14 +56,14 @@ namespace ArgusTransfer.Server
         private readonly ArgusPipeHostOptions options;
 
         /// <summary>
-        /// The <see cref="IArgusRequestSerializer"/> used to deserialize incoming requests
+        /// The <see cref="ArgusRequestSerializer"/> used to deserialize incoming requests
         /// </summary>
-        private readonly IArgusRequestSerializer requestSerializer;
+        private readonly ArgusRequestSerializer requestSerializer;
 
         /// <summary>
-        /// The <see cref="IArgusResponseSerializer"/> used to serialize outgoing responses
+        /// The <see cref="ArgusResponseSerializer"/> used to serialize outgoing responses
         /// </summary>
-        private readonly IArgusResponseSerializer responseSerializer;
+        private readonly ArgusResponseSerializer responseSerializer;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ArgusPipeHostBackgroundService"/> class
@@ -77,24 +77,20 @@ namespace ArgusTransfer.Server
         /// <param name="options">
         /// The <see cref="IOptions{ArgusPipeHostOptions}"/> containing the pipe configuration
         /// </param>
-        /// <param name="requestSerializer">
-        /// The <see cref="IArgusRequestSerializer"/> used to deserialize incoming requests
-        /// </param>
-        /// <param name="responseSerializer">
-        /// The <see cref="IArgusResponseSerializer"/> used to serialize outgoing responses
+        /// <param name="bodySerializer">
+        /// The <see cref="IArgusBodySerializer"/> used to serialize and deserialize message bodies
         /// </param>
         public ArgusPipeHostBackgroundService(
             ILogger<ArgusPipeHostBackgroundService> logger,
             ArgusRouter router,
             IOptions<ArgusPipeHostOptions> options,
-            IArgusRequestSerializer requestSerializer,
-            IArgusResponseSerializer responseSerializer)
+            IArgusBodySerializer bodySerializer)
         {
             this.logger = logger;
             this.router = router;
             this.options = options.Value;
-            this.requestSerializer = requestSerializer;
-            this.responseSerializer = responseSerializer;
+            this.requestSerializer = new ArgusRequestSerializer(bodySerializer);
+            this.responseSerializer = new ArgusResponseSerializer(bodySerializer);
         }
 
         /// <summary>
