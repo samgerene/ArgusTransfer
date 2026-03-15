@@ -21,6 +21,7 @@
 namespace ArgusTransfer.Routing
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
 
     /// <summary>
@@ -28,19 +29,50 @@ namespace ArgusTransfer.Routing
     /// </summary>
     /// <remarks>
     /// Supports literal segments, <c>{param}</c> parameter segments,
-    /// and <c>{param:Guid}</c> constrained parameter segments.
+    /// and <c>{param:constraint}</c> constrained parameter segments.
     /// Matching is case-insensitive for literal segments.
+    /// Built-in constraints include <c>Guid</c> and <c>ShortGuid</c>.
+    /// Custom constraints can be registered via <see cref="RegisterConstraint"/>.
     /// </remarks>
     internal static class ArgusRouteTemplateParser
     {
         /// <summary>
+        /// Registry of named route constraints
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, IArgusRouteConstraint> Constraints =
+            new ConcurrentDictionary<string, IArgusRouteConstraint>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Initializes the <see cref="ArgusRouteTemplateParser"/> class with built-in constraints
+        /// </summary>
+        static ArgusRouteTemplateParser()
+        {
+            Constraints["Guid"] = new GuidRouteConstraint();
+            Constraints["ShortGuid"] = new ShortGuidRouteConstraint();
+        }
+
+        /// <summary>
+        /// Registers a custom route constraint
+        /// </summary>
+        /// <param name="name">
+        /// The constraint name used in route templates (e.g. "Guid" for <c>{param:Guid}</c>)
+        /// </param>
+        /// <param name="constraint">
+        /// The <see cref="IArgusRouteConstraint"/> implementation
+        /// </param>
+        public static void RegisterConstraint(string name, IArgusRouteConstraint constraint)
+        {
+            Constraints[name] = constraint;
+        }
+
+        /// <summary>
         /// Attempts to match a route against a route template, extracting parameter values
         /// </summary>
         /// <param name="template">
-        /// The route template (e.g. "/healthendpoint/{identifier:Guid}")
+        /// The route template (e.g. "/healthendpoint/{identifier:ShortGuid}")
         /// </param>
         /// <param name="route">
-        /// The actual route to match (e.g. "/healthendpoint/cfb2e590-1234-5678-9abc-def012345678")
+        /// The actual route to match (e.g. "/healthendpoint/kOWyz4q5vE2OVvXTiaw6jg")
         /// </param>
         /// <param name="routeValues">
         /// When the method returns <c>true</c>, contains the extracted parameter values keyed by parameter name
@@ -48,6 +80,9 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// <c>true</c> if the route matches the template; otherwise, <c>false</c>
         /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the route template references an unknown constraint name
+        /// </exception>
         public static bool TryMatch(string template, string route, out IReadOnlyDictionary<string, string> routeValues)
         {
             routeValues = new Dictionary<string, string>();
@@ -78,12 +113,16 @@ namespace ArgusTransfer.Routing
                         var paramName = paramContent.Substring(0, colonIndex);
                         var constraint = paramContent.Substring(colonIndex + 1);
 
-                        if (string.Equals(constraint, "Guid", StringComparison.OrdinalIgnoreCase))
+                        if (Constraints.TryGetValue(constraint, out var routeConstraint))
                         {
-                            if (!Guid.TryParse(routeSegment, out _))
+                            if (!routeConstraint.Match(routeSegment))
                             {
                                 return false;
                             }
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"Unknown route constraint: '{constraint}'");
                         }
 
                         values[paramName] = routeSegment;

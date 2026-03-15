@@ -20,6 +20,8 @@
 
 namespace ArgusTransfer.Tests.Routing
 {
+    using System;
+
     using ArgusTransfer.Routing;
 
     using NUnit.Framework;
@@ -176,6 +178,42 @@ namespace ArgusTransfer.Tests.Routing
                 out _);
 
             Assert.That(result, Is.False);
+        }
+
+        [Test]
+        public void Verify_that_ShortGuid_constraint_validates_and_extracts()
+        {
+            var guid = Guid.Parse("cfb2e590-b98a-4dbc-8e56-f5d389ac3a8e");
+            var shortGuid = Convert.ToBase64String(guid.ToByteArray())
+                .Replace("/", "_").Replace("+", "-").Substring(0, 22);
+
+            var result = ArgusRouteTemplateParser.TryMatch(
+                "/healthendpoint/{identifier:ShortGuid}",
+                $"/healthendpoint/{shortGuid}",
+                out var routeValues);
+
+            Assert.That(result, Is.True);
+            Assert.That(routeValues["identifier"], Is.EqualTo(shortGuid));
+        }
+
+        [Test]
+        public void Verify_that_ShortGuid_constraint_rejects_invalid_value()
+        {
+            var result = ArgusRouteTemplateParser.TryMatch(
+                "/healthendpoint/{identifier:ShortGuid}",
+                "/healthendpoint/not-a-short-guid-value!",
+                out _);
+
+            Assert.That(result, Is.False);
+        }
+
+        [Test]
+        public void Verify_that_unknown_constraint_throws()
+        {
+            Assert.That(() => ArgusRouteTemplateParser.TryMatch(
+                "/healthendpoint/{identifier:UnknownType}",
+                "/healthendpoint/some-value",
+                out _), Throws.TypeOf<InvalidOperationException>());
         }
     }
 }
