@@ -60,98 +60,114 @@ namespace ArgusTransfer.Sample
         /// </param>
         public void AddRoutes(IArgusRouteBuilder app)
         {
-            app.MapGet("/sampleitems", (request, routeValues) =>
+            app.MapGet("/sampleitems", context =>
             {
                 var items = Store.Values.ToList();
                 var json = JsonSerializer.Serialize(items, SerializerOptions);
 
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Ok,
                     Body = json
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
-            app.MapGet("/sampleitems/{id:Guid}", (request, routeValues) =>
+            app.MapGet("/sampleitems/{id:Guid}", context =>
             {
-                var id = Guid.Parse(routeValues["id"]);
+                var id = Guid.Parse(context.RouteValues["id"]);
 
                 if (Store.TryGetValue(id, out var item))
                 {
-                    return Task.FromResult(new ArgusResponse
+                    context.Response = new ArgusResponse
                     {
-                        CorrelationToken = request.CorrelationToken,
+                        CorrelationToken = context.Request.CorrelationToken,
                         StatusCode = ArgusStatusCode.Ok,
                         Body = JsonSerializer.Serialize(item, SerializerOptions)
-                    });
+                    };
+
+                    return Task.CompletedTask;
                 }
 
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.NotFound
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
-            app.MapPost("/sampleitems", (request, routeValues) =>
+            app.MapPost("/sampleitems", context =>
             {
-                var item = JsonSerializer.Deserialize<SampleItem>(request.Body, SerializerOptions);
+                var item = JsonSerializer.Deserialize<SampleItem>(context.Request.Body, SerializerOptions);
                 item.Id = Guid.NewGuid();
                 Store[item.Id] = item;
 
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Created,
                     Body = JsonSerializer.Serialize(item, SerializerOptions)
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
-            app.MapPut("/sampleitems/{id:Guid}", (request, routeValues) =>
+            app.MapPut("/sampleitems/{id:Guid}", context =>
             {
-                var id = Guid.Parse(routeValues["id"]);
+                var id = Guid.Parse(context.RouteValues["id"]);
 
                 if (!Store.ContainsKey(id))
                 {
-                    return Task.FromResult(new ArgusResponse
+                    context.Response = new ArgusResponse
                     {
-                        CorrelationToken = request.CorrelationToken,
+                        CorrelationToken = context.Request.CorrelationToken,
                         StatusCode = ArgusStatusCode.NotFound
-                    });
+                    };
+
+                    return Task.CompletedTask;
                 }
 
-                var item = JsonSerializer.Deserialize<SampleItem>(request.Body, SerializerOptions);
+                var item = JsonSerializer.Deserialize<SampleItem>(context.Request.Body, SerializerOptions);
                 item.Id = id;
                 Store[id] = item;
 
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Ok,
                     Body = JsonSerializer.Serialize(item, SerializerOptions)
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
-            app.MapDelete("/sampleitems/{id:Guid}", (request, routeValues) =>
+            app.MapDelete("/sampleitems/{id:Guid}", context =>
             {
-                var id = Guid.Parse(routeValues["id"]);
+                var id = Guid.Parse(context.RouteValues["id"]);
 
                 if (Store.TryRemove(id, out var item))
                 {
-                    return Task.FromResult(new ArgusResponse
+                    context.Response = new ArgusResponse
                     {
-                        CorrelationToken = request.CorrelationToken,
+                        CorrelationToken = context.Request.CorrelationToken,
                         StatusCode = ArgusStatusCode.Ok,
                         Body = JsonSerializer.Serialize(item, SerializerOptions)
-                    });
+                    };
+
+                    return Task.CompletedTask;
                 }
 
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.NotFound
-                });
+                };
+
+                return Task.CompletedTask;
             });
         }
     }

@@ -21,7 +21,7 @@
 namespace ArgusTransfer.Routing
 {
     /// <summary>
-    /// Provides a fluent interface for attaching metadata to a registered route endpoint
+    /// Provides a fluent interface for attaching metadata and middleware to a registered route endpoint
     /// </summary>
     public interface IArgusEndpointConventionBuilder
     {
@@ -38,5 +38,17 @@ namespace ArgusTransfer.Routing
         /// This <see cref="IArgusEndpointConventionBuilder"/> for method chaining
         /// </returns>
         IArgusEndpointConventionBuilder WithMetadata(string key, string value);
+
+        /// <summary>
+        /// Attaches a middleware instance to the endpoint. Per-endpoint middleware
+        /// executes after global middleware, in registration order (first registered = outermost)
+        /// </summary>
+        /// <param name="middleware">
+        /// The <see cref="IArgusMiddleware"/> instance to attach
+        /// </param>
+        /// <returns>
+        /// This <see cref="IArgusEndpointConventionBuilder"/> for method chaining
+        /// </returns>
+        IArgusEndpointConventionBuilder WithMiddleware(IArgusMiddleware middleware);
     }
 }

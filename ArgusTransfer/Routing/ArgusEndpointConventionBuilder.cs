@@ -58,5 +58,21 @@ namespace ArgusTransfer.Routing
             this.endpoint.Metadata[key] = value;
             return this;
         }
+
+        /// <summary>
+        /// Attaches a middleware instance to the endpoint. Per-endpoint middleware
+        /// executes after global middleware, in registration order (first registered = outermost)
+        /// </summary>
+        /// <param name="middleware">
+        /// The <see cref="IArgusMiddleware"/> instance to attach
+        /// </param>
+        /// <returns>
+        /// This <see cref="IArgusEndpointConventionBuilder"/> for method chaining
+        /// </returns>
+        public IArgusEndpointConventionBuilder WithMiddleware(IArgusMiddleware middleware)
+        {
+            this.endpoint.Middlewares.Add(middleware);
+            return this;
+        }
     }
 }

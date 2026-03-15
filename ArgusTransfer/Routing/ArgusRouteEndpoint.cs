@@ -26,7 +26,7 @@ namespace ArgusTransfer.Routing
 
     /// <summary>
     /// Represents a registered route endpoint with its verb, route template,
-    /// handler delegate, and optional metadata
+    /// handler delegate, optional metadata, and per-endpoint middleware
     /// </summary>
     internal class ArgusRouteEndpoint
     {
@@ -50,5 +50,11 @@ namespace ArgusTransfer.Routing
         /// Gets the metadata dictionary attached to this endpoint
         /// </summary>
         public Dictionary<string, string> Metadata { get; } = new Dictionary<string, string>();
+
+        /// <summary>
+        /// Gets the list of middleware instances attached to this endpoint,
+        /// executed in registration order (first registered = outermost)
+        /// </summary>
+        public List<IArgusMiddleware> Middlewares { get; } = new List<IArgusMiddleware>();
     }
 }

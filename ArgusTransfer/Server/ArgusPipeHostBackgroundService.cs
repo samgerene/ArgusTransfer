@@ -99,8 +99,9 @@ namespace ArgusTransfer.Server
                         await using var writer = new StreamWriter(serverStream) { AutoFlush = true };
 
                         var request = await ArgusRequestReader.ReadAsync(reader, stoppingToken);
-                        var response = await this.HandleRequestAsync(request);
-                        ArgusResponseWriter.Write(writer, response);
+                        var context = new ArgusContext(request, stoppingToken);
+                        await this.router.RouteAsync(context);
+                        ArgusResponseWriter.Write(writer, context.Response);
                     }
                     catch (Exception ex)
                     {
@@ -115,18 +116,23 @@ namespace ArgusTransfer.Server
         }
 
         /// <summary>
-        /// Routes an <see cref="ArgusRequest"/> to the appropriate handler
-        /// via the <see cref="ArgusRouter"/>
+        /// Routes an <see cref="ArgusRequest"/> through the middleware pipeline
+        /// and to the appropriate handler via the <see cref="ArgusRouter"/>
         /// </summary>
         /// <param name="argusRequest">
         /// The <see cref="ArgusRequest"/> to handle
         /// </param>
+        /// <param name="cancellationToken">
+        /// A <see cref="CancellationToken"/> that can be used to cancel the operation
+        /// </param>
         /// <returns>
         /// An <see cref="ArgusResponse"/> containing the result of the operation
         /// </returns>
-        public async Task<ArgusResponse> HandleRequestAsync(ArgusRequest argusRequest)
+        public async Task<ArgusResponse> HandleRequestAsync(ArgusRequest argusRequest, CancellationToken cancellationToken = default)
         {
-            return await this.router.RouteAsync(argusRequest);
+            var context = new ArgusContext(argusRequest, cancellationToken);
+            await this.router.RouteAsync(context);
+            return context.Response;
         }
     }
 }

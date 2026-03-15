@@ -27,7 +27,8 @@ namespace ArgusTransfer.Routing
 
     /// <summary>
     /// Implements <see cref="IArgusRouteBuilder"/> and dispatches incoming
-    /// <see cref="ArgusRequest"/> messages to matching route handlers
+    /// <see cref="ArgusRequest"/> messages through a middleware pipeline
+    /// to matching route handlers
     /// </summary>
     public class ArgusRouter : IArgusRouteBuilder
     {
@@ -35,6 +36,23 @@ namespace ArgusTransfer.Routing
         /// The list of registered route endpoints
         /// </summary>
         private readonly List<ArgusRouteEndpoint> endpoints = new List<ArgusRouteEndpoint>();
+
+        /// <summary>
+        /// The list of global middleware instances, executed in registration order
+        /// </summary>
+        private readonly List<IArgusMiddleware> globalMiddlewares = new List<IArgusMiddleware>();
+
+        /// <summary>
+        /// Registers a global middleware that runs for all requests in registration order.
+        /// Global middleware executes before per-endpoint middleware
+        /// </summary>
+        /// <param name="middleware">
+        /// The <see cref="IArgusMiddleware"/> instance to register
+        /// </param>
+        public void UseMiddleware(IArgusMiddleware middleware)
+        {
+            this.globalMiddlewares.Add(middleware);
+        }
 
         /// <summary>
         /// Registers a handler for GET requests matching the specified route template
@@ -139,39 +157,77 @@ namespace ArgusTransfer.Routing
         }
 
         /// <summary>
-        /// Routes an <see cref="ArgusRequest"/> to the matching handler based on
-        /// verb and route, returning the handler's <see cref="ArgusResponse"/>
+        /// Routes an <see cref="ArgusContext"/> to the matching handler, executing
+        /// global and per-endpoint middleware in the pipeline
         /// </summary>
-        /// <param name="request">
-        /// The <see cref="ArgusRequest"/> to route
+        /// <param name="context">
+        /// The <see cref="ArgusContext"/> for the current request
         /// </param>
         /// <returns>
-        /// An <see cref="ArgusResponse"/> from the matched handler,
-        /// a <see cref="ArgusStatusCode.BadRequest"/> response if the route matches but the verb does not,
-        /// or a <see cref="ArgusStatusCode.NotFound"/> response if no route matches
+        /// An awaitable <see cref="Task"/>. When complete, <see cref="ArgusContext.Response"/>
+        /// contains the result. If no route matches, a <see cref="ArgusStatusCode.NotFound"/>
+        /// response is set. If the route matches but the verb does not, a
+        /// <see cref="ArgusStatusCode.BadRequest"/> response is set
         /// </returns>
-        public async Task<ArgusResponse> RouteAsync(ArgusRequest request)
+        public async Task RouteAsync(ArgusContext context)
         {
             var routeMatched = false;
 
             foreach (var endpoint in this.endpoints)
             {
-                if (ArgusRouteTemplateParser.TryMatch(endpoint.RouteTemplate, request.Route, out var routeValues))
+                if (ArgusRouteTemplateParser.TryMatch(endpoint.RouteTemplate, context.Request.Route, out var routeValues))
                 {
                     routeMatched = true;
 
-                    if (endpoint.Verb == request.Verb)
+                    if (endpoint.Verb == context.Request.Verb)
                     {
-                        return await endpoint.Handler(request, routeValues);
+                        context.RouteValues = routeValues;
+                        context.EndpointMetadata = endpoint.Metadata;
+
+                        var pipeline = this.BuildPipeline(endpoint);
+                        await pipeline(context);
+
+                        return;
                     }
                 }
             }
 
-            return new ArgusResponse
+            context.Response = new ArgusResponse
             {
-                CorrelationToken = request.CorrelationToken,
+                CorrelationToken = context.Request.CorrelationToken,
                 StatusCode = routeMatched ? ArgusStatusCode.BadRequest : ArgusStatusCode.NotFound
             };
+        }
+
+        /// <summary>
+        /// Builds a composed pipeline delegate by wrapping the endpoint handler
+        /// with per-endpoint middleware (innermost) and global middleware (outermost)
+        /// </summary>
+        /// <param name="endpoint">
+        /// The <see cref="ArgusRouteEndpoint"/> whose handler and middleware form the pipeline
+        /// </param>
+        /// <returns>
+        /// An <see cref="ArgusRequestDelegate"/> representing the complete pipeline
+        /// </returns>
+        private ArgusRequestDelegate BuildPipeline(ArgusRouteEndpoint endpoint)
+        {
+            ArgusRequestDelegate pipeline = ctx => endpoint.Handler(ctx);
+
+            for (var i = endpoint.Middlewares.Count - 1; i >= 0; i--)
+            {
+                var middleware = endpoint.Middlewares[i];
+                var next = pipeline;
+                pipeline = ctx => middleware.InvokeAsync(ctx, next);
+            }
+
+            for (var i = this.globalMiddlewares.Count - 1; i >= 0; i--)
+            {
+                var middleware = this.globalMiddlewares[i];
+                var next = pipeline;
+                pipeline = ctx => middleware.InvokeAsync(ctx, next);
+            }
+
+            return pipeline;
         }
 
         /// <summary>

@@ -25,6 +25,8 @@ namespace ArgusTransfer.Tests.Routing
     using ArgusTransfer.Protocol;
     using ArgusTransfer.Routing;
 
+    using Moq;
+
     using NUnit.Framework;
 
     /// <summary>
@@ -60,12 +62,14 @@ namespace ArgusTransfer.Tests.Routing
         {
             var router = new ArgusRouter();
 
-            var result = router.MapGet("/route", (request, routeValues) =>
+            var result = router.MapGet("/route", context =>
             {
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
                     StatusCode = ArgusStatusCode.Ok
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
             Assert.That(result, Is.Not.Null);
@@ -77,17 +81,44 @@ namespace ArgusTransfer.Tests.Routing
         {
             var router = new ArgusRouter();
 
-            var result = router.MapGet("/route", (request, routeValues) =>
+            var result = router.MapGet("/route", context =>
             {
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
                     StatusCode = ArgusStatusCode.Ok
-                });
+                };
+
+                return Task.CompletedTask;
             })
             .WithMetadata("first", "1")
             .WithMetadata("second", "2");
 
             Assert.That(result, Is.Not.Null);
+        }
+
+        [Test]
+        public void Verify_that_WithMiddleware_adds_middleware_to_endpoint()
+        {
+            var endpoint = new ArgusRouteEndpoint();
+            var builder = new ArgusEndpointConventionBuilder(endpoint);
+            var middleware = new Mock<IArgusMiddleware>().Object;
+
+            builder.WithMiddleware(middleware);
+
+            Assert.That(endpoint.Middlewares.Count, Is.EqualTo(1));
+            Assert.That(endpoint.Middlewares[0], Is.SameAs(middleware));
+        }
+
+        [Test]
+        public void Verify_that_WithMiddleware_returns_same_builder_for_chaining()
+        {
+            var endpoint = new ArgusRouteEndpoint();
+            var builder = new ArgusEndpointConventionBuilder(endpoint);
+            var middleware = new Mock<IArgusMiddleware>().Object;
+
+            var result = builder.WithMiddleware(middleware);
+
+            Assert.That(result, Is.SameAs(builder));
         }
     }
 }

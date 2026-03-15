@@ -21,7 +21,6 @@
 namespace ArgusTransfer.Transport.Tests.Server
 {
     using System;
-    using System.Collections.Generic;
     using System.Threading.Tasks;
 
     using ArgusTransfer.Protocol;
@@ -32,7 +31,7 @@ namespace ArgusTransfer.Transport.Tests.Server
     using Microsoft.Extensions.Options;
 
     using Moq;
-    
+
     using NUnit.Framework;
 
     /// <summary>
@@ -52,24 +51,28 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             var router = new ArgusRouter();
 
-            router.MapGet("/test", (request, routeValues) =>
+            router.MapGet("/test", context =>
             {
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Ok,
                     Body = """{"message":"hello"}"""
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
-            router.MapPost("/test", (request, routeValues) =>
+            router.MapPost("/test", context =>
             {
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Created,
-                    Body = request.Body
-                });
+                    Body = context.Request.Body
+                };
+
+                return Task.CompletedTask;
             });
 
             var options = Options.Create(new ArgusPipeHostOptions());

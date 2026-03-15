@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusHandlerDelegate.cs">
+//   <copyright file="IArgusMiddleware.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //
@@ -23,14 +23,24 @@ namespace ArgusTransfer.Routing
     using System.Threading.Tasks;
 
     /// <summary>
-    /// Delegate that handles an Argus request by populating the response
-    /// on the provided <see cref="ArgusContext"/>
+    /// Defines a middleware component that can inspect, modify, or short-circuit
+    /// an Argus request as it flows through the pipeline
     /// </summary>
-    /// <param name="context">
-    /// The <see cref="ArgusContext"/> for the current request
-    /// </param>
-    /// <returns>
-    /// An awaitable <see cref="Task"/>
-    /// </returns>
-    public delegate Task ArgusHandlerDelegate(ArgusContext context);
+    public interface IArgusMiddleware
+    {
+        /// <summary>
+        /// Processes an Argus request. Implementations should call <paramref name="next"/>
+        /// to pass control to the next middleware in the pipeline, or skip it to short-circuit
+        /// </summary>
+        /// <param name="context">
+        /// The <see cref="ArgusContext"/> for the current request
+        /// </param>
+        /// <param name="next">
+        /// The <see cref="ArgusRequestDelegate"/> representing the next middleware in the pipeline
+        /// </param>
+        /// <returns>
+        /// An awaitable <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        Task InvokeAsync(ArgusContext context, ArgusRequestDelegate next);
+    }
 }

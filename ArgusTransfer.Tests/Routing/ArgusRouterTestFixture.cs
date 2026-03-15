@@ -21,14 +21,14 @@
 namespace ArgusTransfer.Tests.Routing
 {
     using System;
-    using System.Collections.Generic;
+    using System.Threading;
     using System.Threading.Tasks;
 
     using ArgusTransfer.Protocol;
     using ArgusTransfer.Routing;
 
     using NUnit.Framework;
-    
+
     /// <summary>
     /// Suite of tests for the <see cref="ArgusRouter"/> class
     /// </summary>
@@ -46,13 +46,15 @@ namespace ArgusTransfer.Tests.Routing
         [Test]
         public async Task Verify_that_matching_verb_and_route_dispatches_to_handler()
         {
-            this.router.MapPost("/healthendpoint", (request, routeValues) =>
+            this.router.MapPost("/healthendpoint", context =>
             {
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Created
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
             var request = new ArgusRequest
@@ -61,21 +63,24 @@ namespace ArgusTransfer.Tests.Routing
                 Route = "/healthendpoint"
             };
 
-            var response = await this.router.RouteAsync(request);
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
 
-            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Created));
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Created));
         }
 
         [Test]
         public async Task Verify_that_wrong_verb_returns_BadRequest()
         {
-            this.router.MapPost("/healthendpoint", (request, routeValues) =>
+            this.router.MapPost("/healthendpoint", context =>
             {
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Created
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
             var request = new ArgusRequest
@@ -84,21 +89,24 @@ namespace ArgusTransfer.Tests.Routing
                 Route = "/healthendpoint"
             };
 
-            var response = await this.router.RouteAsync(request);
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
 
-            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
         }
 
         [Test]
         public async Task Verify_that_unknown_route_returns_NotFound()
         {
-            this.router.MapPost("/healthendpoint", (request, routeValues) =>
+            this.router.MapPost("/healthendpoint", context =>
             {
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Created
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
             var request = new ArgusRequest
@@ -107,25 +115,24 @@ namespace ArgusTransfer.Tests.Routing
                 Route = "/unknown"
             };
 
-            var response = await this.router.RouteAsync(request);
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
 
-            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.NotFound));
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.NotFound));
         }
 
         [Test]
         public async Task Verify_that_route_values_are_extracted()
         {
-            IReadOnlyDictionary<string, string> capturedRouteValues = null;
-
-            this.router.MapGet("/healthendpoint/{identifier:Guid}", (request, routeValues) =>
+            this.router.MapGet("/healthendpoint/{identifier:Guid}", context =>
             {
-                capturedRouteValues = routeValues;
-
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Ok
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
             var guid = "cfb2e590-b98a-4dbc-8e56-f5d389ac3a8e";
@@ -136,11 +143,12 @@ namespace ArgusTransfer.Tests.Routing
                 Route = $"/healthendpoint/{guid}"
             };
 
-            var response = await this.router.RouteAsync(request);
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
 
-            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
-            Assert.That(capturedRouteValues, Is.Not.Null);
-            Assert.That(capturedRouteValues["identifier"], Is.EqualTo(guid));
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(context.RouteValues, Is.Not.Null);
+            Assert.That(context.RouteValues["identifier"], Is.EqualTo(guid));
         }
 
         [Test]
@@ -155,21 +163,24 @@ namespace ArgusTransfer.Tests.Routing
                 Route = "/unknown"
             };
 
-            var response = await this.router.RouteAsync(request);
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
 
-            Assert.That(response.CorrelationToken, Is.EqualTo(correlationToken));
+            Assert.That(context.Response.CorrelationToken, Is.EqualTo(correlationToken));
         }
 
         [Test]
         public async Task Verify_that_MapPut_dispatches_to_handler()
         {
-            this.router.MapPut("/resource", (request, routeValues) =>
+            this.router.MapPut("/resource", context =>
             {
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Ok
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
             var request = new ArgusRequest
@@ -178,21 +189,24 @@ namespace ArgusTransfer.Tests.Routing
                 Route = "/resource"
             };
 
-            var response = await this.router.RouteAsync(request);
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
 
-            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
         }
 
         [Test]
         public async Task Verify_that_MapPatch_dispatches_to_handler()
         {
-            this.router.MapPatch("/resource", (request, routeValues) =>
+            this.router.MapPatch("/resource", context =>
             {
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Ok
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
             var request = new ArgusRequest
@@ -201,21 +215,24 @@ namespace ArgusTransfer.Tests.Routing
                 Route = "/resource"
             };
 
-            var response = await this.router.RouteAsync(request);
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
 
-            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
         }
 
         [Test]
         public async Task Verify_that_MapHead_dispatches_to_handler()
         {
-            this.router.MapHead("/resource", (request, routeValues) =>
+            this.router.MapHead("/resource", context =>
             {
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Ok
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
             var request = new ArgusRequest
@@ -224,21 +241,24 @@ namespace ArgusTransfer.Tests.Routing
                 Route = "/resource"
             };
 
-            var response = await this.router.RouteAsync(request);
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
 
-            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
         }
 
         [Test]
         public async Task Verify_that_MapDelete_dispatches_to_handler()
         {
-            this.router.MapDelete("/resource", (request, routeValues) =>
+            this.router.MapDelete("/resource", context =>
             {
-                return Task.FromResult(new ArgusResponse
+                context.Response = new ArgusResponse
                 {
-                    CorrelationToken = request.CorrelationToken,
+                    CorrelationToken = context.Request.CorrelationToken,
                     StatusCode = ArgusStatusCode.Ok
-                });
+                };
+
+                return Task.CompletedTask;
             });
 
             var request = new ArgusRequest
@@ -247,9 +267,66 @@ namespace ArgusTransfer.Tests.Routing
                 Route = "/resource"
             };
 
-            var response = await this.router.RouteAsync(request);
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
 
-            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_endpoint_metadata_is_available_on_context()
+        {
+            this.router.MapGet("/resource", context =>
+            {
+                context.Response = new ArgusResponse
+                {
+                    CorrelationToken = context.Request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                return Task.CompletedTask;
+            }).WithMetadata("tag", "test-value");
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/resource"
+            };
+
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
+
+            Assert.That(context.EndpointMetadata["tag"], Is.EqualTo("test-value"));
+        }
+
+        [Test]
+        public async Task Verify_that_cancellation_token_is_available_on_context()
+        {
+            CancellationToken capturedToken = default;
+
+            this.router.MapGet("/resource", context =>
+            {
+                capturedToken = context.RequestAborted;
+
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                return Task.CompletedTask;
+            });
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/resource"
+            };
+
+            using var cts = new CancellationTokenSource();
+            var context = new ArgusContext(request, cts.Token);
+            await this.router.RouteAsync(context);
+
+            Assert.That(capturedToken, Is.EqualTo(cts.Token));
         }
     }
 }

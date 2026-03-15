@@ -21,10 +21,19 @@
 namespace ArgusTransfer.Routing
 {
     /// <summary>
-    /// Defines methods for registering route handlers using HTTP-like verbs
+    /// Defines methods for registering route handlers and global middleware
     /// </summary>
     public interface IArgusRouteBuilder
     {
+        /// <summary>
+        /// Registers a global middleware that runs for all requests in registration order.
+        /// Global middleware executes before per-endpoint middleware
+        /// </summary>
+        /// <param name="middleware">
+        /// The <see cref="IArgusMiddleware"/> instance to register
+        /// </param>
+        void UseMiddleware(IArgusMiddleware middleware);
+
         /// <summary>
         /// Registers a handler for GET requests matching the specified route template
         /// </summary>
