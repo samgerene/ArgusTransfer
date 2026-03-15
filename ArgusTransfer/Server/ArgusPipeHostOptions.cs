@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusPipeHostOptions.cs" company="Sam Gerené">
+//   <copyright file="ArgusPipeHostOptions.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

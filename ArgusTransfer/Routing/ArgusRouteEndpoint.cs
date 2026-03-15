@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusRouteEndpoint.cs" company="Sam Gerené">
+//   <copyright file="ArgusRouteEndpoint.cs" >
 //
 //     Copyright (c) 2026 Sam Gerené
 //

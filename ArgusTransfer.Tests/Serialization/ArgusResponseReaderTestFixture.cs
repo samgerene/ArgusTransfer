@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusResponseReaderTestFixture.cs" company="Sam Gerene">
+//   <copyright file="ArgusResponseReaderTestFixture.cs">
 //
-//     Copyright (c) 2026 Sam Gerene
+//     Copyright (c) 2026 Sam Gerené
 //
 //     Licensed under the Apache License, Version 2.0 (the "License");
 //     you may not use this file except in compliance with the License.

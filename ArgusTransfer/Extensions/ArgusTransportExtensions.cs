@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusTransportExtensions.cs" company="Sam Gerené">
+//   <copyright file="ArgusTransportExtensions.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

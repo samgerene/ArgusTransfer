@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="IArgusRouteBuilder.cs" company="Sam Gerené">
+//   <copyright file="IArgusRouteBuilder.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

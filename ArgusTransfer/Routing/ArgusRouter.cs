@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusRouter.cs" company="Sam Gerené">
+//   <copyright file="ArgusRouter.cs" >
 //
 //     Copyright (c) 2026 Sam Gerené
 //

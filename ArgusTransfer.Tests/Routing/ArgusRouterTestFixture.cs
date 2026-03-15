@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusRouterTestFixture.cs" company="Sam Gerené">
+//   <copyright file="ArgusRouterTestFixture.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

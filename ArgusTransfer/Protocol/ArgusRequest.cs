@@ -1,5 +1,5 @@
 ﻿// -------------------------------------------------------------------------------------------------
-//   <copyright file="HealthServiceMessage.cs" company="Sam Gerené">
+//   <copyright file="HealthServiceMessage.cs">
 // 
 //     Copyright (c) 2026 Sam Gerené
 // 

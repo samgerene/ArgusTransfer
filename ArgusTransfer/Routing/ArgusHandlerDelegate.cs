@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusHandlerDelegate.cs" company="Sam Gerené">
+//   <copyright file="ArgusHandlerDelegate.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

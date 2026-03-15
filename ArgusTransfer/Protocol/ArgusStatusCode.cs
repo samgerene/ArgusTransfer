@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusStatusCode.cs" company="Sam Gerené">
+//   <copyright file="ArgusStatusCode.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

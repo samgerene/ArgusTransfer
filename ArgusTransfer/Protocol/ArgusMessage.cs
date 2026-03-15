@@ -1,5 +1,5 @@
 ﻿// -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusMessage.cs" company="Sam Gerené">
+//   <copyright file="ArgusMessage.cs">
 // 
 //     Copyright (c) 2026 Sam Gerené
 // 

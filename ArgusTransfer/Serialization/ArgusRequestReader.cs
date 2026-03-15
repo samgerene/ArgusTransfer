@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusRequestReader.cs" company="Sam Gerené">
+//   <copyright file="ArgusRequestReader.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusModuleExtensions.cs" company="Sam Gerené">
+//   <copyright file="ArgusModuleExtensions.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

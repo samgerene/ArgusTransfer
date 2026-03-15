@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="IArgusEndpointConventionBuilder.cs" company="Sam Gerené">
+//   <copyright file="IArgusEndpointConventionBuilder.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

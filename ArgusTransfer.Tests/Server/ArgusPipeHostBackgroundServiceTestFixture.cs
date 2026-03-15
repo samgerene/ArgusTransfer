@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusPipeHostBackgroundServiceTestFixture.cs" company="Sam Gerené">
+//   <copyright file="ArgusPipeHostBackgroundServiceTestFixture.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

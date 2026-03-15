@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusRouteTemplateParserTestFixture.cs" company="Sam Gerené">
+//   <copyright file="ArgusRouteTemplateParserTestFixture.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

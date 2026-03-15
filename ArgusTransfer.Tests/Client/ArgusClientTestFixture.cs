@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusClientTestFixture.cs" company="Sam Gerené">
+//   <copyright file="ArgusClientTestFixture.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //

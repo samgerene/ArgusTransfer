@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusRequestSerializationTestFixture.cs" company="Sam Gerené">
+//   <copyright file="ArgusRequestSerializationTestFixture.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //
