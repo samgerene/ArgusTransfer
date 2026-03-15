@@ -3,8 +3,8 @@ message: "If you use this software, please cite it as below."
 
 title: "ArgusTransfer is framework that provides HTTP like routing for named pipes"
 abstract: "ArgusTransfer is framework that provides routing for named pipes inspired by the HTTP 1.1 request/response protocol that runs over named pipes layer."
-version: "0.1.0"
-date-released: "2026-03-02"
+version: "0.2.0"
+date-released: "2026-03-15"
 url: "https://github.com/samgerene/ArgusTransfer"
 
 authors:
@@ -22,6 +22,6 @@ preferred-citation:
     - given-names: "Sam"
       family-names: "Gerené"
       orcid: "https://orcid.org/0009-0000-1848-550X"
-  version: "0.1.0"
+  version: "0.2.0"
   url: "https://github.com/samgerene/ArgusTransfer"
-  date-released: "2026-03-02"
+  date-released: "2026-03-15"
