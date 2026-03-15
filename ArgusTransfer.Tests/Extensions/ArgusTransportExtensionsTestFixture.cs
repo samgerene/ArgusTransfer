@@ -23,6 +23,7 @@ namespace ArgusTransfer.Tests.Extensions
     using System.Linq;
 
     using ArgusTransfer.Extensions;
+    using ArgusTransfer.Serialization;
     using ArgusTransfer.Server;
 
     using Microsoft.Extensions.DependencyInjection;
@@ -32,7 +33,7 @@ namespace ArgusTransfer.Tests.Extensions
     using NUnit.Framework;
 
     /// <summary>
-    /// Suite of tests for the <see cref="ArgusTransportExtensions"/> class
+    /// Suite of tests for the <see cref="ArgusTransportExtensions"/> and <see cref="ArgusSerializationExtensions"/> classes
     /// </summary>
     [TestFixture]
     public class ArgusTransportExtensionsTestFixture
@@ -72,6 +73,48 @@ namespace ArgusTransfer.Tests.Extensions
             var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IConfigureOptions<ArgusPipeHostOptions>));
 
             Assert.That(descriptor, Is.Null);
+        }
+
+        [Test]
+        public void Verify_that_AddArgusTextProtocol_registers_request_serializer()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusTextProtocol();
+
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusRequestSerializer));
+
+            Assert.That(descriptor, Is.Not.Null);
+            Assert.That(descriptor.ImplementationType, Is.EqualTo(typeof(ArgusTextRequestSerializer)));
+            Assert.That(descriptor.Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusTextProtocol_registers_response_serializer()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusTextProtocol();
+
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusResponseSerializer));
+
+            Assert.That(descriptor, Is.Not.Null);
+            Assert.That(descriptor.ImplementationType, Is.EqualTo(typeof(ArgusTextResponseSerializer)));
+            Assert.That(descriptor.Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusPipeHost_registers_serializers()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusPipeHost();
+
+            var requestDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusRequestSerializer));
+            var responseDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusResponseSerializer));
+
+            Assert.That(requestDescriptor, Is.Not.Null);
+            Assert.That(responseDescriptor, Is.Not.Null);
         }
     }
 }

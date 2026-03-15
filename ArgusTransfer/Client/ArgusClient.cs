@@ -42,6 +42,16 @@ namespace ArgusTransfer.Client
         private readonly string pipeName;
 
         /// <summary>
+        /// The <see cref="IArgusRequestSerializer"/> used to serialize outgoing requests
+        /// </summary>
+        private readonly IArgusRequestSerializer requestSerializer;
+
+        /// <summary>
+        /// The <see cref="IArgusResponseSerializer"/> used to deserialize incoming responses
+        /// </summary>
+        private readonly IArgusResponseSerializer responseSerializer;
+
+        /// <summary>
         /// Tracks whether this instance has been disposed
         /// </summary>
         private bool disposed;
@@ -52,9 +62,20 @@ namespace ArgusTransfer.Client
         /// <param name="pipeName">
         /// The name of the named pipe to connect to. Defaults to "argus"
         /// </param>
-        public ArgusClient(string pipeName = "argus")
+        /// <param name="requestSerializer">
+        /// An optional <see cref="IArgusRequestSerializer"/>. Defaults to <see cref="ArgusTextRequestSerializer"/>
+        /// </param>
+        /// <param name="responseSerializer">
+        /// An optional <see cref="IArgusResponseSerializer"/>. Defaults to <see cref="ArgusTextResponseSerializer"/>
+        /// </param>
+        public ArgusClient(
+            string pipeName = "argus",
+            IArgusRequestSerializer requestSerializer = null,
+            IArgusResponseSerializer responseSerializer = null)
         {
             this.pipeName = pipeName;
+            this.requestSerializer = requestSerializer ?? new ArgusTextRequestSerializer();
+            this.responseSerializer = responseSerializer ?? new ArgusTextResponseSerializer();
         }
 
         /// <summary>
@@ -80,9 +101,9 @@ namespace ArgusTransfer.Client
                 var writer = new StreamWriter(pipeClient, new UTF8Encoding(false)) { AutoFlush = false };
                 var reader = new StreamReader(pipeClient, new UTF8Encoding(false));
 
-                ArgusRequestWriter.Write(writer, request);
+                this.requestSerializer.Write(writer, request);
 
-                var response = await ArgusResponseReader.ReadAsync(reader, cancellationToken);
+                var response = await this.responseSerializer.ReadAsync(reader, cancellationToken);
 
                 return response;
             }

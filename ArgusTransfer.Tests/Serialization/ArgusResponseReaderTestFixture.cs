@@ -31,43 +31,51 @@ namespace ArgusTransfer.Tests.Serialization
     using NUnit.Framework;
 
     /// <summary>
-    /// Suite of tests for the <see cref="ArgusResponseReader"/> class
+    /// Suite of tests for the <see cref="ArgusTextResponseSerializer"/> class (read path)
     /// </summary>
     [TestFixture]
     public class ArgusResponseReaderTestFixture
     {
+        private ArgusTextResponseSerializer serializer;
+
+        [SetUp]
+        public void SetUp()
+        {
+            this.serializer = new ArgusTextResponseSerializer();
+        }
+
         [Test]
         public void Verify_that_Read_throws_FormatException_for_empty_input()
         {
-            Assert.That(() => ArgusResponseReader.Read(string.Empty),
+            Assert.That(() => this.serializer.Read(string.Empty),
                 Throws.TypeOf<FormatException>());
         }
 
         [Test]
         public void Verify_that_Read_throws_FormatException_for_status_line_without_first_space()
         {
-            Assert.That(() => ArgusResponseReader.Read("ARGUS/1.0"),
+            Assert.That(() => this.serializer.Read("ARGUS/1.0"),
                 Throws.TypeOf<FormatException>());
         }
 
         [Test]
         public void Verify_that_Read_throws_FormatException_for_status_line_without_second_space()
         {
-            Assert.That(() => ArgusResponseReader.Read("ARGUS/1.0 200"),
+            Assert.That(() => this.serializer.Read("ARGUS/1.0 200"),
                 Throws.TypeOf<FormatException>());
         }
 
         [Test]
         public void Verify_that_Read_throws_FormatException_for_non_integer_status_code()
         {
-            Assert.That(() => ArgusResponseReader.Read("ARGUS/1.0 ABC OK"),
+            Assert.That(() => this.serializer.Read("ARGUS/1.0 ABC OK"),
                 Throws.TypeOf<FormatException>());
         }
 
         [Test]
         public void Verify_that_Read_throws_FormatException_for_unknown_status_code()
         {
-            Assert.That(() => ArgusResponseReader.Read("ARGUS/1.0 999 Unknown"),
+            Assert.That(() => this.serializer.Read("ARGUS/1.0 999 Unknown"),
                 Throws.TypeOf<FormatException>());
         }
 
@@ -76,7 +84,7 @@ namespace ArgusTransfer.Tests.Serialization
         {
             var text = "ARGUS/1.0 200 OK\r\nInvalidHeaderWithoutColon\r\n\r\n";
 
-            var response = ArgusResponseReader.Read(text);
+            var response = this.serializer.Read(text);
 
             Assert.That(response.Headers, Is.Empty);
         }
@@ -87,7 +95,7 @@ namespace ArgusTransfer.Tests.Serialization
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(string.Empty));
             using var reader = new StreamReader(stream);
 
-            Assert.That(async () => await ArgusResponseReader.ReadAsync(reader, CancellationToken.None),
+            Assert.That(async () => await this.serializer.ReadAsync(reader, CancellationToken.None),
                 Throws.TypeOf<FormatException>());
         }
     }

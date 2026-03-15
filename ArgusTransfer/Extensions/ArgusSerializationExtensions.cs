@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusTransportExtensions.cs">
+//   <copyright file="ArgusSerializationExtensions.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //
@@ -20,39 +20,31 @@
 
 namespace ArgusTransfer.Extensions
 {
-    using System;
-
-    using ArgusTransfer.Server;
+    using ArgusTransfer.Serialization;
 
     using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.DependencyInjection.Extensions;
 
     /// <summary>
-    /// Extension methods for registering the Argus named-pipe host with the DI container
+    /// Extension methods for registering Argus serialization services with the DI container
     /// </summary>
-    public static class ArgusTransportExtensions
+    public static class ArgusSerializationExtensions
     {
         /// <summary>
-        /// Registers the <see cref="ArgusPipeHostBackgroundService"/> as a hosted service
-        /// and optionally configures <see cref="ArgusPipeHostOptions"/>
+        /// Registers the ARGUS/1.0 text protocol serializers as singletons.
+        /// Uses <see cref="ServiceCollectionDescriptorExtensions.TryAddSingleton{TService, TImplementation}(IServiceCollection)"/>
+        /// so that a previously registered alternative format takes precedence.
         /// </summary>
         /// <param name="services">
         /// The <see cref="IServiceCollection"/> to register services with
         /// </param>
-        /// <param name="configure">
-        /// An optional <see cref="Action{ArgusPipeHostOptions}"/> to configure the pipe host options
-        /// </param>
         /// <returns>
         /// The <see cref="IServiceCollection"/> for method chaining
         /// </returns>
-        public static IServiceCollection AddArgusPipeHost(this IServiceCollection services, Action<ArgusPipeHostOptions> configure = null)
+        public static IServiceCollection AddArgusTextProtocol(this IServiceCollection services)
         {
-            if (configure != null)
-            {
-                services.Configure(configure);
-            }
-
-            services.AddArgusTextProtocol();
-            services.AddHostedService<ArgusPipeHostBackgroundService>();
+            services.TryAddSingleton<IArgusRequestSerializer, ArgusTextRequestSerializer>();
+            services.TryAddSingleton<IArgusResponseSerializer, ArgusTextResponseSerializer>();
 
             return services;
         }

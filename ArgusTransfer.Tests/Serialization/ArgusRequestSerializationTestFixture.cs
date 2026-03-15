@@ -28,11 +28,19 @@ namespace ArgusTransfer.Tests.Serialization
     using NUnit.Framework;
 
     /// <summary>
-    /// Suite of tests for the <see cref="ArgusRequestWriter"/> and <see cref="ArgusRequestReader"/> classes
+    /// Suite of tests for the <see cref="ArgusTextRequestSerializer"/> class (round-trip)
     /// </summary>
     [TestFixture]
     public class ArgusRequestSerializationTestFixture
     {
+        private ArgusTextRequestSerializer serializer;
+
+        [SetUp]
+        public void SetUp()
+        {
+            this.serializer = new ArgusTextRequestSerializer();
+        }
+
         [Test]
         public void Verify_that_request_round_trips_with_body()
         {
@@ -45,8 +53,8 @@ namespace ArgusTransfer.Tests.Serialization
                 Body = "{\"name\":\"test\",\"url\":\"https://example.com\"}"
             };
 
-            var text = ArgusRequestWriter.Write(original);
-            var deserialized = ArgusRequestReader.Read(text);
+            var text = this.serializer.Write(original);
+            var deserialized = this.serializer.Read(text);
 
             Assert.That(deserialized.Verb, Is.EqualTo(original.Verb));
             Assert.That(deserialized.Route, Is.EqualTo(original.Route));
@@ -66,8 +74,8 @@ namespace ArgusTransfer.Tests.Serialization
                 Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
             };
 
-            var text = ArgusRequestWriter.Write(original);
-            var deserialized = ArgusRequestReader.Read(text);
+            var text = this.serializer.Write(original);
+            var deserialized = this.serializer.Read(text);
 
             Assert.That(deserialized.Verb, Is.EqualTo(original.Verb));
             Assert.That(deserialized.Route, Is.EqualTo(original.Route));
@@ -86,7 +94,7 @@ namespace ArgusTransfer.Tests.Serialization
                 Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
             };
 
-            var text = ArgusRequestWriter.Write(request);
+            var text = this.serializer.Write(request);
 
             Assert.That(text, Does.StartWith("POST /healthendpoint ARGUS/1.0\r\n"));
         }
@@ -102,7 +110,7 @@ namespace ArgusTransfer.Tests.Serialization
                 Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
             };
 
-            var text = ArgusRequestWriter.Write(request);
+            var text = this.serializer.Write(request);
 
             Assert.That(text, Does.Contain("X-Correlation-Token: cfb2e590-b98a-4dbc-8e56-f5d389ac3a8e\r\n"));
             Assert.That(text, Does.Contain("X-Timestamp: 2026-02-28T14:30:00.0000000Z\r\n"));
@@ -120,8 +128,8 @@ namespace ArgusTransfer.Tests.Serialization
 
             request.Headers["X-Custom"] = "my-value";
 
-            var text = ArgusRequestWriter.Write(request);
-            var deserialized = ArgusRequestReader.Read(text);
+            var text = this.serializer.Write(request);
+            var deserialized = this.serializer.Read(text);
 
             Assert.That(deserialized.Headers["X-Custom"], Is.EqualTo("my-value"));
         }
@@ -137,7 +145,7 @@ namespace ArgusTransfer.Tests.Serialization
                 Body = "{\"name\":\"test\"}"
             };
 
-            var text = ArgusRequestWriter.Write(request);
+            var text = this.serializer.Write(request);
 
             Assert.That(text, Does.Contain("Content-Length:"));
             Assert.That(text, Does.Contain("Content-Type: application/json\r\n"));

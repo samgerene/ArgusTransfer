@@ -56,6 +56,16 @@ namespace ArgusTransfer.Server
         private readonly ArgusPipeHostOptions options;
 
         /// <summary>
+        /// The <see cref="IArgusRequestSerializer"/> used to deserialize incoming requests
+        /// </summary>
+        private readonly IArgusRequestSerializer requestSerializer;
+
+        /// <summary>
+        /// The <see cref="IArgusResponseSerializer"/> used to serialize outgoing responses
+        /// </summary>
+        private readonly IArgusResponseSerializer responseSerializer;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ArgusPipeHostBackgroundService"/> class
         /// </summary>
         /// <param name="logger">
@@ -67,11 +77,24 @@ namespace ArgusTransfer.Server
         /// <param name="options">
         /// The <see cref="IOptions{ArgusPipeHostOptions}"/> containing the pipe configuration
         /// </param>
-        public ArgusPipeHostBackgroundService(ILogger<ArgusPipeHostBackgroundService> logger, ArgusRouter router, IOptions<ArgusPipeHostOptions> options)
+        /// <param name="requestSerializer">
+        /// The <see cref="IArgusRequestSerializer"/> used to deserialize incoming requests
+        /// </param>
+        /// <param name="responseSerializer">
+        /// The <see cref="IArgusResponseSerializer"/> used to serialize outgoing responses
+        /// </param>
+        public ArgusPipeHostBackgroundService(
+            ILogger<ArgusPipeHostBackgroundService> logger,
+            ArgusRouter router,
+            IOptions<ArgusPipeHostOptions> options,
+            IArgusRequestSerializer requestSerializer,
+            IArgusResponseSerializer responseSerializer)
         {
             this.logger = logger;
             this.router = router;
             this.options = options.Value;
+            this.requestSerializer = requestSerializer;
+            this.responseSerializer = responseSerializer;
         }
 
         /// <summary>
@@ -98,10 +121,10 @@ namespace ArgusTransfer.Server
                         using var reader = new StreamReader(serverStream);
                         await using var writer = new StreamWriter(serverStream) { AutoFlush = true };
 
-                        var request = await ArgusRequestReader.ReadAsync(reader, stoppingToken);
+                        var request = await this.requestSerializer.ReadAsync(reader, stoppingToken);
                         var context = new ArgusContext(request, stoppingToken);
                         await this.router.RouteAsync(context);
-                        ArgusResponseWriter.Write(writer, context.Response);
+                        this.responseSerializer.Write(writer, context.Response);
                     }
                     catch (Exception ex)
                     {

@@ -31,36 +31,44 @@ namespace ArgusTransfer.Tests.Serialization
     using NUnit.Framework;
 
     /// <summary>
-    /// Suite of tests for the <see cref="ArgusRequestReader"/> class
+    /// Suite of tests for the <see cref="ArgusTextRequestSerializer"/> class (read path)
     /// </summary>
     [TestFixture]
     public class ArgusRequestReaderTestFixture
     {
+        private ArgusTextRequestSerializer serializer;
+
+        [SetUp]
+        public void SetUp()
+        {
+            this.serializer = new ArgusTextRequestSerializer();
+        }
+
         [Test]
         public void Verify_that_Read_throws_FormatException_for_empty_input()
         {
-            Assert.That(() => ArgusRequestReader.Read(string.Empty),
+            Assert.That(() => this.serializer.Read(string.Empty),
                 Throws.TypeOf<FormatException>());
         }
 
         [Test]
         public void Verify_that_Read_throws_FormatException_for_whitespace_only_input()
         {
-            Assert.That(() => ArgusRequestReader.Read("   "),
+            Assert.That(() => this.serializer.Read("   "),
                 Throws.TypeOf<FormatException>());
         }
 
         [Test]
         public void Verify_that_Read_throws_FormatException_for_malformed_request_line()
         {
-            Assert.That(() => ArgusRequestReader.Read("INVALID"),
+            Assert.That(() => this.serializer.Read("INVALID"),
                 Throws.TypeOf<FormatException>());
         }
 
         [Test]
         public void Verify_that_Read_throws_FormatException_for_unknown_verb()
         {
-            Assert.That(() => ArgusRequestReader.Read("CONNECT /route ARGUS/1.0"),
+            Assert.That(() => this.serializer.Read("CONNECT /route ARGUS/1.0"),
                 Throws.TypeOf<FormatException>());
         }
 
@@ -69,7 +77,7 @@ namespace ArgusTransfer.Tests.Serialization
         {
             var text = "GET /route ARGUS/1.0\r\nInvalidHeaderWithoutColon\r\n\r\n";
 
-            var request = ArgusRequestReader.Read(text);
+            var request = this.serializer.Read(text);
 
             Assert.That(request.Route, Is.EqualTo("/route"));
             Assert.That(request.Headers, Is.Empty);
@@ -80,7 +88,7 @@ namespace ArgusTransfer.Tests.Serialization
         {
             var text = "GET /route ARGUS/1.0\r\nContent-Type: application/json\r\nX-Custom: value\r\n\r\n";
 
-            var request = ArgusRequestReader.Read(text);
+            var request = this.serializer.Read(text);
 
             Assert.That(request.Headers.ContainsKey("Content-Type"), Is.False);
             Assert.That(request.Headers["X-Custom"], Is.EqualTo("value"));
@@ -92,7 +100,7 @@ namespace ArgusTransfer.Tests.Serialization
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(string.Empty));
             using var reader = new StreamReader(stream);
 
-            Assert.That(async () => await ArgusRequestReader.ReadAsync(reader, CancellationToken.None),
+            Assert.That(async () => await this.serializer.ReadAsync(reader, CancellationToken.None),
                 Throws.TypeOf<FormatException>());
         }
     }

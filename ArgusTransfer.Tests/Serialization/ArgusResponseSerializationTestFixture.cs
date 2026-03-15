@@ -28,11 +28,19 @@ namespace ArgusTransfer.Tests.Serialization
     using NUnit.Framework;
 
     /// <summary>
-    /// Suite of tests for the <see cref="ArgusResponseWriter"/> and <see cref="ArgusResponseReader"/> classes
+    /// Suite of tests for the <see cref="ArgusTextResponseSerializer"/> class (round-trip)
     /// </summary>
     [TestFixture]
     public class ArgusResponseSerializationTestFixture
     {
+        private ArgusTextResponseSerializer serializer;
+
+        [SetUp]
+        public void SetUp()
+        {
+            this.serializer = new ArgusTextResponseSerializer();
+        }
+
         [Test]
         public void Verify_that_response_round_trips_with_body()
         {
@@ -44,8 +52,8 @@ namespace ArgusTransfer.Tests.Serialization
                 Body = "{\"name\":\"test\",\"url\":\"https://example.com\"}"
             };
 
-            var text = ArgusResponseWriter.Write(original);
-            var deserialized = ArgusResponseReader.Read(text);
+            var text = this.serializer.Write(original);
+            var deserialized = this.serializer.Read(text);
 
             Assert.That(deserialized.StatusCode, Is.EqualTo(original.StatusCode));
             Assert.That(deserialized.CorrelationToken, Is.EqualTo(original.CorrelationToken));
@@ -63,8 +71,8 @@ namespace ArgusTransfer.Tests.Serialization
                 Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
             };
 
-            var text = ArgusResponseWriter.Write(original);
-            var deserialized = ArgusResponseReader.Read(text);
+            var text = this.serializer.Write(original);
+            var deserialized = this.serializer.Read(text);
 
             Assert.That(deserialized.StatusCode, Is.EqualTo(original.StatusCode));
             Assert.That(deserialized.CorrelationToken, Is.EqualTo(original.CorrelationToken));
@@ -81,7 +89,7 @@ namespace ArgusTransfer.Tests.Serialization
                 Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
             };
 
-            var text = ArgusResponseWriter.Write(response);
+            var text = this.serializer.Write(response);
 
             Assert.That(text, Does.StartWith("ARGUS/1.0 200 OK\r\n"));
         }
@@ -106,7 +114,7 @@ namespace ArgusTransfer.Tests.Serialization
                     Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
                 };
 
-                var text = ArgusResponseWriter.Write(response);
+                var text = this.serializer.Write(response);
 
                 Assert.That(text, Does.StartWith(expectedLine),
                     $"Status code {statusCode} should produce line starting with '{expectedLine}'");
@@ -123,7 +131,7 @@ namespace ArgusTransfer.Tests.Serialization
                 Body = "{\"name\":\"test\"}"
             };
 
-            var text = ArgusResponseWriter.Write(response);
+            var text = this.serializer.Write(response);
 
             Assert.That(text, Does.Contain("Content-Length:"));
             Assert.That(text, Does.Contain("Content-Type: application/json\r\n"));
@@ -138,7 +146,7 @@ namespace ArgusTransfer.Tests.Serialization
                 Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
             };
 
-            var text = ArgusResponseWriter.Write(response);
+            var text = this.serializer.Write(response);
 
             Assert.That(text, Does.Not.Contain("Content-Length"));
             Assert.That(text, Does.Not.Contain("Content-Type"));

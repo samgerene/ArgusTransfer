@@ -32,13 +32,24 @@ namespace ArgusTransfer.Tests.Client
     using ArgusTransfer.Client;
 
     using NUnit.Framework;
-    
+
     /// <summary>
     /// Suite of tests for the <see cref="ArgusClient"/> class
     /// </summary>
     [TestFixture]
     public class ArgusClientTestFixture
     {
+        private ArgusTextRequestSerializer requestSerializer;
+
+        private ArgusTextResponseSerializer responseSerializer;
+
+        [SetUp]
+        public void SetUp()
+        {
+            this.requestSerializer = new ArgusTextRequestSerializer();
+            this.responseSerializer = new ArgusTextResponseSerializer();
+        }
+
         [Test]
         public async Task Verify_that_SendAsync_round_trips_request_and_response()
         {
@@ -52,7 +63,7 @@ namespace ArgusTransfer.Tests.Client
                 var reader = new StreamReader(server, new UTF8Encoding(false));
                 var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
 
-                var request = await ArgusRequestReader.ReadAsync(reader, CancellationToken.None);
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
 
                 Assert.That(request.Verb, Is.EqualTo(ArgusVerb.GET));
                 Assert.That(request.Route, Is.EqualTo("/healthendpoint"));
@@ -64,7 +75,7 @@ namespace ArgusTransfer.Tests.Client
                     Body = """[{"identifier":"cfb2e590-eed6-4223-b2ba-271ed0cb06da","name":"ep1","url":"https://example.com","frequency":30,"timeout":5,"retryCount":3}]"""
                 };
 
-                ArgusResponseWriter.Write(writer, response);
+                ((IArgusResponseSerializer)this.responseSerializer).Write(writer, response);
             });
 
             using var client = new ArgusClient(pipeName);
@@ -98,7 +109,7 @@ namespace ArgusTransfer.Tests.Client
                 var reader = new StreamReader(server, new UTF8Encoding(false));
                 var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
 
-                var request = await ArgusRequestReader.ReadAsync(reader, CancellationToken.None);
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
 
                 var response = new ArgusResponse
                 {
@@ -106,7 +117,7 @@ namespace ArgusTransfer.Tests.Client
                     StatusCode = ArgusStatusCode.Ok
                 };
 
-                ArgusResponseWriter.Write(writer, response);
+                ((IArgusResponseSerializer)this.responseSerializer).Write(writer, response);
             });
 
             using var client = new ArgusClient(pipeName);
@@ -139,7 +150,7 @@ namespace ArgusTransfer.Tests.Client
                 var reader = new StreamReader(server, new UTF8Encoding(false));
                 var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
 
-                var request = await ArgusRequestReader.ReadAsync(reader, CancellationToken.None);
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
 
                 Assert.That(request.Verb, Is.EqualTo(ArgusVerb.POST));
                 Assert.That(request.Route, Is.EqualTo("/healthendpoint"));
@@ -152,7 +163,7 @@ namespace ArgusTransfer.Tests.Client
                     Body = requestBody
                 };
 
-                ArgusResponseWriter.Write(writer, response);
+                ((IArgusResponseSerializer)this.responseSerializer).Write(writer, response);
             });
 
             using var client = new ArgusClient(pipeName);

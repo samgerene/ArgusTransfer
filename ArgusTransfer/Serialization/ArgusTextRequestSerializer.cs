@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusRequestReader.cs">
+//   <copyright file="ArgusTextRequestSerializer.cs">
 //
 //     Copyright (c) 2026 Sam Gerené
 //
@@ -23,16 +23,90 @@ namespace ArgusTransfer.Serialization
     using System;
     using System.Globalization;
     using System.IO;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
 
     using ArgusTransfer.Protocol;
 
     /// <summary>
-    /// Deserializes an <see cref="ArgusRequest"/> from the ARGUS/1.0 text wire format
+    /// Serializes and deserializes <see cref="ArgusRequest"/> messages using the ARGUS/1.0 text wire format
     /// </summary>
-    public static class ArgusRequestReader
+    public class ArgusTextRequestSerializer : IArgusRequestSerializer
     {
+        /// <summary>
+        /// Serializes an <see cref="ArgusRequest"/> to its text wire format representation
+        /// </summary>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> to serialize
+        /// </param>
+        /// <returns>
+        /// A string containing the serialized request in ARGUS/1.0 wire format
+        /// </returns>
+        public string Write(ArgusRequest request)
+        {
+            var sb = new StringBuilder();
+
+            sb.Append(request.Verb.ToString());
+            sb.Append(' ');
+            sb.Append(request.Route);
+            sb.Append(" ARGUS/1.0\r\n");
+
+            sb.Append("X-Correlation-Token: ");
+            sb.Append(request.CorrelationToken.ToString());
+            sb.Append("\r\n");
+
+            sb.Append("X-Timestamp: ");
+            sb.Append(request.Timestamp.ToString("o", CultureInfo.InvariantCulture));
+            sb.Append("\r\n");
+
+            foreach (var header in request.Headers)
+            {
+                sb.Append(header.Key);
+                sb.Append(": ");
+                sb.Append(header.Value);
+                sb.Append("\r\n");
+            }
+
+            if (!string.IsNullOrEmpty(request.Body))
+            {
+                var bodyBytes = Encoding.UTF8.GetByteCount(request.Body);
+
+                if (!request.Headers.ContainsKey("Content-Type"))
+                {
+                    sb.Append("Content-Type: application/json\r\n");
+                }
+
+                sb.Append("Content-Length: ");
+                sb.Append(bodyBytes.ToString(CultureInfo.InvariantCulture));
+                sb.Append("\r\n");
+            }
+
+            sb.Append("\r\n");
+
+            if (!string.IsNullOrEmpty(request.Body))
+            {
+                sb.Append(request.Body);
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Writes an <see cref="ArgusRequest"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>
+        /// </summary>
+        /// <param name="writer">
+        /// The <see cref="StreamWriter"/> to write to
+        /// </param>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> to serialize
+        /// </param>
+        void IArgusRequestSerializer.Write(StreamWriter writer, ArgusRequest request)
+        {
+            writer.Write(this.Write(request));
+            writer.Flush();
+        }
+
         /// <summary>
         /// Deserializes an <see cref="ArgusRequest"/> from its text wire format representation
         /// </summary>
@@ -42,7 +116,7 @@ namespace ArgusTransfer.Serialization
         /// <returns>
         /// The deserialized <see cref="ArgusRequest"/>
         /// </returns>
-        public static ArgusRequest Read(string text)
+        public ArgusRequest Read(string text)
         {
             using var reader = new StringReader(text);
 
@@ -103,7 +177,7 @@ namespace ArgusTransfer.Serialization
         /// <returns>
         /// The deserialized <see cref="ArgusRequest"/>
         /// </returns>
-        public static async Task<ArgusRequest> ReadAsync(StreamReader reader, CancellationToken cancellationToken)
+        public async Task<ArgusRequest> ReadAsync(StreamReader reader, CancellationToken cancellationToken)
         {
             var requestLine = await reader.ReadLineAsync(cancellationToken);
 

@@ -25,6 +25,7 @@ namespace ArgusTransfer.Transport.Tests.Server
 
     using ArgusTransfer.Protocol;
     using ArgusTransfer.Routing;
+    using ArgusTransfer.Serialization;
     using ArgusTransfer.Server;
 
     using Microsoft.Extensions.Logging;
@@ -77,7 +78,12 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             var options = Options.Create(new ArgusPipeHostOptions());
 
-            this.service = new ArgusPipeHostBackgroundService(this.mockLogger.Object, router, options);
+            this.service = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                new ArgusTextRequestSerializer(),
+                new ArgusTextResponseSerializer());
         }
 
         [Test]
