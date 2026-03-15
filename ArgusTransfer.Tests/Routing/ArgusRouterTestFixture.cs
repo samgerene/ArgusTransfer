@@ -50,7 +50,7 @@ namespace ArgusTransfer.Tests.Routing
             {
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Created
                 };
 
@@ -76,7 +76,7 @@ namespace ArgusTransfer.Tests.Routing
             {
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Created
                 };
 
@@ -102,7 +102,7 @@ namespace ArgusTransfer.Tests.Routing
             {
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Created
                 };
 
@@ -128,7 +128,7 @@ namespace ArgusTransfer.Tests.Routing
             {
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Ok
                 };
 
@@ -176,7 +176,7 @@ namespace ArgusTransfer.Tests.Routing
             {
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Ok
                 };
 
@@ -202,7 +202,7 @@ namespace ArgusTransfer.Tests.Routing
             {
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Ok
                 };
 
@@ -228,7 +228,7 @@ namespace ArgusTransfer.Tests.Routing
             {
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Ok
                 };
 
@@ -254,7 +254,7 @@ namespace ArgusTransfer.Tests.Routing
             {
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Ok
                 };
 
@@ -280,7 +280,7 @@ namespace ArgusTransfer.Tests.Routing
             {
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Ok
                 };
 

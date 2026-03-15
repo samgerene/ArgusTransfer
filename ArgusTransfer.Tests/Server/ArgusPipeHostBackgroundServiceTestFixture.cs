@@ -55,7 +55,7 @@ namespace ArgusTransfer.Transport.Tests.Server
             {
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Ok,
                     Body = """{"message":"hello"}"""
                 };
@@ -67,7 +67,7 @@ namespace ArgusTransfer.Transport.Tests.Server
             {
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Created,
                     Body = context.Request.Body
                 };

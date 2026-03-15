@@ -67,7 +67,7 @@ namespace ArgusTransfer.Sample
 
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Ok,
                     Body = json
                 };
@@ -83,7 +83,7 @@ namespace ArgusTransfer.Sample
                 {
                     context.Response = new ArgusResponse
                     {
-                        CorrelationToken = context.Request.CorrelationToken,
+    
                         StatusCode = ArgusStatusCode.Ok,
                         Body = JsonSerializer.Serialize(item, SerializerOptions)
                     };
@@ -93,7 +93,7 @@ namespace ArgusTransfer.Sample
 
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.NotFound
                 };
 
@@ -108,7 +108,7 @@ namespace ArgusTransfer.Sample
 
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Created,
                     Body = JsonSerializer.Serialize(item, SerializerOptions)
                 };
@@ -124,7 +124,7 @@ namespace ArgusTransfer.Sample
                 {
                     context.Response = new ArgusResponse
                     {
-                        CorrelationToken = context.Request.CorrelationToken,
+    
                         StatusCode = ArgusStatusCode.NotFound
                     };
 
@@ -137,7 +137,7 @@ namespace ArgusTransfer.Sample
 
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.Ok,
                     Body = JsonSerializer.Serialize(item, SerializerOptions)
                 };
@@ -153,7 +153,7 @@ namespace ArgusTransfer.Sample
                 {
                     context.Response = new ArgusResponse
                     {
-                        CorrelationToken = context.Request.CorrelationToken,
+    
                         StatusCode = ArgusStatusCode.Ok,
                         Body = JsonSerializer.Serialize(item, SerializerOptions)
                     };
@@ -163,7 +163,7 @@ namespace ArgusTransfer.Sample
 
                 context.Response = new ArgusResponse
                 {
-                    CorrelationToken = context.Request.CorrelationToken,
+
                     StatusCode = ArgusStatusCode.NotFound
                 };
 

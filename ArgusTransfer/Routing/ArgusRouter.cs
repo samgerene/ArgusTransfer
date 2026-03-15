@@ -187,6 +187,8 @@ namespace ArgusTransfer.Routing
                         var pipeline = this.BuildPipeline(endpoint);
                         await pipeline(context);
 
+                        this.StampCorrelationToken(context);
+
                         return;
                     }
                 }
@@ -194,9 +196,25 @@ namespace ArgusTransfer.Routing
 
             context.Response = new ArgusResponse
             {
-                CorrelationToken = context.Request.CorrelationToken,
                 StatusCode = routeMatched ? ArgusStatusCode.BadRequest : ArgusStatusCode.NotFound
             };
+
+            this.StampCorrelationToken(context);
+        }
+
+        /// <summary>
+        /// Stamps the <see cref="ArgusContext.CorrelationToken"/> onto the response
+        /// so that handlers and middleware never need to set it manually
+        /// </summary>
+        /// <param name="context">
+        /// The <see cref="ArgusContext"/> whose response will be stamped
+        /// </param>
+        private void StampCorrelationToken(ArgusContext context)
+        {
+            if (context.Response != null)
+            {
+                context.Response.CorrelationToken = context.CorrelationToken;
+            }
         }
 
         /// <summary>

@@ -44,8 +44,16 @@ namespace ArgusTransfer.Routing
         public ArgusContext(ArgusRequest request, CancellationToken requestAborted)
         {
             this.Request = request;
+            this.CorrelationToken = request.CorrelationToken;
             this.RequestAborted = requestAborted;
         }
+
+        /// <summary>
+        /// Gets the correlation token that identifies this request-response exchange.
+        /// Initialized from the incoming request and automatically stamped on the response
+        /// by the router after the pipeline completes
+        /// </summary>
+        public Guid CorrelationToken { get; }
 
         /// <summary>
         /// Gets the incoming <see cref="ArgusRequest"/>
