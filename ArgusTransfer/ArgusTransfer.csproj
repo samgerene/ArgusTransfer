@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Version>0.1.0</Version>
+        <Version>0.2.0</Version>
         <LangVersion>14.0</LangVersion>
         <Company>Sam Gerené</Company>
         <Authors>Sam Gerené</Authors>
@@ -23,7 +23,7 @@
         <PackageIcon>argus-transfer-ico.png</PackageIcon>
         <PackageTags>pipe routing argus protocol</PackageTags>
         <PackageReleaseNotes>
-            [Initial] Version
+            [Implement] ArgusContext
         </PackageReleaseNotes>
         <Nullable>disable</Nullable>
         <ImplicitUsings>disable</ImplicitUsings>
