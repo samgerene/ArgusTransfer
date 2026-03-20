@@ -182,6 +182,7 @@ namespace ArgusTransfer.Routing
                     if (endpoint.Verb == context.Request.Verb)
                     {
                         context.RouteValues = routeValues;
+                        context.QueryValues = context.Request.QueryParameters;
                         context.EndpointMetadata = endpoint.Metadata;
 
                         var pipeline = this.BuildPipeline(endpoint);
@@ -193,6 +194,8 @@ namespace ArgusTransfer.Routing
                     }
                 }
             }
+
+            context.QueryValues = context.Request.QueryParameters;
 
             context.Response = new ArgusResponse
             {

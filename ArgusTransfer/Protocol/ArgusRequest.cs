@@ -21,6 +21,7 @@
 namespace ArgusTransfer.Protocol
 {
     using System;
+    using System.Collections.Generic;
 
     /// <summary>
     /// The purpose of the <see cref="ArgusRequest"/> is to support a request-response
@@ -38,5 +39,10 @@ namespace ArgusTransfer.Protocol
         /// "/healthendpoint/{identifier:Guid}")
         /// </summary>
         public string Route { get; set; }
+
+        /// <summary>
+        /// Gets the query parameters parsed from the request URL
+        /// </summary>
+        public Dictionary<string, string> QueryParameters { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
 }

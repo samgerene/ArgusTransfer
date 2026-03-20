@@ -71,6 +71,11 @@ namespace ArgusTransfer.Routing
         public IReadOnlyDictionary<string, string> RouteValues { get; internal set; }
 
         /// <summary>
+        /// Gets the query parameter values parsed from the request URL
+        /// </summary>
+        public IReadOnlyDictionary<string, string> QueryValues { get; internal set; }
+
+        /// <summary>
         /// Gets the metadata associated with the matched endpoint
         /// </summary>
         public IReadOnlyDictionary<string, string> EndpointMetadata { get; internal set; }

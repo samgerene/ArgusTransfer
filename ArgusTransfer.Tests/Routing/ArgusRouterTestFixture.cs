@@ -21,6 +21,7 @@
 namespace ArgusTransfer.Tests.Routing
 {
     using System;
+    using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -297,6 +298,72 @@ namespace ArgusTransfer.Tests.Routing
             await this.router.RouteAsync(context);
 
             Assert.That(context.EndpointMetadata["tag"], Is.EqualTo("test-value"));
+        }
+
+        [Test]
+        public async Task Verify_that_query_values_are_populated_on_context()
+        {
+            IReadOnlyDictionary<string, string> capturedQueryValues = null;
+
+            this.router.MapGet("/items", context =>
+            {
+                capturedQueryValues = context.QueryValues;
+
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                return Task.CompletedTask;
+            });
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/items"
+            };
+
+            request.QueryParameters["page"] = "1";
+            request.QueryParameters["size"] = "10";
+
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
+
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(capturedQueryValues, Is.Not.Null);
+            Assert.That(capturedQueryValues["page"], Is.EqualTo("1"));
+            Assert.That(capturedQueryValues["size"], Is.EqualTo("10"));
+        }
+
+        [Test]
+        public async Task Verify_that_route_matching_works_with_query_parameters()
+        {
+            this.router.MapGet("/items/{id:Guid}", context =>
+            {
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                return Task.CompletedTask;
+            });
+
+            var guid = "cfb2e590-b98a-4dbc-8e56-f5d389ac3a8e";
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = $"/items/{guid}"
+            };
+
+            request.QueryParameters["verbose"] = "true";
+
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
+
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(context.RouteValues["id"], Is.EqualTo(guid));
+            Assert.That(context.QueryValues["verbose"], Is.EqualTo("true"));
         }
 
         [Test]

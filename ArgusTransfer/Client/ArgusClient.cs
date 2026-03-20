@@ -21,6 +21,7 @@
 namespace ArgusTransfer.Client
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using System.IO.Pipes;
     using System.Text;
@@ -120,6 +121,20 @@ namespace ArgusTransfer.Client
         }
 
         /// <summary>
+        /// Sends a GET request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> GetAsync(string route, IReadOnlyDictionary<string, string> queryParameters, CancellationToken cancellationToken = default)
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = route };
+            CopyQueryParameters(queryParameters, request);
+            return this.SendAsync(request, cancellationToken);
+        }
+
+        /// <summary>
         /// Sends a POST request to the specified route
         /// </summary>
         /// <param name="route">The route to send the request to</param>
@@ -129,6 +144,21 @@ namespace ArgusTransfer.Client
         public Task<ArgusResponse> PostAsync(string route, string body = null, CancellationToken cancellationToken = default)
         {
             return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.POST, Route = route, Body = body }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a POST request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> PostAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, CancellationToken cancellationToken = default)
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = route, Body = body };
+            CopyQueryParameters(queryParameters, request);
+            return this.SendAsync(request, cancellationToken);
         }
 
         /// <summary>
@@ -144,6 +174,21 @@ namespace ArgusTransfer.Client
         }
 
         /// <summary>
+        /// Sends a PUT request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> PutAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, CancellationToken cancellationToken = default)
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.PUT, Route = route, Body = body };
+            CopyQueryParameters(queryParameters, request);
+            return this.SendAsync(request, cancellationToken);
+        }
+
+        /// <summary>
         /// Sends a PATCH request to the specified route
         /// </summary>
         /// <param name="route">The route to send the request to</param>
@@ -153,6 +198,21 @@ namespace ArgusTransfer.Client
         public Task<ArgusResponse> PatchAsync(string route, string body = null, CancellationToken cancellationToken = default)
         {
             return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.PATCH, Route = route, Body = body }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a PATCH request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> PatchAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, CancellationToken cancellationToken = default)
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.PATCH, Route = route, Body = body };
+            CopyQueryParameters(queryParameters, request);
+            return this.SendAsync(request, cancellationToken);
         }
 
         /// <summary>
@@ -167,6 +227,20 @@ namespace ArgusTransfer.Client
         }
 
         /// <summary>
+        /// Sends a DELETE request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> DeleteAsync(string route, IReadOnlyDictionary<string, string> queryParameters, CancellationToken cancellationToken = default)
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.DELETE, Route = route };
+            CopyQueryParameters(queryParameters, request);
+            return this.SendAsync(request, cancellationToken);
+        }
+
+        /// <summary>
         /// Sends a HEAD request to the specified route
         /// </summary>
         /// <param name="route">The route to send the request to</param>
@@ -175,6 +249,36 @@ namespace ArgusTransfer.Client
         public Task<ArgusResponse> HeadAsync(string route, CancellationToken cancellationToken = default)
         {
             return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.HEAD, Route = route }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a HEAD request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> HeadAsync(string route, IReadOnlyDictionary<string, string> queryParameters, CancellationToken cancellationToken = default)
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.HEAD, Route = route };
+            CopyQueryParameters(queryParameters, request);
+            return this.SendAsync(request, cancellationToken);
+        }
+
+        /// <summary>
+        /// Copies query parameters from a read-only dictionary into the request
+        /// </summary>
+        /// <param name="queryParameters">The source query parameters</param>
+        /// <param name="request">The target request</param>
+        private static void CopyQueryParameters(IReadOnlyDictionary<string, string> queryParameters, ArgusRequest request)
+        {
+            if (queryParameters != null)
+            {
+                foreach (var kvp in queryParameters)
+                {
+                    request.QueryParameters[kvp.Key] = kvp.Value;
+                }
+            }
         }
 
         /// <summary>

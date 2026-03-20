@@ -21,6 +21,7 @@
 namespace ArgusTransfer.Client
 {
     using System;
+    using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -55,6 +56,15 @@ namespace ArgusTransfer.Client
         Task<ArgusResponse> GetAsync(string route, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// Sends a GET request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> GetAsync(string route, IReadOnlyDictionary<string, string> queryParameters, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Sends a POST request to the specified route
         /// </summary>
         /// <param name="route">The route to send the request to</param>
@@ -62,6 +72,16 @@ namespace ArgusTransfer.Client
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
         Task<ArgusResponse> PostAsync(string route, string body = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a POST request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> PostAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Sends a PUT request to the specified route
@@ -73,6 +93,16 @@ namespace ArgusTransfer.Client
         Task<ArgusResponse> PutAsync(string route, string body = null, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// Sends a PUT request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> PutAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Sends a PATCH request to the specified route
         /// </summary>
         /// <param name="route">The route to send the request to</param>
@@ -80,6 +110,16 @@ namespace ArgusTransfer.Client
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
         Task<ArgusResponse> PatchAsync(string route, string body = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a PATCH request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> PatchAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Sends a DELETE request to the specified route
@@ -90,11 +130,29 @@ namespace ArgusTransfer.Client
         Task<ArgusResponse> DeleteAsync(string route, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// Sends a DELETE request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> DeleteAsync(string route, IReadOnlyDictionary<string, string> queryParameters, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Sends a HEAD request to the specified route
         /// </summary>
         /// <param name="route">The route to send the request to</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
         Task<ArgusResponse> HeadAsync(string route, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a HEAD request to the specified route with query parameters
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> HeadAsync(string route, IReadOnlyDictionary<string, string> queryParameters, CancellationToken cancellationToken = default);
     }
 }

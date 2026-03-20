@@ -152,6 +152,83 @@ namespace ArgusTransfer.Tests.Serialization
         }
 
         [Test]
+        public void Verify_that_request_round_trips_with_query_parameters()
+        {
+            var original = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/items",
+                CorrelationToken = Guid.Parse("cfb2e590-b98a-4dbc-8e56-f5d389ac3a8e"),
+                Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
+            };
+
+            original.QueryParameters["page"] = "1";
+            original.QueryParameters["size"] = "10";
+
+            var text = this.serializer.Write(original);
+            var deserialized = this.serializer.Read(text);
+
+            Assert.That(deserialized.Route, Is.EqualTo("/items"));
+            Assert.That(deserialized.QueryParameters["page"], Is.EqualTo("1"));
+            Assert.That(deserialized.QueryParameters["size"], Is.EqualTo("10"));
+        }
+
+        [Test]
+        public void Verify_that_request_line_includes_query_string()
+        {
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/items",
+                Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
+            };
+
+            request.QueryParameters["page"] = "1";
+
+            var text = this.serializer.Write(request);
+
+            Assert.That(text, Does.StartWith("GET /items?page=1 ARGUS/1.0\r\n"));
+        }
+
+        [Test]
+        public void Verify_that_no_query_params_produces_empty_dictionary()
+        {
+            var original = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/items",
+                CorrelationToken = Guid.Parse("cfb2e590-b98a-4dbc-8e56-f5d389ac3a8e"),
+                Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
+            };
+
+            var text = this.serializer.Write(original);
+            var deserialized = this.serializer.Read(text);
+
+            Assert.That(deserialized.QueryParameters.Count, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Verify_that_special_characters_in_query_params_round_trip()
+        {
+            var original = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/search",
+                CorrelationToken = Guid.Parse("cfb2e590-b98a-4dbc-8e56-f5d389ac3a8e"),
+                Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
+            };
+
+            original.QueryParameters["q"] = "hello world";
+            original.QueryParameters["filter"] = "a&b=c";
+
+            var text = this.serializer.Write(original);
+            var deserialized = this.serializer.Read(text);
+
+            Assert.That(deserialized.QueryParameters["q"], Is.EqualTo("hello world"));
+            Assert.That(deserialized.QueryParameters["filter"], Is.EqualTo("a&b=c"));
+        }
+
+        [Test]
         public void Verify_that_Content_Type_round_trips()
         {
             var original = new ArgusRequest

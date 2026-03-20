@@ -75,6 +75,7 @@ namespace ArgusTransfer.Serialization
             sb.Append(request.Verb.ToString());
             sb.Append(' ');
             sb.Append(request.Route);
+            sb.Append(ArgusQueryStringHelper.BuildQueryString(request.QueryParameters));
             sb.Append(" ARGUS/1.0\r\n");
 
             sb.Append("X-Correlation-Token: ");
@@ -269,11 +270,25 @@ namespace ArgusTransfer.Serialization
                 throw new FormatException($"Unknown verb: {parts[0]}");
             }
 
-            return new ArgusRequest
+            var routeAndQuery = parts[1];
+            var questionMarkIndex = routeAndQuery.IndexOf('?');
+
+            var request = new ArgusRequest
             {
                 Verb = verb,
-                Route = parts[1]
+                Route = questionMarkIndex >= 0
+                    ? routeAndQuery.Substring(0, questionMarkIndex)
+                    : routeAndQuery
             };
+
+            if (questionMarkIndex >= 0 && questionMarkIndex < routeAndQuery.Length - 1)
+            {
+                ArgusQueryStringHelper.ParseQueryString(
+                    routeAndQuery.Substring(questionMarkIndex + 1),
+                    request.QueryParameters);
+            }
+
+            return request;
         }
 
         /// <summary>
