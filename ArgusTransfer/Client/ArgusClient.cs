@@ -109,6 +109,75 @@ namespace ArgusTransfer.Client
         }
 
         /// <summary>
+        /// Sends a GET request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> GetAsync(string route, CancellationToken cancellationToken = default)
+        {
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.GET, Route = route }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a POST request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> PostAsync(string route, string body = null, CancellationToken cancellationToken = default)
+        {
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.POST, Route = route, Body = body }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a PUT request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> PutAsync(string route, string body = null, CancellationToken cancellationToken = default)
+        {
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.PUT, Route = route, Body = body }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a PATCH request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> PatchAsync(string route, string body = null, CancellationToken cancellationToken = default)
+        {
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.PATCH, Route = route, Body = body }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a DELETE request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> DeleteAsync(string route, CancellationToken cancellationToken = default)
+        {
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.DELETE, Route = route }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a HEAD request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> HeadAsync(string route, CancellationToken cancellationToken = default)
+        {
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.HEAD, Route = route }, cancellationToken);
+        }
+
+        /// <summary>
         /// Disposes the <see cref="ArgusClient"/>
         /// </summary>
         public void Dispose()

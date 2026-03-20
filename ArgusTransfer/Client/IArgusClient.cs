@@ -45,5 +45,56 @@ namespace ArgusTransfer.Client
         /// The <see cref="ArgusResponse"/> received from the server
         /// </returns>
         Task<ArgusResponse> SendAsync(ArgusRequest request, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a GET request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> GetAsync(string route, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a POST request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> PostAsync(string route, string body = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a PUT request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> PutAsync(string route, string body = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a PATCH request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> PatchAsync(string route, string body = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a DELETE request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> DeleteAsync(string route, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a HEAD request to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> HeadAsync(string route, CancellationToken cancellationToken = default);
     }
 }
