@@ -34,7 +34,7 @@ namespace ArgusTransfer.Client
     /// A low-level client that sends an <see cref="ArgusRequest"/> and receives an <see cref="ArgusResponse"/>
     /// over a named pipe using the ARGUS/1.0 wire protocol
     /// </summary>
-    public class ArgusClient : IDisposable
+    public class ArgusClient : IArgusClient
     {
         /// <summary>
         /// The name of the named pipe to connect to
@@ -65,9 +65,7 @@ namespace ArgusTransfer.Client
         /// <param name="bodySerializer">
         /// An optional <see cref="IArgusBodySerializer"/>. Defaults to <see cref="JsonArgusBodySerializer"/>
         /// </param>
-        public ArgusClient(
-            string pipeName = "argus",
-            IArgusBodySerializer bodySerializer = null)
+        public ArgusClient(string pipeName = "argus", IArgusBodySerializer bodySerializer = null)
         {
             this.pipeName = pipeName;
             var body = bodySerializer ?? new JsonArgusBodySerializer();

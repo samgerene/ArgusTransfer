@@ -22,6 +22,7 @@ namespace ArgusTransfer.Extensions
 {
     using System;
 
+    using ArgusTransfer.Client;
     using ArgusTransfer.Server;
 
     using Microsoft.Extensions.DependencyInjection;
@@ -31,6 +32,25 @@ namespace ArgusTransfer.Extensions
     /// </summary>
     public static class ArgusTransportExtensions
     {
+        /// <summary>
+        /// Registers <see cref="IArgusClient"/> with a transient <see cref="ArgusClient"/> implementation
+        /// </summary>
+        /// <param name="services">
+        /// The <see cref="IServiceCollection"/> to register services with
+        /// </param>
+        /// <param name="pipeName">
+        /// The name of the named pipe to connect to. Defaults to "argus"
+        /// </param>
+        /// <returns>
+        /// The <see cref="IServiceCollection"/> for method chaining
+        /// </returns>
+        public static IServiceCollection AddArgusClient(this IServiceCollection services, string pipeName = "argus")
+        {
+            services.AddTransient<IArgusClient>(_ => new ArgusClient(pipeName));
+
+            return services;
+        }
+
         /// <summary>
         /// Registers the <see cref="ArgusPipeHostBackgroundService"/> as a hosted service
         /// and optionally configures <see cref="ArgusPipeHostOptions"/>

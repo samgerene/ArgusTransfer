@@ -45,6 +45,7 @@ namespace ArgusTransfer.Sample
                 {
                     services.AddArgusModules();
                     services.AddArgusPipeHost(o => o.PipeName = "sample");
+                    services.AddArgusClient("sample");
                     services.AddHostedService<SampleClientService>();
                 })
                 .Build()

@@ -39,6 +39,11 @@ namespace ArgusTransfer.Sample
     public class SampleClientService : BackgroundService
     {
         /// <summary>
+        /// The <see cref="IArgusClient"/> used to send requests to the pipe server
+        /// </summary>
+        private readonly IArgusClient client;
+
+        /// <summary>
         /// The <see cref="IHostApplicationLifetime"/> used to stop the application when done
         /// </summary>
         private readonly IHostApplicationLifetime lifetime;
@@ -55,11 +60,15 @@ namespace ArgusTransfer.Sample
         /// <summary>
         /// Initializes a new instance of the <see cref="SampleClientService"/> class
         /// </summary>
+        /// <param name="client">
+        /// The <see cref="IArgusClient"/> used to send requests to the pipe server
+        /// </param>
         /// <param name="lifetime">
         /// The <see cref="IHostApplicationLifetime"/> used to stop the application after the demo completes
         /// </param>
-        public SampleClientService(IHostApplicationLifetime lifetime)
+        public SampleClientService(IArgusClient client, IHostApplicationLifetime lifetime)
         {
+            this.client = client;
             this.lifetime = lifetime;
         }
 
@@ -79,81 +88,78 @@ namespace ArgusTransfer.Sample
             Console.WriteLine("=== ArgusTransfer Sample ===");
             Console.WriteLine();
 
-            using (var client = new ArgusClient("sample"))
+            // 1. GET /sampleitems — empty list
+            Console.WriteLine("--- Step 1: List all items (expect empty) ---");
+            var response = await this.client.SendAsync(new ArgusRequest
             {
-                // 1. GET /sampleitems — empty list
-                Console.WriteLine("--- Step 1: List all items (expect empty) ---");
-                var response = await client.SendAsync(new ArgusRequest
-                {
-                    Verb = ArgusVerb.GET,
-                    Route = "/sampleitems"
-                }, stoppingToken);
-                PrintResponse("GET", "/sampleitems", response);
+                Verb = ArgusVerb.GET,
+                Route = "/sampleitems"
+            }, stoppingToken);
+            PrintResponse("GET", "/sampleitems", response);
 
-                // 2. POST /sampleitems — create a widget
-                Console.WriteLine("--- Step 2: Create a new item ---");
-                var newItem = new { name = "Widget", description = "A sample widget" };
-                response = await client.SendAsync(new ArgusRequest
-                {
-                    Verb = ArgusVerb.POST,
-                    Route = "/sampleitems",
-                    Body = JsonSerializer.Serialize(newItem, SerializerOptions)
-                }, stoppingToken);
-                PrintResponse("POST", "/sampleitems", response);
+            // 2. POST /sampleitems — create a widget
+            Console.WriteLine("--- Step 2: Create a new item ---");
+            var newItem = new { name = "Widget", description = "A sample widget" };
+            response = await this.client.SendAsync(new ArgusRequest
+            {
+                Verb = ArgusVerb.POST,
+                Route = "/sampleitems",
+                Body = JsonSerializer.Serialize(newItem, SerializerOptions)
+            }, stoppingToken);
+            PrintResponse("POST", "/sampleitems", response);
 
-                var created = JsonSerializer.Deserialize<SampleItem>(response.Body, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-                var id = created.Id;
+            var created = JsonSerializer.Deserialize<SampleItem>(response.Body, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            var id = created.Id;
 
-                // 3. GET /sampleitems/{id} — read it back
-                Console.WriteLine("--- Step 3: Read the created item ---");
-                response = await client.SendAsync(new ArgusRequest
-                {
-                    Verb = ArgusVerb.GET,
-                    Route = $"/sampleitems/{id}"
-                }, stoppingToken);
-                PrintResponse("GET", $"/sampleitems/{id}", response);
+            // 3. GET /sampleitems/{id} — read it back
+            Console.WriteLine("--- Step 3: Read the created item ---");
+            response = await this.client.SendAsync(new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = $"/sampleitems/{id}"
+            }, stoppingToken);
+            PrintResponse("GET", $"/sampleitems/{id}", response);
 
-                // 4. PUT /sampleitems/{id} — update it
-                Console.WriteLine("--- Step 4: Update the item ---");
-                var updatedItem = new { name = "Updated Widget", description = "An updated sample widget" };
-                response = await client.SendAsync(new ArgusRequest
-                {
-                    Verb = ArgusVerb.PUT,
-                    Route = $"/sampleitems/{id}",
-                    Body = JsonSerializer.Serialize(updatedItem, SerializerOptions)
-                }, stoppingToken);
-                PrintResponse("PUT", $"/sampleitems/{id}", response);
+            // 4. PUT /sampleitems/{id} — update it
+            Console.WriteLine("--- Step 4: Update the item ---");
+            var updatedItem = new { name = "Updated Widget", description = "An updated sample widget" };
+            response = await this.client.SendAsync(new ArgusRequest
+            {
+                Verb = ArgusVerb.PUT,
+                Route = $"/sampleitems/{id}",
+                Body = JsonSerializer.Serialize(updatedItem, SerializerOptions)
+            }, stoppingToken);
+            PrintResponse("PUT", $"/sampleitems/{id}", response);
 
-                // 5. GET /sampleitems/{id} — verify update
-                Console.WriteLine("--- Step 5: Verify the update ---");
-                response = await client.SendAsync(new ArgusRequest
-                {
-                    Verb = ArgusVerb.GET,
-                    Route = $"/sampleitems/{id}"
-                }, stoppingToken);
-                PrintResponse("GET", $"/sampleitems/{id}", response);
+            // 5. GET /sampleitems/{id} — verify update
+            Console.WriteLine("--- Step 5: Verify the update ---");
+            response = await this.client.SendAsync(new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = $"/sampleitems/{id}"
+            }, stoppingToken);
+            PrintResponse("GET", $"/sampleitems/{id}", response);
 
-                // 6. DELETE /sampleitems/{id} — delete it
-                Console.WriteLine("--- Step 6: Delete the item ---");
-                response = await client.SendAsync(new ArgusRequest
-                {
-                    Verb = ArgusVerb.DELETE,
-                    Route = $"/sampleitems/{id}"
-                }, stoppingToken);
-                PrintResponse("DELETE", $"/sampleitems/{id}", response);
+            // 6. DELETE /sampleitems/{id} — delete it
+            Console.WriteLine("--- Step 6: Delete the item ---");
+            response = await this.client.SendAsync(new ArgusRequest
+            {
+                Verb = ArgusVerb.DELETE,
+                Route = $"/sampleitems/{id}"
+            }, stoppingToken);
+            PrintResponse("DELETE", $"/sampleitems/{id}", response);
 
-                // 7. GET /sampleitems — verify empty list
-                Console.WriteLine("--- Step 7: List all items (expect empty) ---");
-                response = await client.SendAsync(new ArgusRequest
-                {
-                    Verb = ArgusVerb.GET,
-                    Route = "/sampleitems"
-                }, stoppingToken);
-                PrintResponse("GET", "/sampleitems", response);
-            }
+            // 7. GET /sampleitems — verify empty list
+            Console.WriteLine("--- Step 7: List all items (expect empty) ---");
+            response = await this.client.SendAsync(new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/sampleitems"
+            }, stoppingToken);
+            PrintResponse("GET", "/sampleitems", response);
 
             Console.WriteLine("=== Demo Complete ===");
 
