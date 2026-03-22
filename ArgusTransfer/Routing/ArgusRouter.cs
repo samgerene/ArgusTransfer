@@ -190,6 +190,11 @@ namespace ArgusTransfer.Routing
 
                         this.StampCorrelationToken(context);
 
+                        if (context.Request.Verb == ArgusVerb.HEAD && context.Response != null)
+                        {
+                            context.Response.Body = null;
+                        }
+
                         return;
                     }
                 }

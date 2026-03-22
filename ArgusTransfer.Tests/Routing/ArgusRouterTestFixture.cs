@@ -123,6 +123,38 @@ namespace ArgusTransfer.Tests.Routing
         }
 
         [Test]
+        public async Task Verify_that_HEAD_request_strips_response_body()
+        {
+            this.router.MapHead("/resource", context =>
+            {
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok,
+                    Body = "{\"name\":\"test\"}"
+                };
+
+                context.Response.Headers["Content-Type"] = "application/json";
+                context.Response.Headers["Content-Length"] = "15";
+
+                return Task.CompletedTask;
+            });
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.HEAD,
+                Route = "/resource"
+            };
+
+            var context = new ArgusContext(request, CancellationToken.None);
+            await this.router.RouteAsync(context);
+
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(context.Response.Body, Is.Null);
+            Assert.That(context.Response.Headers["Content-Type"], Is.EqualTo("application/json"));
+            Assert.That(context.Response.Headers["Content-Length"], Is.EqualTo("15"));
+        }
+
+        [Test]
         public async Task Verify_that_route_values_are_extracted()
         {
             this.router.MapGet("/healthendpoint/{identifier:Guid}", context =>
