@@ -42,21 +42,24 @@ namespace ArgusTransfer.Extensions
         /// <param name="pipeName">
         /// The name of the named pipe to connect to. Defaults to "argus"
         /// </param>
+        /// <param name="defaultTimeout">An optional default timeout for all requests made by the client</param>
         /// <returns>
         /// The <see cref="IServiceCollection"/> for method chaining
         /// </returns>
-        public static IServiceCollection AddArgusClient(this IServiceCollection services, string pipeName = "argus")
+        public static IServiceCollection AddArgusClient(this IServiceCollection services, string pipeName = "argus", TimeSpan? defaultTimeout = null)
         {
             services.AddTransient<IArgusClient>(sp =>
             {
                 var registry = sp.GetService<IArgusBodySerializerRegistry>();
 
-                if (registry != null)
+                var client = registry != null ? new ArgusClient(pipeName, registry) : new ArgusClient(pipeName);
+
+                if (defaultTimeout.HasValue)
                 {
-                    return new ArgusClient(pipeName, registry);
+                    client.DefaultTimeout = defaultTimeout.Value;
                 }
 
-                return new ArgusClient(pipeName);
+                return client;
             });
 
             return services;
@@ -82,7 +85,7 @@ namespace ArgusTransfer.Extensions
                 services.Configure(configure);
             }
 
-            services.AddArgusTextProtocol();
+            services.AddArgusPlainTextProtocol();
             services.AddHostedService<ArgusPipeHostBackgroundService>();
 
             return services;

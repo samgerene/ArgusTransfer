@@ -58,6 +58,11 @@ namespace ArgusTransfer.Client
         private bool disposed;
 
         /// <summary>
+        /// Gets or sets the default timeout for requests. Defaults to 30 seconds.
+        /// </summary>
+        public TimeSpan DefaultTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ArgusClient"/> class
         /// </summary>
         /// <param name="pipeName">
@@ -98,28 +103,41 @@ namespace ArgusTransfer.Client
         /// <param name="request">
         /// The <see cref="ArgusRequest"/> to send
         /// </param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> used to signal cancellation
         /// </param>
         /// <returns>
         /// The <see cref="ArgusResponse"/> received from the server
         /// </returns>
-        public async Task<ArgusResponse> SendAsync(ArgusRequest request, CancellationToken cancellationToken = default)
+        public async Task<ArgusResponse> SendAsync(ArgusRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
+            var effectiveTimeout = timeout ?? this.DefaultTimeout;
+            using var timeoutCts = new CancellationTokenSource(effectiveTimeout);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
             var pipeClient = new NamedPipeClientStream(".", this.pipeName, PipeDirection.InOut);
 
             try
             {
-                await pipeClient.ConnectAsync(cancellationToken);
+                await pipeClient.ConnectAsync(linkedCts.Token);
 
                 var writer = new StreamWriter(pipeClient, new UTF8Encoding(false)) { AutoFlush = false };
                 var reader = new StreamReader(pipeClient, new UTF8Encoding(false));
 
                 this.requestSerializer.Write(writer, request);
 
-                var response = await this.responseSerializer.ReadAsync(reader, cancellationToken);
+                var response = await this.responseSerializer.ReadAsync(reader, linkedCts.Token);
 
                 return response;
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException($"The request to pipe '{this.pipeName}' timed out after {effectiveTimeout.TotalSeconds:F1} seconds.");
+            }
+            catch (IOException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException($"The request to pipe '{this.pipeName}' timed out after {effectiveTimeout.TotalSeconds:F1} seconds.");
             }
             finally
             {
@@ -131,11 +149,12 @@ namespace ArgusTransfer.Client
         /// Sends a GET request to the specified route
         /// </summary>
         /// <param name="route">The route to send the request to</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> GetAsync(string route, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> GetAsync(string route, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
-            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.GET, Route = route }, cancellationToken);
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.GET, Route = route }, timeout, cancellationToken);
         }
 
         /// <summary>
@@ -143,13 +162,14 @@ namespace ArgusTransfer.Client
         /// </summary>
         /// <param name="route">The route to send the request to</param>
         /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> GetAsync(string route, IReadOnlyDictionary<string, string> queryParameters, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> GetAsync(string route, IReadOnlyDictionary<string, string> queryParameters, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
             var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = route };
             CopyQueryParameters(queryParameters, request);
-            return this.SendAsync(request, cancellationToken);
+            return this.SendAsync(request, timeout, cancellationToken);
         }
 
         /// <summary>
@@ -157,11 +177,12 @@ namespace ArgusTransfer.Client
         /// </summary>
         /// <param name="route">The route to send the request to</param>
         /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> PostAsync(string route, string body = null, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> PostAsync(string route, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
-            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.POST, Route = route, Body = body }, cancellationToken);
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.POST, Route = route, Body = body }, timeout, cancellationToken);
         }
 
         /// <summary>
@@ -170,13 +191,14 @@ namespace ArgusTransfer.Client
         /// <param name="route">The route to send the request to</param>
         /// <param name="queryParameters">The query parameters to include in the request</param>
         /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> PostAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> PostAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
             var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = route, Body = body };
             CopyQueryParameters(queryParameters, request);
-            return this.SendAsync(request, cancellationToken);
+            return this.SendAsync(request, timeout, cancellationToken);
         }
 
         /// <summary>
@@ -184,11 +206,12 @@ namespace ArgusTransfer.Client
         /// </summary>
         /// <param name="route">The route to send the request to</param>
         /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> PutAsync(string route, string body = null, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> PutAsync(string route, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
-            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.PUT, Route = route, Body = body }, cancellationToken);
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.PUT, Route = route, Body = body }, timeout, cancellationToken);
         }
 
         /// <summary>
@@ -197,13 +220,14 @@ namespace ArgusTransfer.Client
         /// <param name="route">The route to send the request to</param>
         /// <param name="queryParameters">The query parameters to include in the request</param>
         /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> PutAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> PutAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
             var request = new ArgusRequest { Verb = ArgusVerb.PUT, Route = route, Body = body };
             CopyQueryParameters(queryParameters, request);
-            return this.SendAsync(request, cancellationToken);
+            return this.SendAsync(request, timeout, cancellationToken);
         }
 
         /// <summary>
@@ -211,11 +235,12 @@ namespace ArgusTransfer.Client
         /// </summary>
         /// <param name="route">The route to send the request to</param>
         /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> PatchAsync(string route, string body = null, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> PatchAsync(string route, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
-            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.PATCH, Route = route, Body = body }, cancellationToken);
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.PATCH, Route = route, Body = body }, timeout, cancellationToken);
         }
 
         /// <summary>
@@ -224,24 +249,26 @@ namespace ArgusTransfer.Client
         /// <param name="route">The route to send the request to</param>
         /// <param name="queryParameters">The query parameters to include in the request</param>
         /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> PatchAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> PatchAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
             var request = new ArgusRequest { Verb = ArgusVerb.PATCH, Route = route, Body = body };
             CopyQueryParameters(queryParameters, request);
-            return this.SendAsync(request, cancellationToken);
+            return this.SendAsync(request, timeout, cancellationToken);
         }
 
         /// <summary>
         /// Sends a DELETE request to the specified route
         /// </summary>
         /// <param name="route">The route to send the request to</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> DeleteAsync(string route, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> DeleteAsync(string route, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
-            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.DELETE, Route = route }, cancellationToken);
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.DELETE, Route = route }, timeout, cancellationToken);
         }
 
         /// <summary>
@@ -249,24 +276,26 @@ namespace ArgusTransfer.Client
         /// </summary>
         /// <param name="route">The route to send the request to</param>
         /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> DeleteAsync(string route, IReadOnlyDictionary<string, string> queryParameters, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> DeleteAsync(string route, IReadOnlyDictionary<string, string> queryParameters, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
             var request = new ArgusRequest { Verb = ArgusVerb.DELETE, Route = route };
             CopyQueryParameters(queryParameters, request);
-            return this.SendAsync(request, cancellationToken);
+            return this.SendAsync(request, timeout, cancellationToken);
         }
 
         /// <summary>
         /// Sends a HEAD request to the specified route
         /// </summary>
         /// <param name="route">The route to send the request to</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> HeadAsync(string route, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> HeadAsync(string route, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
-            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.HEAD, Route = route }, cancellationToken);
+            return this.SendAsync(new ArgusRequest { Verb = ArgusVerb.HEAD, Route = route }, timeout, cancellationToken);
         }
 
         /// <summary>
@@ -274,13 +303,14 @@ namespace ArgusTransfer.Client
         /// </summary>
         /// <param name="route">The route to send the request to</param>
         /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
-        public Task<ArgusResponse> HeadAsync(string route, IReadOnlyDictionary<string, string> queryParameters, CancellationToken cancellationToken = default)
+        public Task<ArgusResponse> HeadAsync(string route, IReadOnlyDictionary<string, string> queryParameters, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
             var request = new ArgusRequest { Verb = ArgusVerb.HEAD, Route = route };
             CopyQueryParameters(queryParameters, request);
-            return this.SendAsync(request, cancellationToken);
+            return this.SendAsync(request, timeout, cancellationToken);
         }
 
         /// <summary>

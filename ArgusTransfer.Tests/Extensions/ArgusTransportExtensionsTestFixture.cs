@@ -80,7 +80,7 @@ namespace ArgusTransfer.Tests.Extensions
         {
             var services = new ServiceCollection();
 
-            services.AddArgusTextProtocol();
+            services.AddArgusPlainTextProtocol();
 
             var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusBodySerializer));
 

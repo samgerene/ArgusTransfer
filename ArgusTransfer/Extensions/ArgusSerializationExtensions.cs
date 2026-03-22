@@ -41,7 +41,7 @@ namespace ArgusTransfer.Extensions
         /// <returns>
         /// The <see cref="IServiceCollection"/> for method chaining
         /// </returns>
-        public static IServiceCollection AddArgusTextProtocol(this IServiceCollection services)
+        public static IServiceCollection AddArgusPlainTextProtocol(this IServiceCollection services)
         {
             services.TryAddSingleton<IArgusBodySerializer, PlainTextArgusBodySerializer>();
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IArgusBodySerializer, PlainTextArgusBodySerializer>());

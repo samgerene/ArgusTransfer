@@ -90,14 +90,14 @@ namespace ArgusTransfer.Sample
 
             // 1. GET /sampleitems — empty list
             Console.WriteLine("--- Step 1: List all items (expect empty) ---");
-            var response = await this.client.GetAsync("/sampleitems", stoppingToken);
+            var response = await this.client.GetAsync("/sampleitems", cancellationToken: stoppingToken);
             PrintResponse("GET", "/sampleitems", response);
 
             // 2. POST /sampleitems — create a widget
             Console.WriteLine("--- Step 2: Create a new item ---");
             var newItem = new { name = "Widget", description = "A sample widget" };
             var json = JsonSerializer.Serialize(newItem, SerializerOptions);
-            response = await this.client.PostAsync("/sampleitems", json, stoppingToken);
+            response = await this.client.PostAsync("/sampleitems", json, cancellationToken: stoppingToken);
             PrintResponse("POST", "/sampleitems", response);
 
             var created = JsonSerializer.Deserialize<SampleItem>(response.Body, new JsonSerializerOptions
@@ -108,29 +108,29 @@ namespace ArgusTransfer.Sample
 
             // 3. GET /sampleitems/{id} — read it back
             Console.WriteLine("--- Step 3: Read the created item ---");
-            response = await this.client.GetAsync($"/sampleitems/{id}", stoppingToken);
+            response = await this.client.GetAsync($"/sampleitems/{id}", cancellationToken: stoppingToken);
             PrintResponse("GET", $"/sampleitems/{id}", response);
 
             // 4. PUT /sampleitems/{id} — update it
             Console.WriteLine("--- Step 4: Update the item ---");
             var updatedItem = new { name = "Updated Widget", description = "An updated sample widget" };
             var updatedJson = JsonSerializer.Serialize(updatedItem, SerializerOptions);
-            response = await this.client.PutAsync($"/sampleitems/{id}", updatedJson, stoppingToken);
+            response = await this.client.PutAsync($"/sampleitems/{id}", updatedJson, cancellationToken: stoppingToken);
             PrintResponse("PUT", $"/sampleitems/{id}", response);
 
             // 5. GET /sampleitems/{id} — verify update
             Console.WriteLine("--- Step 5: Verify the update ---");
-            response = await this.client.GetAsync($"/sampleitems/{id}", stoppingToken);
+            response = await this.client.GetAsync($"/sampleitems/{id}", cancellationToken: stoppingToken);
             PrintResponse("GET", $"/sampleitems/{id}", response);
 
             // 6. DELETE /sampleitems/{id} — delete it
             Console.WriteLine("--- Step 6: Delete the item ---");
-            response = await this.client.DeleteAsync($"/sampleitems/{id}", stoppingToken);
+            response = await this.client.DeleteAsync($"/sampleitems/{id}", cancellationToken: stoppingToken);
             PrintResponse("DELETE", $"/sampleitems/{id}", response);
 
             // 7. GET /sampleitems — verify empty list
             Console.WriteLine("--- Step 7: List all items (expect empty) ---");
-            response = await this.client.GetAsync("/sampleitems", stoppingToken);
+            response = await this.client.GetAsync("/sampleitems", cancellationToken: stoppingToken);
             PrintResponse("GET", "/sampleitems", response);
 
             Console.WriteLine("=== Demo Complete ===");

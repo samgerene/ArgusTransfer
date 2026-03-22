@@ -182,5 +182,58 @@ namespace ArgusTransfer.Tests.Client
             Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Created));
             Assert.That(clientResponse.Body, Is.EqualTo(requestBody));
         }
+
+        [Test]
+        public void Verify_that_DefaultTimeout_is_30_seconds()
+        {
+            using var client = new ArgusClient("test-pipe");
+            Assert.That(client.DefaultTimeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
+        }
+
+        [Test]
+        public void Verify_that_SendAsync_throws_TimeoutException_when_server_is_slow()
+        {
+            var pipeName = $"argus-timeout-test-{Guid.NewGuid():N}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                await server.WaitForConnectionAsync();
+                // Server deliberately does not respond - simulates a hang
+                await Task.Delay(5000);
+            });
+
+            using var client = new ArgusClient(pipeName);
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/test" };
+
+            Assert.ThrowsAsync<TimeoutException>(async () =>
+            {
+                await client.SendAsync(request, timeout: TimeSpan.FromMilliseconds(200));
+            });
+        }
+
+        [Test]
+        public void Verify_that_per_request_timeout_overrides_default()
+        {
+            var pipeName = $"argus-timeout-override-{Guid.NewGuid():N}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                await server.WaitForConnectionAsync();
+                await Task.Delay(5000);
+            });
+
+            using var client = new ArgusClient(pipeName);
+            client.DefaultTimeout = TimeSpan.FromSeconds(60); // Long default
+
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/test" };
+
+            // Short per-request timeout should override the long default
+            Assert.ThrowsAsync<TimeoutException>(async () =>
+            {
+                await client.SendAsync(request, timeout: TimeSpan.FromMilliseconds(200));
+            });
+        }
     }
 }
