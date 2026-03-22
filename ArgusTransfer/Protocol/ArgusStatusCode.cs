@@ -36,6 +36,11 @@ namespace ArgusTransfer.Protocol
         Created = 201,
 
         /// <summary>
+        /// The request was successful and there is no content to return
+        /// </summary>
+        NoContent = 204,
+
+        /// <summary>
         /// The request was malformed or contained invalid data
         /// </summary>
         BadRequest = 400,
@@ -64,6 +69,11 @@ namespace ArgusTransfer.Protocol
         /// The request could not be completed due to a conflict with the current state of the resource
         /// </summary>
         Conflict = 409,
+
+        /// <summary>
+        /// The request syntax is valid but the contained data failed validation
+        /// </summary>
+        UnprocessableEntity = 422,
 
         /// <summary>
         /// An unexpected error occurred on the server

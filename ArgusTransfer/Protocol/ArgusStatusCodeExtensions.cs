@@ -42,6 +42,8 @@ namespace ArgusTransfer.Protocol
                     return "OK";
                 case ArgusStatusCode.Created:
                     return "Created";
+                case ArgusStatusCode.NoContent:
+                    return "No Content";
                 case ArgusStatusCode.BadRequest:
                     return "Bad Request";
                 case ArgusStatusCode.Unauthorized:
@@ -54,6 +56,8 @@ namespace ArgusTransfer.Protocol
                     return "Not Acceptable";
                 case ArgusStatusCode.Conflict:
                     return "Conflict";
+                case ArgusStatusCode.UnprocessableEntity:
+                    return "Unprocessable Entity";
                 case ArgusStatusCode.InternalServerError:
                     return "Internal Server Error";
                 case ArgusStatusCode.NotImplemented:
@@ -87,6 +91,9 @@ namespace ArgusTransfer.Protocol
                 case 201:
                     statusCode = ArgusStatusCode.Created;
                     return true;
+                case 204:
+                    statusCode = ArgusStatusCode.NoContent;
+                    return true;
                 case 400:
                     statusCode = ArgusStatusCode.BadRequest;
                     return true;
@@ -104,6 +111,9 @@ namespace ArgusTransfer.Protocol
                     return true;
                 case 409:
                     statusCode = ArgusStatusCode.Conflict;
+                    return true;
+                case 422:
+                    statusCode = ArgusStatusCode.UnprocessableEntity;
                     return true;
                 case 500:
                     statusCode = ArgusStatusCode.InternalServerError;

@@ -43,6 +43,12 @@ namespace ArgusTransfer.Tests.Protocol
         }
 
         [Test]
+        public void Verify_that_NoContent_returns_No_Content_reason_phrase()
+        {
+            Assert.That(ArgusStatusCode.NoContent.ToReasonPhrase(), Is.EqualTo("No Content"));
+        }
+
+        [Test]
         public void Verify_that_BadRequest_returns_Bad_Request_reason_phrase()
         {
             Assert.That(ArgusStatusCode.BadRequest.ToReasonPhrase(), Is.EqualTo("Bad Request"));
@@ -85,6 +91,12 @@ namespace ArgusTransfer.Tests.Protocol
         }
 
         [Test]
+        public void Verify_that_UnprocessableEntity_returns_Unprocessable_Entity_reason_phrase()
+        {
+            Assert.That(ArgusStatusCode.UnprocessableEntity.ToReasonPhrase(), Is.EqualTo("Unprocessable Entity"));
+        }
+
+        [Test]
         public void Verify_that_NotImplemented_returns_Not_Implemented_reason_phrase()
         {
             Assert.That(ArgusStatusCode.NotImplemented.ToReasonPhrase(), Is.EqualTo("Not Implemented"));
@@ -105,6 +117,9 @@ namespace ArgusTransfer.Tests.Protocol
             Assert.That(ArgusStatusCodeExtensions.TryParse(201, out var created), Is.True);
             Assert.That(created, Is.EqualTo(ArgusStatusCode.Created));
 
+            Assert.That(ArgusStatusCodeExtensions.TryParse(204, out var noContent), Is.True);
+            Assert.That(noContent, Is.EqualTo(ArgusStatusCode.NoContent));
+
             Assert.That(ArgusStatusCodeExtensions.TryParse(400, out var badRequest), Is.True);
             Assert.That(badRequest, Is.EqualTo(ArgusStatusCode.BadRequest));
 
@@ -122,6 +137,9 @@ namespace ArgusTransfer.Tests.Protocol
 
             Assert.That(ArgusStatusCodeExtensions.TryParse(409, out var conflict), Is.True);
             Assert.That(conflict, Is.EqualTo(ArgusStatusCode.Conflict));
+
+            Assert.That(ArgusStatusCodeExtensions.TryParse(422, out var unprocessableEntity), Is.True);
+            Assert.That(unprocessableEntity, Is.EqualTo(ArgusStatusCode.UnprocessableEntity));
 
             Assert.That(ArgusStatusCodeExtensions.TryParse(500, out var internalServerError), Is.True);
             Assert.That(internalServerError, Is.EqualTo(ArgusStatusCode.InternalServerError));
