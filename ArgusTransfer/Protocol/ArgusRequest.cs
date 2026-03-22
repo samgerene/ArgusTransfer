@@ -44,5 +44,26 @@ namespace ArgusTransfer.Protocol
         /// Gets the query parameters parsed from the request URL
         /// </summary>
         public Dictionary<string, string> QueryParameters { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Gets or sets the preferred content type(s) for the response, as specified
+        /// by the client via the Accept header (e.g. "application/json", "text/xml").
+        /// This is a convenience accessor over <c>Headers["Accept"]</c>.
+        /// </summary>
+        public string Accept
+        {
+            get => Headers.TryGetValue("Accept", out var value) ? value : null;
+            set
+            {
+                if (string.IsNullOrEmpty(value))
+                {
+                    Headers.Remove("Accept");
+                }
+                else
+                {
+                    Headers["Accept"] = value;
+                }
+            }
+        }
     }
 }

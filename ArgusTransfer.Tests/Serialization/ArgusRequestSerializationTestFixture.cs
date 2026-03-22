@@ -229,6 +229,86 @@ namespace ArgusTransfer.Tests.Serialization
         }
 
         [Test]
+        public void Verify_that_Accept_header_round_trips()
+        {
+            var original = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/healthendpoint",
+                CorrelationToken = Guid.Parse("cfb2e590-b98a-4dbc-8e56-f5d389ac3a8e"),
+                Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc),
+                Accept = "application/json"
+            };
+
+            var text = this.serializer.Write(original);
+            var deserialized = this.serializer.Read(text);
+
+            Assert.That(deserialized.Accept, Is.EqualTo("application/json"));
+        }
+
+        [Test]
+        public void Verify_that_Accept_header_is_written_to_wire_format()
+        {
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/healthendpoint",
+                Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc),
+                Accept = "text/xml"
+            };
+
+            var text = this.serializer.Write(request);
+
+            Assert.That(text, Does.Contain("Accept: text/xml\r\n"));
+        }
+
+        [Test]
+        public void Verify_that_Accept_header_is_omitted_when_null()
+        {
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/healthendpoint",
+                Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
+            };
+
+            var text = this.serializer.Write(request);
+
+            Assert.That(text, Does.Not.Contain("Accept:"));
+        }
+
+        [Test]
+        public void Verify_that_Accept_property_and_Headers_are_in_sync()
+        {
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/healthendpoint",
+                Accept = "application/json"
+            };
+
+            Assert.That(request.Headers["Accept"], Is.EqualTo("application/json"));
+
+            request.Accept = null;
+
+            Assert.That(request.Headers.ContainsKey("Accept"), Is.False);
+        }
+
+        [Test]
+        public void Verify_that_Accept_set_via_Headers_is_read_via_property()
+        {
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/healthendpoint"
+            };
+
+            request.Headers["Accept"] = "text/plain";
+
+            Assert.That(request.Accept, Is.EqualTo("text/plain"));
+        }
+
+        [Test]
         public void Verify_that_Content_Type_round_trips()
         {
             var original = new ArgusRequest
