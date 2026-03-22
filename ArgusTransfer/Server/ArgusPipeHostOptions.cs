@@ -20,6 +20,8 @@
 
 namespace ArgusTransfer.Server
 {
+    using System;
+
     /// <summary>
     /// Configuration options for the <see cref="ArgusPipeHostBackgroundService"/>
     /// </summary>
@@ -35,5 +37,11 @@ namespace ArgusTransfer.Server
         /// Requests with a Content-Length exceeding this limit are rejected with a 400 Bad Request response.
         /// </summary>
         public long MaxRequestBodySize { get; set; } = 1_048_576;
+
+        /// <summary>
+        /// Gets or sets the maximum time to wait for in-flight requests to complete during shutdown.
+        /// Defaults to 30 seconds. After this timeout, remaining requests are cancelled.
+        /// </summary>
+        public TimeSpan ShutdownDrainTimeout { get; set; } = TimeSpan.FromSeconds(30);
     }
 }

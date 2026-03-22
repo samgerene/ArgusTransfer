@@ -21,8 +21,10 @@
 namespace ArgusTransfer.Server
 {
     using System;
+    using System.Collections.Concurrent;
     using System.IO;
     using System.IO.Pipes;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -69,6 +71,16 @@ namespace ArgusTransfer.Server
         /// The <see cref="IArgusBodySerializerRegistry"/> used to resolve serializers by content type
         /// </summary>
         private readonly IArgusBodySerializerRegistry bodySerializerRegistry;
+
+        /// <summary>
+        /// Tracks in-flight request handler tasks for graceful shutdown draining
+        /// </summary>
+        private readonly ConcurrentDictionary<int, Task> activeRequests = new();
+
+        /// <summary>
+        /// Cancellation source for in-flight requests during shutdown drain
+        /// </summary>
+        private CancellationTokenSource drainCts;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ArgusPipeHostBackgroundService"/> class
@@ -140,12 +152,15 @@ namespace ArgusTransfer.Server
         /// </returns>
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            this.drainCts = new CancellationTokenSource();
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 var serverStream = new NamedPipeServerStream(this.options.PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
                 await serverStream.WaitForConnectionAsync(stoppingToken);
 
-                _ = Task.Run(async () =>
+                var requestToken = this.drainCts.Token;
+                var task = Task.Run(async () =>
                 {
                     try
                     {
@@ -153,7 +168,7 @@ namespace ArgusTransfer.Server
                         await using var writer = new StreamWriter(serverStream);
                         writer.AutoFlush = true;
 
-                        var request = await this.requestSerializer.ReadAsync(reader, stoppingToken, this.options.MaxRequestBodySize);
+                        var request = await this.requestSerializer.ReadAsync(reader, requestToken, this.options.MaxRequestBodySize);
 
                         if (this.bodySerializerRegistry != null)
                         {
@@ -173,7 +188,7 @@ namespace ArgusTransfer.Server
                             }
                         }
 
-                        var context = new ArgusContext(request, stoppingToken);
+                        var context = new ArgusContext(request, requestToken);
                         await this.router.RouteAsync(context);
 
                         var acceptType2 = request.Accept;
@@ -217,8 +232,45 @@ namespace ArgusTransfer.Server
                     {
                         await serverStream.DisposeAsync();
                     }
-                }, stoppingToken);
+                }, CancellationToken.None);
+
+                var taskId = task.Id;
+                this.activeRequests[taskId] = task;
+                task.ContinueWith(_ => this.activeRequests.TryRemove(taskId, out _), TaskContinuationOptions.ExecuteSynchronously);
             }
+        }
+
+        /// <summary>
+        /// Stops the service, draining in-flight requests within the configured
+        /// <see cref="ArgusPipeHostOptions.ShutdownDrainTimeout"/> before cancelling them
+        /// </summary>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal forced shutdown
+        /// </param>
+        /// <returns>
+        /// An awaitable <see cref="Task"/>
+        /// </returns>
+        public override async Task StopAsync(CancellationToken cancellationToken)
+        {
+            await base.StopAsync(cancellationToken);
+
+            var pending = this.activeRequests.Values.ToArray();
+
+            if (pending.Length > 0)
+            {
+                this.logger.LogInformation("Draining {Count} in-flight request(s)...", pending.Length);
+
+                var drainTask = Task.WhenAll(pending);
+                var completed = await Task.WhenAny(drainTask, Task.Delay(this.options.ShutdownDrainTimeout, cancellationToken));
+
+                if (completed != drainTask)
+                {
+                    this.logger.LogWarning("Shutdown drain timeout expired. Cancelling {Count} remaining request(s).", this.activeRequests.Count);
+                    this.drainCts?.Cancel();
+                }
+            }
+
+            this.drainCts?.Dispose();
         }
 
         /// <summary>

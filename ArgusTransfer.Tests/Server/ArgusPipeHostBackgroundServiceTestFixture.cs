@@ -21,7 +21,11 @@
 namespace ArgusTransfer.Transport.Tests.Server
 {
     using System;
+    using System.Diagnostics;
+    using System.Threading;
     using System.Threading.Tasks;
+
+    using ArgusTransfer.Client;
 
     using ArgusTransfer.Protocol;
     using ArgusTransfer.Routing;
@@ -159,6 +163,121 @@ namespace ArgusTransfer.Transport.Tests.Server
             var response = await this.service.HandleRequestAsync(request);
 
             Assert.That(response.CorrelationToken, Is.EqualTo(correlationToken));
+        }
+
+        [Test]
+        public void Verify_that_ShutdownDrainTimeout_defaults_to_30_seconds()
+        {
+            var options = new ArgusPipeHostOptions();
+
+            Assert.That(options.ShutdownDrainTimeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
+        }
+
+        [Test]
+        public void Verify_that_MaxRequestBodySize_defaults_to_1MB()
+        {
+            var options = new ArgusPipeHostOptions();
+
+            Assert.That(options.MaxRequestBodySize, Is.EqualTo(1_048_576));
+        }
+
+        [Test]
+        public async Task Verify_that_StopAsync_waits_for_in_flight_request_to_complete()
+        {
+            var pipeName = $"argus-drain-{Guid.NewGuid():N}";
+            var handlerCompleted = false;
+
+            var router = new ArgusRouter();
+
+            router.MapGet("/slow", async context =>
+            {
+                await Task.Delay(500, context.RequestAborted);
+
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok,
+                    Body = "done"
+                };
+
+                handlerCompleted = true;
+            });
+
+            var options = Options.Create(new ArgusPipeHostOptions
+            {
+                PipeName = pipeName,
+                ShutdownDrainTimeout = TimeSpan.FromSeconds(5)
+            });
+
+            var drainService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                new PlainTextArgusBodySerializer());
+
+            await drainService.StartAsync(CancellationToken.None);
+
+            using var client = new ArgusClient(pipeName);
+            var responseTask = client.GetAsync("/slow", timeout: TimeSpan.FromSeconds(10));
+
+            await Task.Delay(100);
+
+            await drainService.StopAsync(CancellationToken.None);
+
+            var response = await responseTask;
+
+            Assert.That(handlerCompleted, Is.True);
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Is.EqualTo("done"));
+        }
+
+        [Test]
+        public async Task Verify_that_StopAsync_cancels_requests_after_drain_timeout()
+        {
+            var pipeName = $"argus-drain-timeout-{Guid.NewGuid():N}";
+
+            var router = new ArgusRouter();
+
+            router.MapGet("/very-slow", async context =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(30), context.RequestAborted);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected — drain timeout cancelled us
+                }
+
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok
+                };
+            });
+
+            var options = Options.Create(new ArgusPipeHostOptions
+            {
+                PipeName = pipeName,
+                ShutdownDrainTimeout = TimeSpan.FromMilliseconds(200)
+            });
+
+            var drainService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                new PlainTextArgusBodySerializer());
+
+            await drainService.StartAsync(CancellationToken.None);
+
+            using var client = new ArgusClient(pipeName);
+            _ = client.GetAsync("/very-slow", timeout: TimeSpan.FromSeconds(10));
+
+            await Task.Delay(100);
+
+            var stopwatch = Stopwatch.StartNew();
+            await drainService.StopAsync(CancellationToken.None);
+            stopwatch.Stop();
+
+            Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(5)));
         }
     }
 }

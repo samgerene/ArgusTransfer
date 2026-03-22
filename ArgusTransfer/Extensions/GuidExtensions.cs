@@ -116,7 +116,7 @@ namespace ArgusTransfer.Extensions
         /// a shortGuid string
         /// </param>
         /// <returns>
-        /// an instance of <see cref=".Guid"/>
+        /// an instance of <see cref="Guid"/>
         /// </returns>
         /// <remarks>
         /// A ShortGuid is a base64 encoded guid-string representation where any "/" has been replaced with a "_"
