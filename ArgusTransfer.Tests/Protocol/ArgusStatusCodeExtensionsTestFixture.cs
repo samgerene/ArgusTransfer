@@ -49,6 +49,18 @@ namespace ArgusTransfer.Tests.Protocol
         }
 
         [Test]
+        public void Verify_that_Unauthorized_returns_Unauthorized_reason_phrase()
+        {
+            Assert.That(ArgusStatusCode.Unauthorized.ToReasonPhrase(), Is.EqualTo("Unauthorized"));
+        }
+
+        [Test]
+        public void Verify_that_Forbidden_returns_Forbidden_reason_phrase()
+        {
+            Assert.That(ArgusStatusCode.Forbidden.ToReasonPhrase(), Is.EqualTo("Forbidden"));
+        }
+
+        [Test]
         public void Verify_that_NotFound_returns_Not_Found_reason_phrase()
         {
             Assert.That(ArgusStatusCode.NotFound.ToReasonPhrase(), Is.EqualTo("Not Found"));
@@ -77,6 +89,12 @@ namespace ArgusTransfer.Tests.Protocol
 
             Assert.That(ArgusStatusCodeExtensions.TryParse(400, out var badRequest), Is.True);
             Assert.That(badRequest, Is.EqualTo(ArgusStatusCode.BadRequest));
+
+            Assert.That(ArgusStatusCodeExtensions.TryParse(401, out var unauthorized), Is.True);
+            Assert.That(unauthorized, Is.EqualTo(ArgusStatusCode.Unauthorized));
+
+            Assert.That(ArgusStatusCodeExtensions.TryParse(403, out var forbidden), Is.True);
+            Assert.That(forbidden, Is.EqualTo(ArgusStatusCode.Forbidden));
 
             Assert.That(ArgusStatusCodeExtensions.TryParse(404, out var notFound), Is.True);
             Assert.That(notFound, Is.EqualTo(ArgusStatusCode.NotFound));

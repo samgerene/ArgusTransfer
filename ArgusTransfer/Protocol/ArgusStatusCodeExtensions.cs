@@ -44,6 +44,10 @@ namespace ArgusTransfer.Protocol
                     return "Created";
                 case ArgusStatusCode.BadRequest:
                     return "Bad Request";
+                case ArgusStatusCode.Unauthorized:
+                    return "Unauthorized";
+                case ArgusStatusCode.Forbidden:
+                    return "Forbidden";
                 case ArgusStatusCode.NotFound:
                     return "Not Found";
                 case ArgusStatusCode.NotAcceptable:
@@ -79,6 +83,12 @@ namespace ArgusTransfer.Protocol
                     return true;
                 case 400:
                     statusCode = ArgusStatusCode.BadRequest;
+                    return true;
+                case 401:
+                    statusCode = ArgusStatusCode.Unauthorized;
+                    return true;
+                case 403:
+                    statusCode = ArgusStatusCode.Forbidden;
                     return true;
                 case 404:
                     statusCode = ArgusStatusCode.NotFound;
