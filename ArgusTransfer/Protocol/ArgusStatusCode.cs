@@ -46,6 +46,11 @@ namespace ArgusTransfer.Protocol
         NotFound = 404,
 
         /// <summary>
+        /// The server cannot produce a response matching the Accept header
+        /// </summary>
+        NotAcceptable = 406,
+
+        /// <summary>
         /// An unexpected error occurred on the server
         /// </summary>
         InternalServerError = 500,

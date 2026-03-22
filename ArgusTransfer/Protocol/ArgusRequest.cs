@@ -30,6 +30,15 @@ namespace ArgusTransfer.Protocol
     public class ArgusRequest : ArgusMessage
     {
         /// <summary>
+        /// Initializes a new instance of the <see cref="ArgusRequest"/> class
+        /// with default header values
+        /// </summary>
+        public ArgusRequest()
+        {
+            Headers["Accept"] = "text/plain";
+        }
+
+        /// <summary>
         /// The verb used to determine the type of operation
         /// </summary>
         public ArgusVerb Verb { get; set; }

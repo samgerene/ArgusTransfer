@@ -66,6 +66,11 @@ namespace ArgusTransfer.Server
         private readonly ArgusResponseSerializer responseSerializer;
 
         /// <summary>
+        /// The <see cref="IArgusBodySerializerRegistry"/> used to resolve serializers by content type
+        /// </summary>
+        private readonly IArgusBodySerializerRegistry bodySerializerRegistry;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ArgusPipeHostBackgroundService"/> class
         /// </summary>
         /// <param name="logger">
@@ -94,6 +99,36 @@ namespace ArgusTransfer.Server
         }
 
         /// <summary>
+        /// Initializes a new instance of the <see cref="ArgusPipeHostBackgroundService"/> class
+        /// using an <see cref="IArgusBodySerializerRegistry"/> for content-type-aware serialization
+        /// </summary>
+        /// <param name="logger">
+        /// The <see cref="ILogger{ArgusPipeHostBackgroundService}"/> used for logging
+        /// </param>
+        /// <param name="router">
+        /// The <see cref="ArgusRouter"/> used to dispatch requests to registered handlers
+        /// </param>
+        /// <param name="options">
+        /// The <see cref="IOptions{ArgusPipeHostOptions}"/> containing the pipe configuration
+        /// </param>
+        /// <param name="bodySerializerRegistry">
+        /// The <see cref="IArgusBodySerializerRegistry"/> used to resolve serializers by content type
+        /// </param>
+        public ArgusPipeHostBackgroundService(
+            ILogger<ArgusPipeHostBackgroundService> logger,
+            ArgusRouter router,
+            IOptions<ArgusPipeHostOptions> options,
+            IArgusBodySerializerRegistry bodySerializerRegistry)
+        {
+            this.logger = logger;
+            this.router = router;
+            this.options = options.Value;
+            this.bodySerializerRegistry = bodySerializerRegistry;
+            this.requestSerializer = new ArgusRequestSerializer(bodySerializerRegistry);
+            this.responseSerializer = new ArgusResponseSerializer(bodySerializerRegistry);
+        }
+
+        /// <summary>
         /// Listens on the named pipe for incoming requests, deserializes them,
         /// routes to the appropriate handler, and writes back the response
         /// </summary>
@@ -118,9 +153,38 @@ namespace ArgusTransfer.Server
                         await using var writer = new StreamWriter(serverStream) { AutoFlush = true };
 
                         var request = await this.requestSerializer.ReadAsync(reader, stoppingToken);
+
+                        if (this.bodySerializerRegistry != null)
+                        {
+                            var acceptType = request.Accept;
+
+                            if (!string.IsNullOrEmpty(acceptType)
+                                && !this.bodySerializerRegistry.TryGetSerializer(acceptType, out _))
+                            {
+                                var notAcceptable = new ArgusResponse
+                                {
+                                    StatusCode = ArgusStatusCode.NotAcceptable,
+                                    CorrelationToken = request.CorrelationToken
+                                };
+
+                                this.responseSerializer.Write(writer, notAcceptable);
+                                return;
+                            }
+                        }
+
                         var context = new ArgusContext(request, stoppingToken);
                         await this.router.RouteAsync(context);
-                        this.responseSerializer.Write(writer, context.Response);
+
+                        var acceptType2 = request.Accept;
+
+                        if (!string.IsNullOrEmpty(acceptType2))
+                        {
+                            this.responseSerializer.Write(writer, context.Response, acceptType2);
+                        }
+                        else
+                        {
+                            this.responseSerializer.Write(writer, context.Response);
+                        }
                     }
                     catch (Exception ex)
                     {

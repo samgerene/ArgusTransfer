@@ -64,14 +64,32 @@ namespace ArgusTransfer.Client
         /// The name of the named pipe to connect to. Defaults to "argus"
         /// </param>
         /// <param name="bodySerializer">
-        /// An optional <see cref="IArgusBodySerializer"/>. Defaults to <see cref="JsonArgusBodySerializer"/>
+        /// An optional <see cref="IArgusBodySerializer"/>. Defaults to <see cref="PlainTextArgusBodySerializer"/>
         /// </param>
         public ArgusClient(string pipeName = "argus", IArgusBodySerializer bodySerializer = null)
         {
             this.pipeName = pipeName;
-            var body = bodySerializer ?? new JsonArgusBodySerializer();
+            var body = bodySerializer ?? new PlainTextArgusBodySerializer();
             this.requestSerializer = new ArgusRequestSerializer(body);
             this.responseSerializer = new ArgusResponseSerializer(body);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ArgusClient"/> class
+        /// that uses the specified <see cref="IArgusBodySerializerRegistry"/> to resolve
+        /// body serializers by content type
+        /// </summary>
+        /// <param name="pipeName">
+        /// The name of the named pipe to connect to
+        /// </param>
+        /// <param name="bodySerializerRegistry">
+        /// The <see cref="IArgusBodySerializerRegistry"/> used to resolve body serializers
+        /// </param>
+        public ArgusClient(string pipeName, IArgusBodySerializerRegistry bodySerializerRegistry)
+        {
+            this.pipeName = pipeName;
+            this.requestSerializer = new ArgusRequestSerializer(bodySerializerRegistry);
+            this.responseSerializer = new ArgusResponseSerializer(bodySerializerRegistry);
         }
 
         /// <summary>

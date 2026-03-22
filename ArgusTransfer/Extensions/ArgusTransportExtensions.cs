@@ -23,6 +23,7 @@ namespace ArgusTransfer.Extensions
     using System;
 
     using ArgusTransfer.Client;
+    using ArgusTransfer.Serialization;
     using ArgusTransfer.Server;
 
     using Microsoft.Extensions.DependencyInjection;
@@ -46,7 +47,17 @@ namespace ArgusTransfer.Extensions
         /// </returns>
         public static IServiceCollection AddArgusClient(this IServiceCollection services, string pipeName = "argus")
         {
-            services.AddTransient<IArgusClient>(_ => new ArgusClient(pipeName));
+            services.AddTransient<IArgusClient>(sp =>
+            {
+                var registry = sp.GetService<IArgusBodySerializerRegistry>();
+
+                if (registry != null)
+                {
+                    return new ArgusClient(pipeName, registry);
+                }
+
+                return new ArgusClient(pipeName);
+            });
 
             return services;
         }

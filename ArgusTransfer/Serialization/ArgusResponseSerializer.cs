@@ -40,10 +40,15 @@ namespace ArgusTransfer.Serialization
         private readonly IArgusBodySerializer bodySerializer;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ArgusResponseSerializer"/> class
-        /// with the default <see cref="JsonArgusBodySerializer"/>
+        /// The <see cref="IArgusBodySerializerRegistry"/> used to resolve serializers by content type
         /// </summary>
-        public ArgusResponseSerializer() : this(new JsonArgusBodySerializer())
+        private readonly IArgusBodySerializerRegistry bodySerializerRegistry;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ArgusResponseSerializer"/> class
+        /// with the default <see cref="PlainTextArgusBodySerializer"/>
+        /// </summary>
+        public ArgusResponseSerializer() : this(new PlainTextArgusBodySerializer())
         {
         }
 
@@ -59,6 +64,19 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
+        /// Initializes a new instance of the <see cref="ArgusResponseSerializer"/> class
+        /// with an <see cref="IArgusBodySerializerRegistry"/> for content-type based serializer resolution
+        /// </summary>
+        /// <param name="bodySerializerRegistry">
+        /// The <see cref="IArgusBodySerializerRegistry"/> used to resolve serializers by content type
+        /// </param>
+        public ArgusResponseSerializer(IArgusBodySerializerRegistry bodySerializerRegistry)
+            : this(bodySerializerRegistry.DefaultSerializer)
+        {
+            this.bodySerializerRegistry = bodySerializerRegistry;
+        }
+
+        /// <summary>
         /// Serializes an <see cref="ArgusResponse"/> to its text wire format representation
         /// </summary>
         /// <param name="response">
@@ -69,55 +87,35 @@ namespace ArgusTransfer.Serialization
         /// </returns>
         public string Write(ArgusResponse response)
         {
-            var sb = new StringBuilder();
+            var contentType = response.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+            var resolvedSerializer = this.ResolveSerializer(contentType);
 
-            sb.Append("ARGUS/1.0 ");
-            sb.Append(((int)response.StatusCode).ToString(CultureInfo.InvariantCulture));
-            sb.Append(' ');
-            sb.Append(response.StatusCode.ToReasonPhrase());
-            sb.Append("\r\n");
+            return this.WriteCore(response, resolvedSerializer);
+        }
 
-            sb.Append("X-Correlation-Token: ");
-            sb.Append(response.CorrelationToken.ToString());
-            sb.Append("\r\n");
+        /// <summary>
+        /// Serializes an <see cref="ArgusResponse"/> to its text wire format representation
+        /// using a serializer resolved from the specified accept content type
+        /// </summary>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> to serialize
+        /// </param>
+        /// <param name="acceptContentType">
+        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
+        /// </param>
+        /// <returns>
+        /// A string containing the serialized response in ARGUS/1.0 wire format
+        /// </returns>
+        public string Write(ArgusResponse response, string acceptContentType)
+        {
+            var resolvedSerializer = this.ResolveSerializer(acceptContentType);
 
-            sb.Append("X-Timestamp: ");
-            sb.Append(response.Timestamp.ToString("o", CultureInfo.InvariantCulture));
-            sb.Append("\r\n");
-
-            foreach (var header in response.Headers)
+            if (!response.Headers.ContainsKey("Content-Type"))
             {
-                sb.Append(header.Key);
-                sb.Append(": ");
-                sb.Append(header.Value);
-                sb.Append("\r\n");
+                response.Headers["Content-Type"] = resolvedSerializer.ContentType;
             }
 
-            if (!string.IsNullOrEmpty(response.Body))
-            {
-                var serializedBody = this.bodySerializer.WriteBody(response.Body);
-                var bodyBytes = Encoding.UTF8.GetByteCount(serializedBody);
-
-                if (!response.Headers.ContainsKey("Content-Type"))
-                {
-                    sb.Append("Content-Type: ");
-                    sb.Append(this.bodySerializer.ContentType);
-                    sb.Append("\r\n");
-                }
-
-                sb.Append("Content-Length: ");
-                sb.Append(bodyBytes.ToString(CultureInfo.InvariantCulture));
-                sb.Append("\r\n");
-            }
-
-            sb.Append("\r\n");
-
-            if (!string.IsNullOrEmpty(response.Body))
-            {
-                sb.Append(this.bodySerializer.WriteBody(response.Body));
-            }
-
-            return sb.ToString();
+            return this.WriteCore(response, resolvedSerializer);
         }
 
         /// <summary>
@@ -132,6 +130,25 @@ namespace ArgusTransfer.Serialization
         public void Write(StreamWriter writer, ArgusResponse response)
         {
             writer.Write(this.Write(response));
+            writer.Flush();
+        }
+
+        /// <summary>
+        /// Writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>
+        /// using a serializer resolved from the specified accept content type
+        /// </summary>
+        /// <param name="writer">
+        /// The <see cref="StreamWriter"/> to write to
+        /// </param>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> to serialize
+        /// </param>
+        /// <param name="acceptContentType">
+        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
+        /// </param>
+        public void Write(StreamWriter writer, ArgusResponse response, string acceptContentType)
+        {
+            writer.Write(this.Write(response, acceptContentType));
             writer.Flush();
         }
 
@@ -172,6 +189,9 @@ namespace ArgusTransfer.Serialization
 
             if (contentLength > 0)
             {
+                var contentType = response.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+                var resolvedSerializer = this.ResolveSerializer(contentType);
+
                 var bodyChars = new char[contentLength];
                 var totalRead = 0;
 
@@ -187,7 +207,7 @@ namespace ArgusTransfer.Serialization
                     totalRead += read;
                 }
 
-                response.Body = this.bodySerializer.ReadBody(new string(bodyChars, 0, totalRead));
+                response.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
             }
 
             return response;
@@ -231,6 +251,9 @@ namespace ArgusTransfer.Serialization
 
             if (contentLength > 0)
             {
+                var contentType = response.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+                var resolvedSerializer = this.ResolveSerializer(contentType);
+
                 var bodyChars = new char[contentLength];
                 var totalRead = 0;
 
@@ -246,7 +269,7 @@ namespace ArgusTransfer.Serialization
                     totalRead += read;
                 }
 
-                response.Body = this.bodySerializer.ReadBody(new string(bodyChars, 0, totalRead));
+                response.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
             }
 
             return response;
@@ -332,6 +355,78 @@ namespace ArgusTransfer.Serialization
             }
 
             return contentLength;
+        }
+
+        /// <summary>
+        /// Core write logic that serializes an <see cref="ArgusResponse"/> using the specified serializer
+        /// </summary>
+        private string WriteCore(ArgusResponse response, IArgusBodySerializer serializer)
+        {
+            var sb = new StringBuilder();
+
+            sb.Append("ARGUS/1.0 ");
+            sb.Append(((int)response.StatusCode).ToString(CultureInfo.InvariantCulture));
+            sb.Append(' ');
+            sb.Append(response.StatusCode.ToReasonPhrase());
+            sb.Append("\r\n");
+
+            sb.Append("X-Correlation-Token: ");
+            sb.Append(response.CorrelationToken.ToString());
+            sb.Append("\r\n");
+
+            sb.Append("X-Timestamp: ");
+            sb.Append(response.Timestamp.ToString("o", CultureInfo.InvariantCulture));
+            sb.Append("\r\n");
+
+            foreach (var header in response.Headers)
+            {
+                sb.Append(header.Key);
+                sb.Append(": ");
+                sb.Append(header.Value);
+                sb.Append("\r\n");
+            }
+
+            string serializedBody = null;
+
+            if (!string.IsNullOrEmpty(response.Body))
+            {
+                serializedBody = serializer.WriteBody(response.Body);
+                var bodyBytes = Encoding.UTF8.GetByteCount(serializedBody);
+
+                if (!response.Headers.ContainsKey("Content-Type"))
+                {
+                    sb.Append("Content-Type: ");
+                    sb.Append(serializer.ContentType);
+                    sb.Append("\r\n");
+                }
+
+                sb.Append("Content-Length: ");
+                sb.Append(bodyBytes.ToString(CultureInfo.InvariantCulture));
+                sb.Append("\r\n");
+            }
+
+            sb.Append("\r\n");
+
+            if (serializedBody != null)
+            {
+                sb.Append(serializedBody);
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Resolves the appropriate <see cref="IArgusBodySerializer"/> for the specified content type
+        /// </summary>
+        private IArgusBodySerializer ResolveSerializer(string contentType)
+        {
+            if (this.bodySerializerRegistry != null && contentType != null
+                && this.bodySerializerRegistry.TryGetSerializer(contentType, out var resolved))
+            {
+                return resolved;
+            }
+
+            return this.bodySerializer;
         }
     }
 }

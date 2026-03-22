@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="JsonArgusBodySerializer.cs">
+//   <copyright file="PlainTextArgusBodySerializer.cs">
 //
 //     Copyright (c) 2025-2026 Sam Gerené
 //
@@ -21,14 +21,14 @@
 namespace ArgusTransfer.Serialization
 {
     /// <summary>
-    /// An <see cref="IArgusBodySerializer"/> implementation for JSON content that passes the body through unchanged
+    /// An <see cref="IArgusBodySerializer"/> implementation for plain text content that passes the body through unchanged
     /// </summary>
-    public class JsonArgusBodySerializer : IArgusBodySerializer
+    public class PlainTextArgusBodySerializer : IArgusBodySerializer
     {
         /// <summary>
-        /// Gets the MIME content type: "application/json"
+        /// Gets the MIME content type: "text/plain"
         /// </summary>
-        public string ContentType => "application/json";
+        public string ContentType => "text/plain";
 
         /// <summary>
         /// Returns the body unchanged (identity serialization)

@@ -80,7 +80,8 @@ namespace ArgusTransfer.Tests.Serialization
             var request = this.serializer.Read(text);
 
             Assert.That(request.Route, Is.EqualTo("/route"));
-            Assert.That(request.Headers, Is.Empty);
+            Assert.That(request.Headers.Count, Is.EqualTo(1));
+            Assert.That(request.Headers.ContainsKey("Accept"), Is.True);
         }
 
         [Test]

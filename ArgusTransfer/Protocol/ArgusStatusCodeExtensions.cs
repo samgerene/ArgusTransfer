@@ -46,6 +46,8 @@ namespace ArgusTransfer.Protocol
                     return "Bad Request";
                 case ArgusStatusCode.NotFound:
                     return "Not Found";
+                case ArgusStatusCode.NotAcceptable:
+                    return "Not Acceptable";
                 case ArgusStatusCode.InternalServerError:
                     return "Internal Server Error";
                 default:
@@ -80,6 +82,9 @@ namespace ArgusTransfer.Protocol
                     return true;
                 case 404:
                     statusCode = ArgusStatusCode.NotFound;
+                    return true;
+                case 406:
+                    statusCode = ArgusStatusCode.NotAcceptable;
                     return true;
                 case 500:
                     statusCode = ArgusStatusCode.InternalServerError;

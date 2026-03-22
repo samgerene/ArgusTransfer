@@ -134,7 +134,7 @@ namespace ArgusTransfer.Tests.Serialization
             var text = this.serializer.Write(response);
 
             Assert.That(text, Does.Contain("Content-Length:"));
-            Assert.That(text, Does.Contain("Content-Type: application/json\r\n"));
+            Assert.That(text, Does.Contain("Content-Type: text/plain\r\n"));
         }
 
         [Test]
@@ -166,7 +166,7 @@ namespace ArgusTransfer.Tests.Serialization
             var text = this.serializer.Write(original);
             var deserialized = this.serializer.Read(text);
 
-            Assert.That(deserialized.Headers["Content-Type"], Is.EqualTo("application/json"));
+            Assert.That(deserialized.Headers["Content-Type"], Is.EqualTo("text/plain"));
         }
     }
 }

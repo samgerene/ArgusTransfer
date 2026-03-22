@@ -55,6 +55,12 @@ namespace ArgusTransfer.Tests.Protocol
         }
 
         [Test]
+        public void Verify_that_NotAcceptable_returns_Not_Acceptable_reason_phrase()
+        {
+            Assert.That(ArgusStatusCode.NotAcceptable.ToReasonPhrase(), Is.EqualTo("Not Acceptable"));
+        }
+
+        [Test]
         public void Verify_that_InternalServerError_returns_Internal_Server_Error_reason_phrase()
         {
             Assert.That(ArgusStatusCode.InternalServerError.ToReasonPhrase(), Is.EqualTo("Internal Server Error"));
@@ -74,6 +80,9 @@ namespace ArgusTransfer.Tests.Protocol
 
             Assert.That(ArgusStatusCodeExtensions.TryParse(404, out var notFound), Is.True);
             Assert.That(notFound, Is.EqualTo(ArgusStatusCode.NotFound));
+
+            Assert.That(ArgusStatusCodeExtensions.TryParse(406, out var notAcceptable), Is.True);
+            Assert.That(notAcceptable, Is.EqualTo(ArgusStatusCode.NotAcceptable));
 
             Assert.That(ArgusStatusCodeExtensions.TryParse(500, out var internalServerError), Is.True);
             Assert.That(internalServerError, Is.EqualTo(ArgusStatusCode.InternalServerError));

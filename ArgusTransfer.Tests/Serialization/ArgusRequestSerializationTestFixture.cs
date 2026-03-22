@@ -148,7 +148,7 @@ namespace ArgusTransfer.Tests.Serialization
             var text = this.serializer.Write(request);
 
             Assert.That(text, Does.Contain("Content-Length:"));
-            Assert.That(text, Does.Contain("Content-Type: application/json\r\n"));
+            Assert.That(text, Does.Contain("Content-Type: text/plain\r\n"));
         }
 
         [Test]
@@ -263,13 +263,37 @@ namespace ArgusTransfer.Tests.Serialization
         }
 
         [Test]
-        public void Verify_that_Accept_header_is_omitted_when_null()
+        public void Verify_that_Accept_defaults_to_text_plain()
+        {
+            var request = new ArgusRequest();
+
+            Assert.That(request.Accept, Is.EqualTo("text/plain"));
+        }
+
+        [Test]
+        public void Verify_that_default_Accept_header_appears_on_wire()
         {
             var request = new ArgusRequest
             {
                 Verb = ArgusVerb.GET,
                 Route = "/healthendpoint",
                 Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc)
+            };
+
+            var text = this.serializer.Write(request);
+
+            Assert.That(text, Does.Contain("Accept: text/plain\r\n"));
+        }
+
+        [Test]
+        public void Verify_that_Accept_header_is_omitted_when_cleared()
+        {
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/healthendpoint",
+                Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc),
+                Accept = null
             };
 
             var text = this.serializer.Write(request);
@@ -323,7 +347,7 @@ namespace ArgusTransfer.Tests.Serialization
             var text = this.serializer.Write(original);
             var deserialized = this.serializer.Read(text);
 
-            Assert.That(deserialized.Headers["Content-Type"], Is.EqualTo("application/json"));
+            Assert.That(deserialized.Headers["Content-Type"], Is.EqualTo("text/plain"));
         }
     }
 }

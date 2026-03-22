@@ -40,11 +40,16 @@ namespace ArgusTransfer.Serialization
         private readonly IArgusBodySerializer bodySerializer;
 
         /// <summary>
+        /// The <see cref="IArgusBodySerializerRegistry"/> used to resolve serializers by content type
+        /// </summary>
+        private readonly IArgusBodySerializerRegistry bodySerializerRegistry;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ArgusRequestSerializer"/> class
-        /// with the default <see cref="JsonArgusBodySerializer"/>
+        /// with the default <see cref="PlainTextArgusBodySerializer"/>
         /// </summary>
         public ArgusRequestSerializer()
-            : this(new JsonArgusBodySerializer())
+            : this(new PlainTextArgusBodySerializer())
         {
         }
 
@@ -57,6 +62,19 @@ namespace ArgusTransfer.Serialization
         public ArgusRequestSerializer(IArgusBodySerializer bodySerializer)
         {
             this.bodySerializer = bodySerializer;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ArgusRequestSerializer"/> class
+        /// with an <see cref="IArgusBodySerializerRegistry"/> for content-type based serializer resolution
+        /// </summary>
+        /// <param name="bodySerializerRegistry">
+        /// The <see cref="IArgusBodySerializerRegistry"/> used to resolve serializers by content type
+        /// </param>
+        public ArgusRequestSerializer(IArgusBodySerializerRegistry bodySerializerRegistry)
+            : this(bodySerializerRegistry.DefaultSerializer)
+        {
+            this.bodySerializerRegistry = bodySerializerRegistry;
         }
 
         /// <summary>
@@ -94,15 +112,20 @@ namespace ArgusTransfer.Serialization
                 sb.Append("\r\n");
             }
 
+            string serializedBody = null;
+
             if (!string.IsNullOrEmpty(request.Body))
             {
-                var serializedBody = this.bodySerializer.WriteBody(request.Body);
+                var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+                var resolvedSerializer = this.ResolveSerializer(contentType);
+
+                serializedBody = resolvedSerializer.WriteBody(request.Body);
                 var bodyBytes = Encoding.UTF8.GetByteCount(serializedBody);
 
                 if (!request.Headers.ContainsKey("Content-Type"))
                 {
                     sb.Append("Content-Type: ");
-                    sb.Append(this.bodySerializer.ContentType);
+                    sb.Append(resolvedSerializer.ContentType);
                     sb.Append("\r\n");
                 }
 
@@ -113,9 +136,9 @@ namespace ArgusTransfer.Serialization
 
             sb.Append("\r\n");
 
-            if (!string.IsNullOrEmpty(request.Body))
+            if (serializedBody != null)
             {
-                sb.Append(this.bodySerializer.WriteBody(request.Body));
+                sb.Append(serializedBody);
             }
 
             return sb.ToString();
@@ -173,6 +196,9 @@ namespace ArgusTransfer.Serialization
 
             if (contentLength > 0)
             {
+                var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+                var resolvedSerializer = this.ResolveSerializer(contentType);
+
                 var bodyChars = new char[contentLength];
                 var totalRead = 0;
 
@@ -188,7 +214,7 @@ namespace ArgusTransfer.Serialization
                     totalRead += read;
                 }
 
-                request.Body = this.bodySerializer.ReadBody(new string(bodyChars, 0, totalRead));
+                request.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
             }
 
             return request;
@@ -232,6 +258,9 @@ namespace ArgusTransfer.Serialization
 
             if (contentLength > 0)
             {
+                var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+                var resolvedSerializer = this.ResolveSerializer(contentType);
+
                 var bodyChars = new char[contentLength];
                 var totalRead = 0;
 
@@ -247,7 +276,7 @@ namespace ArgusTransfer.Serialization
                     totalRead += read;
                 }
 
-                request.Body = this.bodySerializer.ReadBody(new string(bodyChars, 0, totalRead));
+                request.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
             }
 
             return request;
@@ -333,6 +362,20 @@ namespace ArgusTransfer.Serialization
             }
 
             return contentLength;
+        }
+
+        /// <summary>
+        /// Resolves the appropriate <see cref="IArgusBodySerializer"/> for the specified content type
+        /// </summary>
+        private IArgusBodySerializer ResolveSerializer(string contentType)
+        {
+            if (this.bodySerializerRegistry != null && contentType != null
+                && this.bodySerializerRegistry.TryGetSerializer(contentType, out var resolved))
+            {
+                return resolved;
+            }
+
+            return this.bodySerializer;
         }
     }
 }

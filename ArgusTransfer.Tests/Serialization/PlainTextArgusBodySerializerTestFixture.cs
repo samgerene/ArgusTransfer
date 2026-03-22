@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------
-//   <copyright file="JsonArgusBodySerializerTestFixture.cs">
+//   <copyright file="PlainTextArgusBodySerializerTestFixture.cs">
 //
 //     Copyright (c) 2025-2026 Sam Gerené
 //
@@ -25,29 +25,29 @@ namespace ArgusTransfer.Tests.Serialization
     using NUnit.Framework;
 
     /// <summary>
-    /// Suite of tests for the <see cref="JsonArgusBodySerializer"/> class
+    /// Suite of tests for the <see cref="PlainTextArgusBodySerializer"/> class
     /// </summary>
     [TestFixture]
-    public class JsonArgusBodySerializerTestFixture
+    public class PlainTextArgusBodySerializerTestFixture
     {
-        private JsonArgusBodySerializer serializer;
+        private PlainTextArgusBodySerializer serializer;
 
         [SetUp]
         public void SetUp()
         {
-            this.serializer = new JsonArgusBodySerializer();
+            this.serializer = new PlainTextArgusBodySerializer();
         }
 
         [Test]
-        public void Verify_that_ContentType_is_application_json()
+        public void Verify_that_ContentType_is_text_plain()
         {
-            Assert.That(this.serializer.ContentType, Is.EqualTo("application/json"));
+            Assert.That(this.serializer.ContentType, Is.EqualTo("text/plain"));
         }
 
         [Test]
         public void Verify_that_WriteBody_returns_body_unchanged()
         {
-            var body = """{"name":"test","url":"https://example.com"}""";
+            var body = "Hello, world!";
 
             var result = this.serializer.WriteBody(body);
 
@@ -57,7 +57,7 @@ namespace ArgusTransfer.Tests.Serialization
         [Test]
         public void Verify_that_ReadBody_returns_body_unchanged()
         {
-            var body = """{"name":"test","url":"https://example.com"}""";
+            var body = "Hello, world!";
 
             var result = this.serializer.ReadBody(body);
 

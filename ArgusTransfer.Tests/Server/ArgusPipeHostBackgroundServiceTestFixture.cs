@@ -82,7 +82,7 @@ namespace ArgusTransfer.Transport.Tests.Server
                 this.mockLogger.Object,
                 router,
                 options,
-                new JsonArgusBodySerializer());
+                new PlainTextArgusBodySerializer());
         }
 
         [Test]

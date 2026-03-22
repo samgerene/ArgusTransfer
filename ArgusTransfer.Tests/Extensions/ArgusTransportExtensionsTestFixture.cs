@@ -85,7 +85,7 @@ namespace ArgusTransfer.Tests.Extensions
             var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusBodySerializer));
 
             Assert.That(descriptor, Is.Not.Null);
-            Assert.That(descriptor.ImplementationType, Is.EqualTo(typeof(JsonArgusBodySerializer)));
+            Assert.That(descriptor.ImplementationType, Is.EqualTo(typeof(PlainTextArgusBodySerializer)));
             Assert.That(descriptor.Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
         }
 
