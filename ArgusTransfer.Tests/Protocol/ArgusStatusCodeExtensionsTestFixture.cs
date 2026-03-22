@@ -73,9 +73,27 @@ namespace ArgusTransfer.Tests.Protocol
         }
 
         [Test]
+        public void Verify_that_Conflict_returns_Conflict_reason_phrase()
+        {
+            Assert.That(ArgusStatusCode.Conflict.ToReasonPhrase(), Is.EqualTo("Conflict"));
+        }
+
+        [Test]
         public void Verify_that_InternalServerError_returns_Internal_Server_Error_reason_phrase()
         {
             Assert.That(ArgusStatusCode.InternalServerError.ToReasonPhrase(), Is.EqualTo("Internal Server Error"));
+        }
+
+        [Test]
+        public void Verify_that_NotImplemented_returns_Not_Implemented_reason_phrase()
+        {
+            Assert.That(ArgusStatusCode.NotImplemented.ToReasonPhrase(), Is.EqualTo("Not Implemented"));
+        }
+
+        [Test]
+        public void Verify_that_ServiceUnavailable_returns_Service_Unavailable_reason_phrase()
+        {
+            Assert.That(ArgusStatusCode.ServiceUnavailable.ToReasonPhrase(), Is.EqualTo("Service Unavailable"));
         }
 
         [Test]
@@ -102,8 +120,17 @@ namespace ArgusTransfer.Tests.Protocol
             Assert.That(ArgusStatusCodeExtensions.TryParse(406, out var notAcceptable), Is.True);
             Assert.That(notAcceptable, Is.EqualTo(ArgusStatusCode.NotAcceptable));
 
+            Assert.That(ArgusStatusCodeExtensions.TryParse(409, out var conflict), Is.True);
+            Assert.That(conflict, Is.EqualTo(ArgusStatusCode.Conflict));
+
             Assert.That(ArgusStatusCodeExtensions.TryParse(500, out var internalServerError), Is.True);
             Assert.That(internalServerError, Is.EqualTo(ArgusStatusCode.InternalServerError));
+
+            Assert.That(ArgusStatusCodeExtensions.TryParse(501, out var notImplemented), Is.True);
+            Assert.That(notImplemented, Is.EqualTo(ArgusStatusCode.NotImplemented));
+
+            Assert.That(ArgusStatusCodeExtensions.TryParse(503, out var serviceUnavailable), Is.True);
+            Assert.That(serviceUnavailable, Is.EqualTo(ArgusStatusCode.ServiceUnavailable));
         }
 
         [Test]

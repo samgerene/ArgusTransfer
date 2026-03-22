@@ -167,7 +167,7 @@ namespace ArgusTransfer.Routing
         /// An awaitable <see cref="Task"/>. When complete, <see cref="ArgusContext.Response"/>
         /// contains the result. If no route matches, a <see cref="ArgusStatusCode.NotFound"/>
         /// response is set. If the route matches but the verb does not, a
-        /// <see cref="ArgusStatusCode.BadRequest"/> response is set
+        /// <see cref="ArgusStatusCode.NotImplemented"/> response is set
         /// </returns>
         public async Task RouteAsync(ArgusContext context)
         {
@@ -199,7 +199,7 @@ namespace ArgusTransfer.Routing
 
             context.Response = new ArgusResponse
             {
-                StatusCode = routeMatched ? ArgusStatusCode.BadRequest : ArgusStatusCode.NotFound
+                StatusCode = routeMatched ? ArgusStatusCode.NotImplemented : ArgusStatusCode.NotFound
             };
 
             this.StampCorrelationToken(context);

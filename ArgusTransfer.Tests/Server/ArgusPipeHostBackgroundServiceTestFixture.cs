@@ -131,7 +131,7 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
-        public async Task Verify_that_wrong_verb_returns_BadRequest()
+        public async Task Verify_that_wrong_verb_returns_NotImplemented()
         {
             var request = new ArgusRequest
             {
@@ -141,7 +141,7 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             var response = await this.service.HandleRequestAsync(request);
 
-            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.NotImplemented));
         }
 
         [Test]

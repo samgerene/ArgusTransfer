@@ -52,8 +52,14 @@ namespace ArgusTransfer.Protocol
                     return "Not Found";
                 case ArgusStatusCode.NotAcceptable:
                     return "Not Acceptable";
+                case ArgusStatusCode.Conflict:
+                    return "Conflict";
                 case ArgusStatusCode.InternalServerError:
                     return "Internal Server Error";
+                case ArgusStatusCode.NotImplemented:
+                    return "Not Implemented";
+                case ArgusStatusCode.ServiceUnavailable:
+                    return "Service Unavailable";
                 default:
                     return "Unknown";
             }
@@ -96,8 +102,17 @@ namespace ArgusTransfer.Protocol
                 case 406:
                     statusCode = ArgusStatusCode.NotAcceptable;
                     return true;
+                case 409:
+                    statusCode = ArgusStatusCode.Conflict;
+                    return true;
                 case 500:
                     statusCode = ArgusStatusCode.InternalServerError;
+                    return true;
+                case 501:
+                    statusCode = ArgusStatusCode.NotImplemented;
+                    return true;
+                case 503:
+                    statusCode = ArgusStatusCode.ServiceUnavailable;
                     return true;
                 default:
                     statusCode = default;

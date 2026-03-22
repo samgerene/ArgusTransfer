@@ -71,7 +71,7 @@ namespace ArgusTransfer.Tests.Routing
         }
 
         [Test]
-        public async Task Verify_that_wrong_verb_returns_BadRequest()
+        public async Task Verify_that_wrong_verb_returns_NotImplemented()
         {
             this.router.MapPost("/healthendpoint", context =>
             {
@@ -93,7 +93,7 @@ namespace ArgusTransfer.Tests.Routing
             var context = new ArgusContext(request, CancellationToken.None);
             await this.router.RouteAsync(context);
 
-            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.NotImplemented));
         }
 
         [Test]

@@ -61,8 +61,23 @@ namespace ArgusTransfer.Protocol
         NotAcceptable = 406,
 
         /// <summary>
+        /// The request could not be completed due to a conflict with the current state of the resource
+        /// </summary>
+        Conflict = 409,
+
+        /// <summary>
         /// An unexpected error occurred on the server
         /// </summary>
         InternalServerError = 500,
+
+        /// <summary>
+        /// The server does not support the functionality required to fulfill the request
+        /// </summary>
+        NotImplemented = 501,
+
+        /// <summary>
+        /// The server is currently unable to handle the request due to temporary overloading or maintenance
+        /// </summary>
+        ServiceUnavailable = 503,
     }
 }
