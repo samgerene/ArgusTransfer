@@ -150,9 +150,10 @@ namespace ArgusTransfer.Server
                     try
                     {
                         using var reader = new StreamReader(serverStream);
-                        await using var writer = new StreamWriter(serverStream) { AutoFlush = true };
+                        await using var writer = new StreamWriter(serverStream);
+                        writer.AutoFlush = true;
 
-                        var request = await this.requestSerializer.ReadAsync(reader, stoppingToken);
+                        var request = await this.requestSerializer.ReadAsync(reader, stoppingToken, this.options.MaxRequestBodySize);
 
                         if (this.bodySerializerRegistry != null)
                         {
@@ -184,6 +185,28 @@ namespace ArgusTransfer.Server
                         else
                         {
                             this.responseSerializer.Write(writer, context.Response);
+                        }
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        logger.LogWarning(ex, "Request rejected: {Message}", ex.Message);
+
+                        try
+                        {
+                            await using var errorWriter = new StreamWriter(serverStream);
+                            errorWriter.AutoFlush = true;
+                            
+                            var badRequest = new ArgusResponse
+                            {
+                                StatusCode = ArgusStatusCode.BadRequest,
+                                Body = ex.Message
+                            };
+
+                            this.responseSerializer.Write(errorWriter, badRequest);
+                        }
+                        catch
+                        {
+                            // Best effort — pipe may already be broken
                         }
                     }
                     catch (Exception ex)

@@ -349,5 +349,41 @@ namespace ArgusTransfer.Tests.Serialization
 
             Assert.That(deserialized.Headers["Content-Type"], Is.EqualTo("text/plain"));
         }
+
+        [Test]
+        public void Verify_that_Read_throws_when_body_exceeds_max_size()
+        {
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.POST,
+                Route = "/test",
+                Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc),
+                Body = new string('x', 1000)
+            };
+
+            var text = this.serializer.Write(request);
+
+            Assert.That(
+                () => this.serializer.Read(text, maxBodySize: 100),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("exceeds the maximum allowed size"));
+        }
+
+        [Test]
+        public void Verify_that_Read_allows_body_within_max_size()
+        {
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.POST,
+                Route = "/test",
+                Timestamp = new DateTime(2026, 2, 28, 14, 30, 0, DateTimeKind.Utc),
+                Body = new string('x', 50)
+            };
+
+            var text = this.serializer.Write(request);
+            var deserialized = this.serializer.Read(text, maxBodySize: 1000);
+
+            Assert.That(deserialized.Body, Is.EqualTo(new string('x', 50)));
+        }
     }
 }

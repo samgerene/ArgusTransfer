@@ -165,10 +165,13 @@ namespace ArgusTransfer.Serialization
         /// <param name="text">
         /// The text containing the serialized request in ARGUS/1.0 wire format
         /// </param>
+        /// <param name="maxBodySize">
+        /// The maximum allowed body size in bytes. Pass 0 for no limit.
+        /// </param>
         /// <returns>
         /// The deserialized <see cref="ArgusRequest"/>
         /// </returns>
-        public ArgusRequest Read(string text)
+        public ArgusRequest Read(string text, long maxBodySize = 0)
         {
             using var reader = new StringReader(text);
 
@@ -192,6 +195,12 @@ namespace ArgusTransfer.Serialization
                 }
 
                 contentLength = ParseHeader(line, request, contentLength);
+            }
+
+            if (maxBodySize > 0 && contentLength > maxBodySize)
+            {
+                throw new InvalidOperationException(
+                    $"Request body size {contentLength} bytes exceeds the maximum allowed size of {maxBodySize} bytes.");
             }
 
             if (contentLength > 0)
@@ -229,10 +238,13 @@ namespace ArgusTransfer.Serialization
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> used to signal cancellation
         /// </param>
+        /// <param name="maxBodySize">
+        /// The maximum allowed body size in bytes. Pass 0 for no limit.
+        /// </param>
         /// <returns>
         /// The deserialized <see cref="ArgusRequest"/>
         /// </returns>
-        public async Task<ArgusRequest> ReadAsync(StreamReader reader, CancellationToken cancellationToken)
+        public async Task<ArgusRequest> ReadAsync(StreamReader reader, CancellationToken cancellationToken, long maxBodySize = 0)
         {
             var requestLine = await reader.ReadLineAsync(cancellationToken);
 
@@ -254,6 +266,12 @@ namespace ArgusTransfer.Serialization
                 }
 
                 contentLength = ParseHeader(line, request, contentLength);
+            }
+
+            if (maxBodySize > 0 && contentLength > maxBodySize)
+            {
+                throw new InvalidOperationException(
+                    $"Request body size {contentLength} bytes exceeds the maximum allowed size of {maxBodySize} bytes.");
             }
 
             if (contentLength > 0)
