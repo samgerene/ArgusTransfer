@@ -21,6 +21,7 @@
 namespace ArgusTransfer.Server
 {
     using System;
+    using System.Threading;
 
     /// <summary>
     /// Configuration options for the <see cref="ArgusPipeHostBackgroundService"/>
@@ -43,5 +44,11 @@ namespace ArgusTransfer.Server
         /// Defaults to 30 seconds. After this timeout, remaining requests are cancelled.
         /// </summary>
         public TimeSpan ShutdownDrainTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// Gets or sets the maximum time allowed for a single request handler to execute.
+        /// Defaults to 60 seconds. Set to <see cref="Timeout.InfiniteTimeSpan"/> to disable the timeout.
+        /// </summary>
+        public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(60);
     }
 }

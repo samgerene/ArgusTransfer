@@ -279,5 +279,166 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(5)));
         }
+
+        [Test]
+        public void Verify_that_RequestTimeout_defaults_to_60_seconds()
+        {
+            var options = new ArgusPipeHostOptions();
+
+            Assert.That(options.RequestTimeout, Is.EqualTo(TimeSpan.FromSeconds(60)));
+        }
+
+        [Test]
+        public async Task Verify_that_timed_out_request_returns_ServiceUnavailable()
+        {
+            var router = new ArgusRouter();
+
+            router.MapGet("/slow", async context =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), context.RequestAborted);
+
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok
+                };
+            });
+
+            var options = Options.Create(new ArgusPipeHostOptions
+            {
+                RequestTimeout = TimeSpan.FromMilliseconds(100)
+            });
+
+            var timeoutService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                new PlainTextArgusBodySerializer());
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/slow"
+            };
+
+            var response = await timeoutService.HandleRequestAsync(request);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.ServiceUnavailable));
+            Assert.That(response.Body, Does.Contain("timed out"));
+        }
+
+        [Test]
+        public async Task Verify_that_request_within_timeout_succeeds()
+        {
+            var router = new ArgusRouter();
+
+            router.MapGet("/fast", context =>
+            {
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok,
+                    Body = "fast"
+                };
+
+                return Task.CompletedTask;
+            });
+
+            var options = Options.Create(new ArgusPipeHostOptions
+            {
+                RequestTimeout = TimeSpan.FromSeconds(5)
+            });
+
+            var timeoutService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                new PlainTextArgusBodySerializer());
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/fast"
+            };
+
+            var response = await timeoutService.HandleRequestAsync(request);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Is.EqualTo("fast"));
+        }
+
+        [Test]
+        public async Task Verify_that_infinite_timeout_disables_per_request_timeout()
+        {
+            var router = new ArgusRouter();
+
+            router.MapGet("/delayed", async context =>
+            {
+                await Task.Delay(200);
+
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok,
+                    Body = "completed"
+                };
+            });
+
+            var options = Options.Create(new ArgusPipeHostOptions
+            {
+                RequestTimeout = Timeout.InfiniteTimeSpan
+            });
+
+            var timeoutService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                new PlainTextArgusBodySerializer());
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/delayed"
+            };
+
+            var response = await timeoutService.HandleRequestAsync(request);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Is.EqualTo("completed"));
+        }
+
+        [Test]
+        public void Verify_that_caller_cancellation_propagates_through_timeout()
+        {
+            var router = new ArgusRouter();
+
+            router.MapGet("/slow", async context =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), context.RequestAborted);
+
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok
+                };
+            });
+
+            var options = Options.Create(new ArgusPipeHostOptions());
+
+            var timeoutService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                new PlainTextArgusBodySerializer());
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/slow"
+            };
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            Assert.That(
+                async () => await timeoutService.HandleRequestAsync(request, cts.Token),
+                Throws.InstanceOf<OperationCanceledException>());
+        }
     }
 }

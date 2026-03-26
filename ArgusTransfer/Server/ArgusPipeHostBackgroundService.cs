@@ -188,8 +188,39 @@ namespace ArgusTransfer.Server
                             }
                         }
 
-                        var context = new ArgusContext(request, requestToken);
-                        await this.router.RouteAsync(context);
+                        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(requestToken);
+
+                        if (this.options.RequestTimeout != Timeout.InfiniteTimeSpan)
+                        {
+                            timeoutCts.CancelAfter(this.options.RequestTimeout);
+                        }
+
+                        var context = new ArgusContext(request, timeoutCts.Token);
+
+                        try
+                        {
+                            await this.router.RouteAsync(context);
+                        }
+                        catch (OperationCanceledException) when (!requestToken.IsCancellationRequested)
+                        {
+                            this.logger.LogWarning(
+                                "Request {Verb} {Route} timed out after {Timeout}.",
+                                request.Verb, request.Route, this.options.RequestTimeout);
+
+                            var timeoutResponse = new ArgusResponse
+                            {
+                                StatusCode = ArgusStatusCode.ServiceUnavailable,
+                                CorrelationToken = request.CorrelationToken,
+                                Body = "Request processing timed out"
+                            };
+
+                            this.responseSerializer.Write(writer, timeoutResponse);
+                            return;
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            return;
+                        }
 
                         var acceptType2 = request.Accept;
 
@@ -288,8 +319,29 @@ namespace ArgusTransfer.Server
         /// </returns>
         public async Task<ArgusResponse> HandleRequestAsync(ArgusRequest argusRequest, CancellationToken cancellationToken = default)
         {
-            var context = new ArgusContext(argusRequest, cancellationToken);
-            await this.router.RouteAsync(context);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            if (this.options.RequestTimeout != Timeout.InfiniteTimeSpan)
+            {
+                timeoutCts.CancelAfter(this.options.RequestTimeout);
+            }
+
+            var context = new ArgusContext(argusRequest, timeoutCts.Token);
+
+            try
+            {
+                await this.router.RouteAsync(context);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.ServiceUnavailable,
+                    CorrelationToken = argusRequest.CorrelationToken,
+                    Body = "Request processing timed out"
+                };
+            }
+
             return context.Response;
         }
     }
