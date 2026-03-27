@@ -50,5 +50,11 @@ namespace ArgusTransfer.Server
         /// Defaults to 60 seconds. Set to <see cref="Timeout.InfiniteTimeSpan"/> to disable the timeout.
         /// </summary>
         public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(60);
+
+        /// <summary>
+        /// Gets or sets the maximum number of requests that can be processed concurrently.
+        /// Defaults to 10. When the limit is reached, new requests receive a 503 Service Unavailable response.
+        /// </summary>
+        public int MaxConcurrentRequests { get; set; } = 10;
     }
 }

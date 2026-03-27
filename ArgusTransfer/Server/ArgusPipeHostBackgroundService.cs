@@ -83,6 +83,21 @@ namespace ArgusTransfer.Server
         private CancellationTokenSource drainCts;
 
         /// <summary>
+        /// Semaphore used to limit the number of concurrently processed requests
+        /// </summary>
+        private SemaphoreSlim concurrencySemaphore;
+
+        /// <summary>
+        /// The current number of in-flight requests being processed
+        /// </summary>
+        private long currentRequestCount;
+
+        /// <summary>
+        /// The total number of requests rejected due to concurrency limits
+        /// </summary>
+        private long rejectedRequestCount;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ArgusPipeHostBackgroundService"/> class
         /// </summary>
         /// <param name="logger">
@@ -141,6 +156,16 @@ namespace ArgusTransfer.Server
         }
 
         /// <summary>
+        /// Gets the current number of in-flight requests being processed
+        /// </summary>
+        public long CurrentRequestCount => Interlocked.Read(ref this.currentRequestCount);
+
+        /// <summary>
+        /// Gets the total number of requests rejected due to concurrency limits
+        /// </summary>
+        public long RejectedRequestCount => Interlocked.Read(ref this.rejectedRequestCount);
+
+        /// <summary>
         /// Listens on the named pipe for incoming requests, deserializes them,
         /// routes to the appropriate handler, and writes back the response
         /// </summary>
@@ -153,6 +178,7 @@ namespace ArgusTransfer.Server
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             this.drainCts = new CancellationTokenSource();
+            this.concurrencySemaphore = new SemaphoreSlim(this.options.MaxConcurrentRequests, this.options.MaxConcurrentRequests);
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -162,6 +188,8 @@ namespace ArgusTransfer.Server
                 var requestToken = this.drainCts.Token;
                 var task = Task.Run(async () =>
                 {
+                    var semaphoreAcquired = false;
+
                     try
                     {
                         using var reader = new StreamReader(serverStream);
@@ -169,6 +197,28 @@ namespace ArgusTransfer.Server
                         writer.AutoFlush = true;
 
                         var request = await this.requestSerializer.ReadAsync(reader, requestToken, this.options.MaxRequestBodySize);
+
+                        if (!await this.concurrencySemaphore.WaitAsync(0))
+                        {
+                            Interlocked.Increment(ref this.rejectedRequestCount);
+
+                            this.logger.LogWarning(
+                                "Concurrency limit of {MaxConcurrentRequests} reached. Rejecting request {Verb} {Route} with 503.",
+                                this.options.MaxConcurrentRequests, request.Verb, request.Route);
+
+                            var rejectResponse = new ArgusResponse
+                            {
+                                StatusCode = ArgusStatusCode.ServiceUnavailable,
+                                CorrelationToken = request.CorrelationToken,
+                                Body = "Server concurrency limit reached"
+                            };
+
+                            this.responseSerializer.Write(writer, rejectResponse);
+                            return;
+                        }
+
+                        semaphoreAcquired = true;
+                        Interlocked.Increment(ref this.currentRequestCount);
 
                         if (this.bodySerializerRegistry != null)
                         {
@@ -241,7 +291,7 @@ namespace ArgusTransfer.Server
                         {
                             await using var errorWriter = new StreamWriter(serverStream);
                             errorWriter.AutoFlush = true;
-                            
+
                             var badRequest = new ArgusResponse
                             {
                                 StatusCode = ArgusStatusCode.BadRequest,
@@ -261,6 +311,12 @@ namespace ArgusTransfer.Server
                     }
                     finally
                     {
+                        if (semaphoreAcquired)
+                        {
+                            Interlocked.Decrement(ref this.currentRequestCount);
+                            this.concurrencySemaphore.Release();
+                        }
+
                         await serverStream.DisposeAsync();
                     }
                 }, CancellationToken.None);
@@ -302,6 +358,7 @@ namespace ArgusTransfer.Server
             }
 
             this.drainCts?.Dispose();
+            this.concurrencySemaphore?.Dispose();
         }
 
         /// <summary>

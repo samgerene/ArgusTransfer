@@ -440,5 +440,196 @@ namespace ArgusTransfer.Transport.Tests.Server
                 async () => await timeoutService.HandleRequestAsync(request, cts.Token),
                 Throws.InstanceOf<OperationCanceledException>());
         }
+
+        [Test]
+        public void Verify_that_MaxConcurrentRequests_defaults_to_10()
+        {
+            var options = new ArgusPipeHostOptions();
+
+            Assert.That(options.MaxConcurrentRequests, Is.EqualTo(10));
+        }
+
+        [Test]
+        public async Task Verify_that_request_within_concurrency_limit_succeeds()
+        {
+            var router = new ArgusRouter();
+
+            router.MapGet("/test", context =>
+            {
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok,
+                    Body = "ok"
+                };
+
+                return Task.CompletedTask;
+            });
+
+            var options = Options.Create(new ArgusPipeHostOptions
+            {
+                MaxConcurrentRequests = 5
+            });
+
+            var concurrencyService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                new PlainTextArgusBodySerializer());
+
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/test"
+            };
+
+            var response = await concurrencyService.HandleRequestAsync(request);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_concurrent_requests_beyond_limit_return_ServiceUnavailable()
+        {
+            var pipeName = $"argus-concurrency-test-{Guid.NewGuid():N}";
+            var handlerBarrier = new TaskCompletionSource();
+
+            var router = new ArgusRouter();
+
+            router.MapGet("/slow", async context =>
+            {
+                await handlerBarrier.Task;
+
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok
+                };
+            });
+
+            var options = Options.Create(new ArgusPipeHostOptions
+            {
+                PipeName = pipeName,
+                MaxConcurrentRequests = 1,
+                RequestTimeout = Timeout.InfiniteTimeSpan
+            });
+
+            var concurrencyService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                new PlainTextArgusBodySerializer());
+
+            using var cts = new CancellationTokenSource();
+
+            await concurrencyService.StartAsync(cts.Token);
+
+            // First request: occupies the single slot
+            var client1 = new ArgusClient(pipeName);
+            var request1Task = client1.SendAsync(new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/slow"
+            });
+
+            // Give the first request time to acquire the semaphore
+            await Task.Delay(200);
+
+            // Second request: should be rejected with 503
+            var client2 = new ArgusClient(pipeName);
+            var response2 = await client2.SendAsync(new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/slow"
+            });
+
+            Assert.That(response2.StatusCode, Is.EqualTo(ArgusStatusCode.ServiceUnavailable));
+            Assert.That(response2.Body, Does.Contain("concurrency limit"));
+            Assert.That(concurrencyService.RejectedRequestCount, Is.EqualTo(1));
+
+            // Release the first request
+            handlerBarrier.SetResult();
+            await request1Task;
+
+            cts.Cancel();
+            await concurrencyService.StopAsync(CancellationToken.None);
+        }
+
+        [Test]
+        public async Task Verify_that_concurrency_slot_is_released_after_request_completes()
+        {
+            var pipeName = $"argus-slot-release-test-{Guid.NewGuid():N}";
+            var handlerBarrier = new TaskCompletionSource();
+
+            var router = new ArgusRouter();
+
+            router.MapGet("/slow", async context =>
+            {
+                await handlerBarrier.Task;
+
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok
+                };
+            });
+
+            router.MapGet("/fast", context =>
+            {
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok,
+                    Body = "fast"
+                };
+
+                return Task.CompletedTask;
+            });
+
+            var options = Options.Create(new ArgusPipeHostOptions
+            {
+                PipeName = pipeName,
+                MaxConcurrentRequests = 1,
+                RequestTimeout = Timeout.InfiniteTimeSpan
+            });
+
+            var concurrencyService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                new PlainTextArgusBodySerializer());
+
+            using var cts = new CancellationTokenSource();
+
+            await concurrencyService.StartAsync(cts.Token);
+
+            // First request: occupies the single slot
+            var client1 = new ArgusClient(pipeName);
+            var request1Task = client1.SendAsync(new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/slow"
+            });
+
+            // Give the first request time to acquire the semaphore
+            await Task.Delay(200);
+
+            // Release the first request so the slot frees up
+            handlerBarrier.SetResult();
+            await request1Task;
+
+            // Give time for semaphore release
+            await Task.Delay(100);
+
+            // Next request should succeed
+            var client2 = new ArgusClient(pipeName);
+            var response2 = await client2.SendAsync(new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/fast"
+            });
+
+            Assert.That(response2.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response2.Body, Is.EqualTo("fast"));
+
+            cts.Cancel();
+            await concurrencyService.StopAsync(CancellationToken.None);
+        }
     }
 }
