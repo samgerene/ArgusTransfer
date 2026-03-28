@@ -157,6 +157,20 @@ namespace ArgusTransfer.Extensions
                 throw new ArgumentException("Invalid ShortGuid Array, must end with ]", nameof(shortGuids));
             }
 
+            return FromShortGuidArrayIterator(shortGuids);
+        }
+
+        /// <summary>
+        /// Iterator that yields <see cref="Guid"/> values from a validated ShortGuid Array string
+        /// </summary>
+        /// <param name="shortGuids">
+        /// A validated ShortGuid Array string
+        /// </param>
+        /// <returns>
+        /// An <see cref="IEnumerable{Guid}"/> parsed from the ShortGuid Array
+        /// </returns>
+        private static IEnumerable<Guid> FromShortGuidArrayIterator(string shortGuids)
+        {
             var listOfShortGuids = shortGuids.TrimStart('[').TrimEnd(']').Split(';');
 
             foreach (var shortGuid in listOfShortGuids)
