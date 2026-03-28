@@ -60,8 +60,8 @@ namespace ArgusTransfer.Serialization
                 this.serializers[serializer.ContentType] = serializer;
             }
 
-            this.DefaultSerializer = this.serializers.ContainsKey("text/plain")
-                ? this.serializers["text/plain"]
+            this.DefaultSerializer = this.serializers.TryGetValue("text/plain", out var textPlainSerializer)
+                ? textPlainSerializer
                 : serializers.First();
         }
 
