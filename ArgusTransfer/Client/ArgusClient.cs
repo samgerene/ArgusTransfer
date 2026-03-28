@@ -131,7 +131,7 @@ namespace ArgusTransfer.Client
                 }
                 else
                 {
-                    this.requestSerializer.Write(writer, request);
+                    await this.requestSerializer.WriteAsync(writer, request, linkedCts.Token);
                 }
 
                 var response = await this.responseSerializer.ReadAsync(reader, linkedCts.Token);
