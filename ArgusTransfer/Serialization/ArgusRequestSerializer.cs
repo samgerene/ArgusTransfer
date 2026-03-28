@@ -194,7 +194,8 @@ namespace ArgusTransfer.Serialization
         {
             if (!request.IsStreamed)
             {
-                this.Write(writer, request);
+                await writer.WriteAsync(this.Write(request));
+                await writer.FlushAsync(cancellationToken);
                 return;
             }
 

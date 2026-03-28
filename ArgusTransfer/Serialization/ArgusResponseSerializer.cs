@@ -153,7 +153,8 @@ namespace ArgusTransfer.Serialization
         {
             if (!response.IsStreamed)
             {
-                this.Write(writer, response);
+                await writer.WriteAsync(this.Write(response));
+                await writer.FlushAsync(cancellationToken);
                 return;
             }
 
@@ -212,6 +213,37 @@ namespace ArgusTransfer.Serialization
         {
             writer.Write(this.Write(response, acceptContentType));
             writer.Flush();
+        }
+
+        /// <summary>
+        /// Asynchronously writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>
+        /// using a serializer resolved from the specified accept content type
+        /// </summary>
+        /// <param name="writer">
+        /// The <see cref="StreamWriter"/> to write to
+        /// </param>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> to serialize
+        /// </param>
+        /// <param name="acceptContentType">
+        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        public async Task WriteAsync(StreamWriter writer, ArgusResponse response, string acceptContentType, CancellationToken cancellationToken = default)
+        {
+            if (!response.IsStreamed)
+            {
+                await writer.WriteAsync(this.Write(response, acceptContentType));
+                await writer.FlushAsync(cancellationToken);
+                return;
+            }
+
+            await this.WriteAsync(writer, response, cancellationToken);
         }
 
         /// <summary>

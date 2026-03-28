@@ -213,7 +213,7 @@ namespace ArgusTransfer.Server
                                 Body = "Server concurrency limit reached"
                             };
 
-                            this.responseSerializer.Write(writer, rejectResponse);
+                            await this.responseSerializer.WriteAsync(writer, rejectResponse, requestToken);
                             return;
                         }
 
@@ -233,7 +233,7 @@ namespace ArgusTransfer.Server
                                     CorrelationToken = request.CorrelationToken
                                 };
 
-                                this.responseSerializer.Write(writer, notAcceptable);
+                                await this.responseSerializer.WriteAsync(writer, notAcceptable, requestToken);
                                 return;
                             }
                         }
@@ -264,7 +264,7 @@ namespace ArgusTransfer.Server
                                 Body = "Request processing timed out"
                             };
 
-                            this.responseSerializer.Write(writer, timeoutResponse);
+                            await this.responseSerializer.WriteAsync(writer, timeoutResponse, requestToken);
                             return;
                         }
                         catch (OperationCanceledException)
@@ -272,20 +272,13 @@ namespace ArgusTransfer.Server
                             return;
                         }
 
-                        if (context.Response.IsStreamed)
+                        if (!string.IsNullOrEmpty(request.Accept))
                         {
-                            await this.responseSerializer.WriteAsync(writer, context.Response, requestToken);
+                            await this.responseSerializer.WriteAsync(writer, context.Response, request.Accept, requestToken);
                         }
                         else
                         {
-                            if (!string.IsNullOrEmpty(request.Accept))
-                            {
-                                this.responseSerializer.Write(writer, context.Response, request.Accept);
-                            }
-                            else
-                            {
-                                this.responseSerializer.Write(writer, context.Response);
-                            }
+                            await this.responseSerializer.WriteAsync(writer, context.Response, requestToken);
                         }
                     }
                     catch (InvalidOperationException ex)
@@ -303,7 +296,7 @@ namespace ArgusTransfer.Server
                                 Body = ex.Message
                             };
 
-                            this.responseSerializer.Write(errorWriter, badRequest);
+                            await this.responseSerializer.WriteAsync(errorWriter, badRequest);
                         }
                         catch
                         {
