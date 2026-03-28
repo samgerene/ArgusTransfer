@@ -25,11 +25,13 @@ namespace ArgusTransfer.Tests.Extensions
 
     using ArgusTransfer.Client;
     using ArgusTransfer.Extensions;
+    using ArgusTransfer.Routing;
     using ArgusTransfer.Serialization;
     using ArgusTransfer.Server;
 
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Hosting;
+    using Microsoft.Extensions.Logging;
     using Microsoft.Extensions.Options;
 
     using NUnit.Framework;
@@ -50,7 +52,7 @@ namespace ArgusTransfer.Tests.Extensions
             var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IHostedService));
 
             Assert.That(descriptor, Is.Not.Null);
-            Assert.That(descriptor.ImplementationType, Is.EqualTo(typeof(ArgusPipeHostBackgroundService)));
+            Assert.That(descriptor.ImplementationFactory, Is.Not.Null);
         }
 
         [Test]
@@ -167,6 +169,21 @@ namespace ArgusTransfer.Tests.Extensions
 
             Assert.That(descriptor, Is.Not.Null);
             Assert.That(descriptor.Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusPipeHost_resolves_without_ambiguity()
+        {
+            var services = new ServiceCollection();
+
+            services.AddLogging();
+            services.AddSingleton<ArgusRouter>();
+            services.AddArgusPipeHost();
+
+            var provider = services.BuildServiceProvider();
+            var hostedServices = provider.GetServices<IHostedService>().ToList();
+
+            Assert.That(hostedServices.OfType<ArgusPipeHostBackgroundService>().Count(), Is.EqualTo(1));
         }
 
         [Test]

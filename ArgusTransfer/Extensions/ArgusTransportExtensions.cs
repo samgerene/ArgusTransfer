@@ -23,10 +23,13 @@ namespace ArgusTransfer.Extensions
     using System;
 
     using ArgusTransfer.Client;
+    using ArgusTransfer.Routing;
     using ArgusTransfer.Serialization;
     using ArgusTransfer.Server;
 
     using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.Logging;
+    using Microsoft.Extensions.Options;
 
     /// <summary>
     /// Extension methods for registering the Argus named-pipe host with the DI container
@@ -86,7 +89,18 @@ namespace ArgusTransfer.Extensions
             }
 
             services.AddArgusPlainTextProtocol();
-            services.AddHostedService<ArgusPipeHostBackgroundService>();
+
+            services.AddHostedService<ArgusPipeHostBackgroundService>(sp =>
+            {
+                var logger = sp.GetRequiredService<ILogger<ArgusPipeHostBackgroundService>>();
+                var router = sp.GetRequiredService<ArgusRouter>();
+                var options = sp.GetRequiredService<IOptions<ArgusPipeHostOptions>>();
+                var registry = sp.GetService<IArgusBodySerializerRegistry>();
+
+                return registry != null
+                    ? new ArgusPipeHostBackgroundService(logger, router, options, registry)
+                    : new ArgusPipeHostBackgroundService(logger, router, options, sp.GetRequiredService<IArgusBodySerializer>());
+            });
 
             return services;
         }

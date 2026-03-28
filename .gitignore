@@ -407,4 +407,4 @@ FodyWeavers.xsd
 *.sln.iml
 
 # Claude
-/.claude/settings.local.json
+/.claude/*
