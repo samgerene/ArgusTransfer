@@ -96,11 +96,11 @@ namespace ArgusTransfer.Serialization
             sb.Append(ArgusQueryStringHelper.BuildQueryString(request.QueryParameters));
             sb.Append(" ARGUS/1.0\r\n");
 
-            sb.Append("X-Correlation-Token: ");
+            sb.Append(ArgusHeaderNames.CorrelationToken + ": ");
             sb.Append(request.CorrelationToken.ToString());
             sb.Append("\r\n");
 
-            sb.Append("X-Timestamp: ");
+            sb.Append(ArgusHeaderNames.Timestamp + ": ");
             sb.Append(request.Timestamp.ToString("o", CultureInfo.InvariantCulture));
             sb.Append("\r\n");
 
@@ -116,9 +116,9 @@ namespace ArgusTransfer.Serialization
 
             if (request.IsStreamed)
             {
-                if (!request.Headers.ContainsKey("Content-Type"))
+                if (!request.Headers.ContainsKey(ArgusHeaderNames.ContentType))
                 {
-                    sb.Append("Content-Type: application/octet-stream\r\n");
+                    sb.Append(ArgusHeaderNames.ContentType + ": application/octet-stream\r\n");
                 }
 
                 sb.Append("Transfer-Encoding: chunked\r\n");
@@ -130,20 +130,20 @@ namespace ArgusTransfer.Serialization
             {
                 if (!string.IsNullOrEmpty(request.Body))
                 {
-                    var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+                    var contentType = request.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
                     var resolvedSerializer = this.ResolveSerializer(contentType);
 
                     serializedBody = resolvedSerializer.WriteBody(request.Body);
                     var bodyBytes = Encoding.UTF8.GetByteCount(serializedBody);
 
-                    if (!request.Headers.ContainsKey("Content-Type"))
+                    if (!request.Headers.ContainsKey(ArgusHeaderNames.ContentType))
                     {
-                        sb.Append("Content-Type: ");
+                        sb.Append(ArgusHeaderNames.ContentType + ": ");
                         sb.Append(resolvedSerializer.ContentType);
                         sb.Append("\r\n");
                     }
 
-                    sb.Append("Content-Length: ");
+                    sb.Append(ArgusHeaderNames.ContentLength + ": ");
                     sb.Append(bodyBytes.ToString(CultureInfo.InvariantCulture));
                     sb.Append("\r\n");
                 }
@@ -207,11 +207,11 @@ namespace ArgusTransfer.Serialization
             sb.Append(ArgusQueryStringHelper.BuildQueryString(request.QueryParameters));
             sb.Append(" ARGUS/1.0\r\n");
 
-            sb.Append("X-Correlation-Token: ");
+            sb.Append(ArgusHeaderNames.CorrelationToken + ": ");
             sb.Append(request.CorrelationToken.ToString());
             sb.Append("\r\n");
 
-            sb.Append("X-Timestamp: ");
+            sb.Append(ArgusHeaderNames.Timestamp + ": ");
             sb.Append(request.Timestamp.ToString("o", CultureInfo.InvariantCulture));
             sb.Append("\r\n");
 
@@ -223,9 +223,9 @@ namespace ArgusTransfer.Serialization
                 sb.Append("\r\n");
             }
 
-            if (!request.Headers.ContainsKey("Content-Type"))
+            if (!request.Headers.ContainsKey(ArgusHeaderNames.ContentType))
             {
-                sb.Append("Content-Type: application/octet-stream\r\n");
+                sb.Append(ArgusHeaderNames.ContentType + ": application/octet-stream\r\n");
             }
 
             sb.Append("Transfer-Encoding: chunked\r\n");
@@ -292,7 +292,7 @@ namespace ArgusTransfer.Serialization
 
                 if (contentLength > 0)
                 {
-                    var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+                    var contentType = request.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
                     var resolvedSerializer = this.ResolveSerializer(contentType);
 
                     var bodyChars = new char[contentLength];
@@ -373,7 +373,7 @@ namespace ArgusTransfer.Serialization
 
                 if (contentLength > 0)
                 {
-                    var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+                    var contentType = request.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
                     var resolvedSerializer = this.ResolveSerializer(contentType);
 
                     var bodyChars = new char[contentLength];
@@ -451,21 +451,21 @@ namespace ArgusTransfer.Serialization
             var name = line.Substring(0, colonIndex).Trim();
             var value = line.Substring(colonIndex + 1).Trim();
 
-            if (string.Equals(name, "X-Correlation-Token", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(name, ArgusHeaderNames.CorrelationToken, StringComparison.OrdinalIgnoreCase))
             {
                 if (Guid.TryParse(value, out var guid))
                 {
                     request.CorrelationToken = guid;
                 }
             }
-            else if (string.Equals(name, "X-Timestamp", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(name, ArgusHeaderNames.Timestamp, StringComparison.OrdinalIgnoreCase))
             {
                 if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var timestamp))
                 {
                     request.Timestamp = timestamp;
                 }
             }
-            else if (string.Equals(name, "Content-Length", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(name, ArgusHeaderNames.ContentLength, StringComparison.OrdinalIgnoreCase))
             {
                 if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var length))
                 {

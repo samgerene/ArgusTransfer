@@ -364,7 +364,7 @@ namespace ArgusTransfer.Client
 
             if (contentType != null)
             {
-                request.Headers["Content-Type"] = contentType;
+                request.Headers[ArgusHeaderNames.ContentType] = contentType;
             }
 
             return this.SendAsync(request, timeout, cancellationToken);

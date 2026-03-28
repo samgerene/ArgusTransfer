@@ -35,7 +35,7 @@ namespace ArgusTransfer.Protocol
         /// </summary>
         public ArgusRequest()
         {
-            Headers["Accept"] = "text/plain";
+            Headers[ArgusHeaderNames.Accept] = "text/plain";
         }
 
         /// <summary>
@@ -57,20 +57,20 @@ namespace ArgusTransfer.Protocol
         /// <summary>
         /// Gets or sets the preferred content type(s) for the response, as specified
         /// by the client via the Accept header (e.g. "application/json", "text/xml").
-        /// This is a convenience accessor over <c>Headers["Accept"]</c>.
+        /// This is a convenience accessor over <c>Headers[ArgusHeaderNames.Accept]</c>.
         /// </summary>
         public string Accept
         {
-            get => Headers.TryGetValue("Accept", out var value) ? value : null;
+            get => Headers.TryGetValue(ArgusHeaderNames.Accept, out var value) ? value : null;
             set
             {
                 if (string.IsNullOrEmpty(value))
                 {
-                    Headers.Remove("Accept");
+                    Headers.Remove(ArgusHeaderNames.Accept);
                 }
                 else
                 {
-                    Headers["Accept"] = value;
+                    Headers[ArgusHeaderNames.Accept] = value;
                 }
             }
         }
