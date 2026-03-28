@@ -38,9 +38,9 @@ ArgusTransfer/
 ├── Client/          – ArgusClient
 ├── Extensions/      – DI extension methods
 ├── Middleware/      – Middleware implementations such as ArgusLoggingMiddleware
-├── Protocol/        – ArgusMessage, ArgusRequest, ArgusResponse, ArgusVerb, ArgusStatusCode
+├── Protocol/        – ArgusMessage, ArgusRequest, ArgusResponse, ArgusVerb, ArgusStatusCode, ArgusHeaderNames
 ├── Routing/         – ArgusRouter, route templates, modules
-├── Serialization/   – Request/response readers and writers
+├── Serialization/   – Request/response serializers, body serializer registry, chunked encoding
 └── Server/          – ArgusPipeHostBackgroundService, ArgusPipeHostOptions
 ```
 
@@ -54,19 +54,19 @@ Text-based request/response wire format transmitted over named pipes.
 - **Response status line**: `ARGUS/1.0 {StatusCode} {ReasonPhrase}`
 - **Standard headers**: `X-Correlation-Token`, `X-Timestamp`, `Content-Length`, `Content-Type`
 - **Verbs** (`ArgusVerb`): GET, POST, PUT, PATCH, HEAD, DELETE
-- **Status codes** (`ArgusStatusCode`): 200 Ok, 201 Created, 400 BadRequest, 404 NotFound, 500 InternalServerError
+- **Status codes** (`ArgusStatusCode`): 200 Ok, 201 Created, 204 NoContent, 400 BadRequest, 401 Unauthorized, 403 Forbidden, 404 NotFound, 406 NotAcceptable, 409 Conflict, 422 UnprocessableEntity, 500 InternalServerError, 501 NotImplemented, 503 ServiceUnavailable
 
 ### Routing
 
-`ArgusRouter` matches verb + route template and dispatches to an `ArgusHandlerDelegate`. Supports literal segments, `{param}` parameters, and `{param:Guid}` constrained parameters (case-insensitive matching on literals). Modules implement `IArgusModule.AddRoutes(IArgusRouteBuilder)` to register endpoints.
+`ArgusRouter` matches verb + route template and dispatches to an `ArgusHandlerDelegate`. Supports literal segments, `{param}` parameters, `{param:Guid}` and `{param:ShortGuid}` constrained parameters (case-insensitive matching on literals). Modules implement `IArgusModule.AddRoutes(IArgusRouteBuilder)` to register endpoints.
 
 ### Serialization
 
-`ArgusRequestWriter`/`ArgusRequestReader` and `ArgusResponseWriter`/`ArgusResponseReader` in `/Serialization/`. Each provides a synchronous string API and a `StreamWriter`/`StreamReader` overload for pipe I/O.
+`ArgusRequestSerializer` and `ArgusResponseSerializer` in `/Serialization/`. Each provides a synchronous string API and a `StreamWriter`/`StreamReader` overload for pipe I/O. `IArgusBodySerializer` and `IArgusBodySerializerRegistry` support content-type-based serializer resolution. `ArgusChunkedEncoding` handles chunked transfer encoding for streaming bodies.
 
 ### Client
 
-`ArgusClient` creates a `NamedPipeClientStream` per request, serializes via `ArgusRequestWriter`, reads the response via `ArgusResponseReader`.
+`ArgusClient` creates a `NamedPipeClientStream` per request, serializes via `ArgusRequestSerializer`, reads the response via `ArgusResponseSerializer`. Provides typed convenience methods (`GetAsync`, `PostAsync`, `PutAsync`, `PatchAsync`, `DeleteAsync`, `HeadAsync`) with optional query parameters, per-request timeouts, and streaming body support.
 
 ### Server
 
@@ -76,6 +76,9 @@ Text-based request/response wire format transmitted over named pipes.
 
 - `services.AddArgusModules()` — scans the calling assembly for `IArgusModule` implementations, registers them as transient, and registers `ArgusRouter` as a singleton that wires up all module routes.
 - `services.AddArgusPipeHost(Action<ArgusPipeHostOptions>?)` — registers `ArgusPipeHostBackgroundService` as a hosted service with optional configuration.
+- `services.AddArgusClient(string pipeName, TimeSpan? defaultTimeout)` — registers `IArgusClient` as transient, using `IArgusBodySerializerRegistry` if available.
+- `services.AddArgusPlainTextProtocol()` — registers `PlainTextArgusBodySerializer`, the enumerable `IArgusBodySerializer`, and `IArgusBodySerializerRegistry`.
+- `services.AddArgusBodySerializer<T>()` — registers an additional `IArgusBodySerializer` implementation (deduplicated via `TryAddEnumerable`).
 
 ## Git Conventions
 
@@ -86,7 +89,7 @@ Text-based request/response wire format transmitted over named pipes.
 - **language**: C#, no using python
 - **Explicit usings**: `ImplicitUsings` is disabled — all `using` directives must be written explicitly.
 - **LangVersion**: `14.0`
-- **Nullable**: `enable` in `ArgusTransfer`, `disable` in `ArgusTransfer.Tests`
+- **Nullable**: `disable` in both `ArgusTransfer` and `ArgusTransfer.Tests`
 - **XML doc comments**: required on all public types and members.
 - **License header**: every `.cs` file starts with the Apache-2.0 copyright block.
 
