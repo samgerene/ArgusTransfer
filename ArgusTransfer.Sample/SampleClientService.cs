@@ -58,6 +58,14 @@ namespace ArgusTransfer.Sample
         };
 
         /// <summary>
+        /// JSON deserializer options using case-insensitive property matching
+        /// </summary>
+        private static readonly JsonSerializerOptions DeserializerOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="SampleClientService"/> class
         /// </summary>
         /// <param name="client">
@@ -100,10 +108,7 @@ namespace ArgusTransfer.Sample
             response = await this.client.PostAsync("/sampleitems", json, cancellationToken: stoppingToken);
             PrintResponse("POST", "/sampleitems", response);
 
-            var created = JsonSerializer.Deserialize<SampleItem>(response.Body, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+            var created = JsonSerializer.Deserialize<SampleItem>(response.Body, DeserializerOptions);
             var id = created.Id;
 
             // 3. GET /sampleitems/{id} — read it back
