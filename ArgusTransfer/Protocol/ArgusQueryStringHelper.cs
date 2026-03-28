@@ -103,8 +103,8 @@ namespace ArgusTransfer.Protocol
                 }
                 else
                 {
-                    var key = Uri.UnescapeDataString(pair.Substring(0, equalsIndex));
-                    var value = Uri.UnescapeDataString(pair.Substring(equalsIndex + 1));
+                    var key = Uri.UnescapeDataString(pair.AsSpan(0, equalsIndex));
+                    var value = Uri.UnescapeDataString(pair.AsSpan(equalsIndex + 1));
                     target[key] = value;
                 }
             }
