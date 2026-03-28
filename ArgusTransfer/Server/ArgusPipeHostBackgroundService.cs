@@ -360,7 +360,10 @@ namespace ArgusTransfer.Server
                 if (completed != drainTask)
                 {
                     this.logger.LogWarning("Shutdown drain timeout expired. Cancelling {Count} remaining request(s).", this.activeRequests.Count);
-                    this.drainCancellationTokenSource?.Cancel();
+                    if (this.drainCancellationTokenSource != null)
+                    {
+                        await this.drainCancellationTokenSource.CancelAsync();
+                    }
                 }
             }
 
