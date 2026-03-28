@@ -134,6 +134,25 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
+        /// Writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>
+        /// using a serializer resolved from the specified accept content type
+        /// </summary>
+        /// <param name="writer">
+        /// The <see cref="StreamWriter"/> to write to
+        /// </param>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> to serialize
+        /// </param>
+        /// <param name="acceptContentType">
+        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
+        /// </param>
+        public void Write(StreamWriter writer, ArgusResponse response, string acceptContentType)
+        {
+            writer.Write(this.Write(response, acceptContentType));
+            writer.Flush();
+        }
+
+        /// <summary>
         /// Asynchronously writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>.
         /// This method supports streaming bodies via chunked transfer encoding.
         /// </summary>
@@ -194,25 +213,6 @@ namespace ArgusTransfer.Serialization
             await writer.FlushAsync(cancellationToken);
 
             await ArgusChunkedEncoding.WriteChunkedAsync(response.BodyStream, writer, cancellationToken: cancellationToken);
-        }
-
-        /// <summary>
-        /// Writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>
-        /// using a serializer resolved from the specified accept content type
-        /// </summary>
-        /// <param name="writer">
-        /// The <see cref="StreamWriter"/> to write to
-        /// </param>
-        /// <param name="response">
-        /// The <see cref="ArgusResponse"/> to serialize
-        /// </param>
-        /// <param name="acceptContentType">
-        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
-        /// </param>
-        public void Write(StreamWriter writer, ArgusResponse response, string acceptContentType)
-        {
-            writer.Write(this.Write(response, acceptContentType));
-            writer.Flush();
         }
 
         /// <summary>
