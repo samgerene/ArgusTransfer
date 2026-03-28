@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Version>1.0.0</Version>
+        <Version>1.0.1</Version>
         <LangVersion>14.0</LangVersion>
         <Company>Sam Gerené</Company>
         <Authors>Sam Gerené</Authors>
@@ -23,20 +23,30 @@
         <PackageIcon>argus-transfer-ico.png</PackageIcon>
         <PackageTags>pipe routing argus protocol</PackageTags>
         <PackageReleaseNotes>
-            [Add] IArgusClient interface
-            [Add] queryparameters
-            [Add] Accept header as first class citizen on ArgusRequest; fixes #1
-            [Add] content negotiation with IArgusBodySerializerRegistry; fixes #1
-            [Add] timeout per request; fixes #4
-            [Add] request timesout; fixes #114
-            [Add] statuscode 401 and 403; fixes #8
-            [Add] statuscode 409, 501 and 503; fixes #9 and #10
-            [Add] statuscode 204 and 422; fixes #13 and fixes #12
-            [Add] HEAD verb returns no body; fixes #24
-            [Add] max body size checking; fixes #15
-            [Add] graceful shutdown with in-flight request draining; fixes #16
-            [Add] concurrency gating; fixes #17
-            [Add] Add streaming body support for large payloads fixes #7
+            [Security]
+            - Hardened chunked transfer encoding against DoS: chunk size parsing now uses TryParse with non-negative
+            validation to prevent malicious peers from triggering excessive memory allocation
+            - Added non-negative validation for parsed Content-Length headers in both request and response
+            deserializers
+            - Added ObjectDisposedException guard in ArgusClient.SendAsync to fail fast after disposal
+            - Fixed resource leak in ArgusClient.SendAsync: StreamWriter and StreamReader are now properly disposed
+            with leaveOpen: true
+
+            [Performance]
+            - Replaced Substring().Trim() with AsSpan().Trim().ToString() in header parsing hot paths to reduce
+            intermediate string allocations
+            - Replaced ContainsKey + indexer double lookup with TryGetValue in ArgusBodySerializerRegistry
+            - Cached JsonSerializerOptions instance in SampleClientService instead of allocating per call
+            - Used ReadAsync(Memory byte) overload instead of inexact Read(byte[], int, int) in chunked encoding
+
+            [Refactoring]
+            - Introduced ArgusHeaderNames constants (Accept, ContentType, ContentLength, CorrelationToken, Timestamp)
+            replacing all string literals
+            - Reordered IArgusClient and ArgusClient method overloads to be adjacent by name
+            - Reordered ArgusResponseSerializer so all Write overloads are grouped, followed by all WriteAsync
+            overloads
+            - Refactored GuidExtensions.FromShortGuidArray to use a private iterator method
+            - Refactored ArgusClient.SendAsync to use requestSerializer.WriteAsync
         </PackageReleaseNotes>
         <Nullable>disable</Nullable>
         <ImplicitUsings>disable</ImplicitUsings>
