@@ -631,5 +631,128 @@ namespace ArgusTransfer.Transport.Tests.Server
             cts.Cancel();
             await concurrencyService.StopAsync(CancellationToken.None);
         }
+
+        [Test]
+        public void Verify_that_constructor_with_registry_creates_service()
+        {
+            var registry = new ArgusBodySerializerRegistry(new[] { new PlainTextArgusBodySerializer() });
+
+            var options = Options.Create(new ArgusPipeHostOptions());
+
+            var registryService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                new ArgusRouter(),
+                options,
+                registry);
+
+            Assert.That(registryService, Is.Not.Null);
+        }
+
+        [Test]
+        public async Task Verify_that_CurrentRequestCount_reflects_in_flight_requests()
+        {
+            var pipeName = $"argus-count-test-{Guid.NewGuid():N}";
+            var handlerBarrier = new TaskCompletionSource();
+
+            var router = new ArgusRouter();
+
+            router.MapGet("/slow", async context =>
+            {
+                await handlerBarrier.Task;
+
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok
+                };
+            });
+
+            var options = Options.Create(new ArgusPipeHostOptions
+            {
+                PipeName = pipeName,
+                RequestTimeout = Timeout.InfiniteTimeSpan
+            });
+
+            var countService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                new PlainTextArgusBodySerializer());
+
+            using var cts = new CancellationTokenSource();
+
+            await countService.StartAsync(cts.Token);
+
+            var client1 = new ArgusClient(pipeName);
+            _ = client1.SendAsync(new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/slow"
+            });
+
+            await Task.Delay(200);
+
+            Assert.That(countService.CurrentRequestCount, Is.EqualTo(1));
+
+            handlerBarrier.SetResult();
+
+            await Task.Delay(200);
+
+            Assert.That(countService.CurrentRequestCount, Is.EqualTo(0));
+
+            cts.Cancel();
+            await countService.StopAsync(CancellationToken.None);
+        }
+
+        [Test]
+        public async Task Verify_that_unsupported_accept_type_returns_NotAcceptable()
+        {
+            var pipeName = $"argus-accept-test-{Guid.NewGuid():N}";
+
+            var registry = new ArgusBodySerializerRegistry(new[] { new PlainTextArgusBodySerializer() });
+
+            var router = new ArgusRouter();
+
+            router.MapGet("/test", context =>
+            {
+                context.Response = new ArgusResponse
+                {
+                    StatusCode = ArgusStatusCode.Ok,
+                    Body = "ok"
+                };
+
+                return Task.CompletedTask;
+            });
+
+            var options = Options.Create(new ArgusPipeHostOptions
+            {
+                PipeName = pipeName
+            });
+
+            var acceptService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                options,
+                registry);
+
+            using var cts = new CancellationTokenSource();
+
+            await acceptService.StartAsync(cts.Token);
+
+            using var client = new ArgusClient(pipeName);
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/test"
+            };
+
+            request.Headers[ArgusHeaderNames.Accept] = "application/xml";
+
+            var response = await client.SendAsync(request);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.NotAcceptable));
+
+            cts.Cancel();
+            await acceptService.StopAsync(CancellationToken.None);
+        }
     }
 }

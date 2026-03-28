@@ -27,6 +27,8 @@ namespace ArgusTransfer.Tests.Client
     using System.Threading;
     using System.Threading.Tasks;
 
+    using System.Collections.Generic;
+
     using ArgusTransfer.Protocol;
     using ArgusTransfer.Serialization;
     using ArgusTransfer.Client;
@@ -234,6 +236,433 @@ namespace ArgusTransfer.Tests.Client
             {
                 await client.SendAsync(request, timeout: TimeSpan.FromMilliseconds(200));
             });
+        }
+
+        [Test]
+        public async Task Verify_that_GetAsync_with_query_parameters_sends_query_parameters()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.GET));
+                Assert.That(request.QueryParameters["key"], Is.EqualTo("value"));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+            var queryParams = new Dictionary<string, string> { { "key", "value" } };
+
+            var clientResponse = await client.GetAsync("/test", queryParams);
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_PostAsync_sends_POST_with_body()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var body = "post-body";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.POST));
+                Assert.That(request.Body, Is.EqualTo(body));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Created
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+
+            var clientResponse = await client.PostAsync("/test", body);
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Created));
+        }
+
+        [Test]
+        public async Task Verify_that_PostAsync_with_query_parameters_sends_query_parameters()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.POST));
+                Assert.That(request.QueryParameters["key"], Is.EqualTo("value"));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Created
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+            var queryParams = new Dictionary<string, string> { { "key", "value" } };
+
+            var clientResponse = await client.PostAsync("/test", queryParams, "body");
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Created));
+        }
+
+        [Test]
+        public async Task Verify_that_PutAsync_sends_PUT_with_body()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var body = "put-body";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.PUT));
+                Assert.That(request.Body, Is.EqualTo(body));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+
+            var clientResponse = await client.PutAsync("/test", body);
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_PutAsync_with_query_parameters_sends_query_parameters()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.PUT));
+                Assert.That(request.QueryParameters["key"], Is.EqualTo("value"));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+            var queryParams = new Dictionary<string, string> { { "key", "value" } };
+
+            var clientResponse = await client.PutAsync("/test", queryParams, "body");
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_PatchAsync_sends_PATCH_with_body()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var body = "patch-body";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.PATCH));
+                Assert.That(request.Body, Is.EqualTo(body));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+
+            var clientResponse = await client.PatchAsync("/test", body);
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_PatchAsync_with_query_parameters_sends_query_parameters()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.PATCH));
+                Assert.That(request.QueryParameters["key"], Is.EqualTo("value"));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+            var queryParams = new Dictionary<string, string> { { "key", "value" } };
+
+            var clientResponse = await client.PatchAsync("/test", queryParams, "body");
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_DeleteAsync_sends_DELETE()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.DELETE));
+                Assert.That(request.Route, Does.StartWith("/test"));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+
+            var clientResponse = await client.DeleteAsync("/test");
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_DeleteAsync_with_query_parameters_sends_query_parameters()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.DELETE));
+                Assert.That(request.QueryParameters["key"], Is.EqualTo("value"));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+            var queryParams = new Dictionary<string, string> { { "key", "value" } };
+
+            var clientResponse = await client.DeleteAsync("/test", queryParams);
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_HeadAsync_sends_HEAD()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.HEAD));
+                Assert.That(request.Route, Does.StartWith("/test"));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+
+            var clientResponse = await client.HeadAsync("/test");
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_HeadAsync_with_query_parameters_sends_query_parameters()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.HEAD));
+                Assert.That(request.QueryParameters["key"], Is.EqualTo("value"));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+            var queryParams = new Dictionary<string, string> { { "key", "value" } };
+
+            var clientResponse = await client.HeadAsync("/test", queryParams);
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public void Verify_that_constructor_with_registry_creates_client()
+        {
+            var registry = new ArgusBodySerializerRegistry(new[] { new PlainTextArgusBodySerializer() });
+
+            using var client = new ArgusClient("test-pipe", registry);
+
+            Assert.That(client, Is.Not.Null);
+            Assert.That(client.DefaultTimeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
+        }
+
+        [Test]
+        public void Verify_that_Dispose_can_be_called_multiple_times()
+        {
+            var client = new ArgusClient("test-pipe");
+
+            client.Dispose();
+            client.Dispose();
+
+            Assert.Pass();
         }
     }
 }

@@ -20,8 +20,10 @@
 
 namespace ArgusTransfer.Tests.Extensions
 {
+    using System;
     using System.Linq;
 
+    using ArgusTransfer.Client;
     using ArgusTransfer.Extensions;
     using ArgusTransfer.Serialization;
     using ArgusTransfer.Server;
@@ -99,6 +101,85 @@ namespace ArgusTransfer.Tests.Extensions
             var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusBodySerializer));
 
             Assert.That(descriptor, Is.Not.Null);
+        }
+
+        [Test]
+        public void Verify_that_AddArgusClient_registers_IArgusClient()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusClient("test-pipe");
+
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusClient));
+
+            Assert.That(descriptor, Is.Not.Null);
+            Assert.That(descriptor.Lifetime, Is.EqualTo(ServiceLifetime.Transient));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusClient_with_timeout_sets_DefaultTimeout()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusClient("test-pipe", defaultTimeout: TimeSpan.FromSeconds(10));
+
+            var provider = services.BuildServiceProvider();
+            var client = provider.GetRequiredService<IArgusClient>() as ArgusClient;
+
+            Assert.That(client, Is.Not.Null);
+            Assert.That(client.DefaultTimeout, Is.EqualTo(TimeSpan.FromSeconds(10)));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusClient_uses_registry_when_available()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusPlainTextProtocol();
+            services.AddArgusClient("test-pipe");
+
+            var provider = services.BuildServiceProvider();
+            var client = provider.GetRequiredService<IArgusClient>();
+
+            Assert.That(client, Is.Not.Null);
+        }
+
+        [Test]
+        public void Verify_that_AddArgusBodySerializer_registers_custom_serializer()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusBodySerializer<PlainTextArgusBodySerializer>();
+
+            var descriptors = services.Where(d => d.ServiceType == typeof(IArgusBodySerializer)).ToList();
+
+            Assert.That(descriptors, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusPlainTextProtocol_registers_registry()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusPlainTextProtocol();
+
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusBodySerializerRegistry));
+
+            Assert.That(descriptor, Is.Not.Null);
+            Assert.That(descriptor.Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusBodySerializer_does_not_duplicate()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusBodySerializer<PlainTextArgusBodySerializer>();
+            services.AddArgusBodySerializer<PlainTextArgusBodySerializer>();
+
+            var descriptors = services.Where(d => d.ServiceType == typeof(IArgusBodySerializer)).ToList();
+
+            Assert.That(descriptors, Has.Count.EqualTo(1));
         }
     }
 }

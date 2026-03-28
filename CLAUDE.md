@@ -29,6 +29,7 @@ dotnet test ArgusTransfer.Tests --filter "FullyQualifiedName~Verify_that_HealthE
 |---|---|---|
 | `ArgusTransfer` | net10.0 | Protocol, Routing, Serialization, Named-pipe client + server host |
 | `ArgusTransfer.Tests` | net10.0 | Tests for ArgusTransfer |
+| `ArgusTransfer.Sample` | net10.0 | A sample ArgusModule and Client to demonstrate its use |
 
 ### Key Directories
 
@@ -36,6 +37,7 @@ dotnet test ArgusTransfer.Tests --filter "FullyQualifiedName~Verify_that_HealthE
 ArgusTransfer/
 ├── Client/          – ArgusClient
 ├── Extensions/      – DI extension methods
+├── Middleware/      – Middleware implementations such as ArgusLoggingMiddleware
 ├── Protocol/        – ArgusMessage, ArgusRequest, ArgusResponse, ArgusVerb, ArgusStatusCode
 ├── Routing/         – ArgusRouter, route templates, modules
 ├── Serialization/   – Request/response readers and writers
