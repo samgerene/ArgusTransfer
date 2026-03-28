@@ -330,7 +330,7 @@ namespace ArgusTransfer.Server
 
                 var taskId = task.Id;
                 this.activeRequests[taskId] = task;
-                task.ContinueWith(_ => this.activeRequests.TryRemove(taskId, out _), TaskContinuationOptions.ExecuteSynchronously);
+                _ = task.ContinueWith(_ => this.activeRequests.TryRemove(taskId, out _), TaskContinuationOptions.ExecuteSynchronously);
             }
         }
 
