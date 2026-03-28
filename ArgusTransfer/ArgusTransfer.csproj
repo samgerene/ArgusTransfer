@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Version>0.2.0</Version>
+        <Version>1.0.0</Version>
         <LangVersion>14.0</LangVersion>
         <Company>Sam Gerené</Company>
         <Authors>Sam Gerené</Authors>
@@ -23,7 +23,20 @@
         <PackageIcon>argus-transfer-ico.png</PackageIcon>
         <PackageTags>pipe routing argus protocol</PackageTags>
         <PackageReleaseNotes>
-            [Implement] ArgusContext
+            [Add] IArgusClient interface
+            [Add] queryparameters
+            [Add] Accept header as first class citizen on ArgusRequest; fixes #1
+            [Add] content negotiation with IArgusBodySerializerRegistry; fixes #1
+            [Add] timeout per request; fixes #4
+            [Add] request timesout; fixes #114
+            [Add] statuscode 401 and 403; fixes #8
+            [Add] statuscode 409, 501 and 503; fixes #9 and #10
+            [Add] statuscode 204 and 422; fixes #13 and fixes #12
+            [Add] HEAD verb returns no body; fixes #24
+            [Add] max body size checking; fixes #15
+            [Add] graceful shutdown with in-flight request draining; fixes #16
+            [Add] concurrency gating; fixes #17
+            [Add] Add streaming body support for large payloads fixes #7
         </PackageReleaseNotes>
         <Nullable>disable</Nullable>
         <ImplicitUsings>disable</ImplicitUsings>
