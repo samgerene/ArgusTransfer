@@ -23,6 +23,15 @@ dotnet test ArgusTransfer.Tests --filter "FullyQualifiedName~Verify_that_HealthE
 
 ```
 
+## Build & Verification Workflow
+
+After making code changes, follow this verification sequence before considering work complete:
+
+1. **Build and inspect warnings**: Run `dotnet build ArgusTransfer.sln`. Inspect the output for all warnings (CSxxxx, CAxxxx, IDExxxx). Fix all warnings before proceeding.
+2. **Run tests**: Run `dotnet test ArgusTransfer.sln`. All tests must pass.
+3. **Format check**: Run `dotnet format ArgusTransfer.sln --verify-no-changes`. Fix any formatting violations reported.
+4. **Final strict build**: Run `dotnet build ArgusTransfer.sln -warnaserror` as a final pass. The build must succeed with zero warnings and zero errors.
+
 ## Solution Structure
 
 | Project | Framework | Role |
