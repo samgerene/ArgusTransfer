@@ -61,7 +61,7 @@ namespace ArgusTransfer.Serialization
             var buffer = new byte[chunkSize];
             int bytesRead;
 
-            while ((bytesRead = await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+            while ((bytesRead = await source.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
             {
                 await writer.WriteAsync(bytesRead.ToString("x", CultureInfo.InvariantCulture));
                 await writer.WriteAsync("\r\n");
@@ -136,7 +136,7 @@ namespace ArgusTransfer.Serialization
                 }
 
                 var bytes = Encoding.UTF8.GetBytes(charBuffer, 0, totalRead);
-                result.Write(bytes, 0, bytes.Length);
+                await result.WriteAsync(bytes.AsMemory(), cancellationToken);
 
                 // Read the trailing \r\n after the chunk data
                 await reader.ReadLineAsync(cancellationToken);

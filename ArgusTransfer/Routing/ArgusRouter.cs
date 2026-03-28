@@ -188,7 +188,7 @@ namespace ArgusTransfer.Routing
                         var pipeline = this.BuildPipeline(endpoint);
                         await pipeline(context);
 
-                        this.StampCorrelationToken(context);
+                        StampCorrelationToken(context);
 
                         if (context.Request.Verb == ArgusVerb.HEAD && context.Response != null)
                         {
@@ -207,7 +207,7 @@ namespace ArgusTransfer.Routing
                 StatusCode = routeMatched ? ArgusStatusCode.NotImplemented : ArgusStatusCode.NotFound
             };
 
-            this.StampCorrelationToken(context);
+            StampCorrelationToken(context);
         }
 
         /// <summary>
@@ -217,7 +217,7 @@ namespace ArgusTransfer.Routing
         /// <param name="context">
         /// The <see cref="ArgusContext"/> whose response will be stamped
         /// </param>
-        private void StampCorrelationToken(ArgusContext context)
+        private static void StampCorrelationToken(ArgusContext context)
         {
             if (context.Response != null)
             {

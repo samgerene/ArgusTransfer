@@ -90,7 +90,7 @@ namespace ArgusTransfer.Serialization
             var contentType = response.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
             var resolvedSerializer = this.ResolveSerializer(contentType);
 
-            return this.WriteCore(response, resolvedSerializer);
+            return WriteCore(response, resolvedSerializer);
         }
 
         /// <summary>
@@ -115,7 +115,7 @@ namespace ArgusTransfer.Serialization
                 response.Headers[ArgusHeaderNames.ContentType] = resolvedSerializer.ContentType;
             }
 
-            return this.WriteCore(response, resolvedSerializer);
+            return WriteCore(response, resolvedSerializer);
         }
 
         /// <summary>
@@ -468,7 +468,7 @@ namespace ArgusTransfer.Serialization
         /// <summary>
         /// Core write logic that serializes an <see cref="ArgusResponse"/> using the specified serializer
         /// </summary>
-        private string WriteCore(ArgusResponse response, IArgusBodySerializer serializer)
+        private static string WriteCore(ArgusResponse response, IArgusBodySerializer serializer)
         {
             var sb = new StringBuilder();
 
