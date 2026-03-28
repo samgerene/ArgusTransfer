@@ -103,7 +103,10 @@ namespace ArgusTransfer.Serialization
                     break;
                 }
 
-                var chunkSize = int.Parse(sizeLine.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                if (!int.TryParse(sizeLine.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var chunkSize) || chunkSize < 0)
+                {
+                    throw new FormatException($"Invalid chunk size: {sizeLine.Trim()}");
+                }
 
                 if (chunkSize == 0)
                 {
@@ -200,7 +203,10 @@ namespace ArgusTransfer.Serialization
                     break;
                 }
 
-                var chunkSize = int.Parse(sizeLine.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                if (!int.TryParse(sizeLine.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var chunkSize) || chunkSize < 0)
+                {
+                    throw new FormatException($"Invalid chunk size: {sizeLine.Trim()}");
+                }
 
                 if (chunkSize == 0)
                 {

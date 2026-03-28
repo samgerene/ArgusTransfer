@@ -448,8 +448,8 @@ namespace ArgusTransfer.Serialization
                 return contentLength;
             }
 
-            var name = line.Substring(0, colonIndex).Trim();
-            var value = line.Substring(colonIndex + 1).Trim();
+            var name = line.AsSpan(0, colonIndex).Trim().ToString();
+            var value = line.AsSpan(colonIndex + 1).Trim().ToString();
 
             if (string.Equals(name, ArgusHeaderNames.CorrelationToken, StringComparison.OrdinalIgnoreCase))
             {
@@ -467,7 +467,7 @@ namespace ArgusTransfer.Serialization
             }
             else if (string.Equals(name, ArgusHeaderNames.ContentLength, StringComparison.OrdinalIgnoreCase))
             {
-                if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var length))
+                if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var length) && length >= 0)
                 {
                     contentLength = length;
                 }

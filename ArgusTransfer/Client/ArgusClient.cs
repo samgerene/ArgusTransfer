@@ -112,6 +112,8 @@ namespace ArgusTransfer.Client
         /// </returns>
         public async Task<ArgusResponse> SendAsync(ArgusRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
+            ObjectDisposedException.ThrowIf(this.disposed, this);
+
             var effectiveTimeout = timeout ?? this.DefaultTimeout;
             using var timeoutCts = new CancellationTokenSource(effectiveTimeout);
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
@@ -122,8 +124,8 @@ namespace ArgusTransfer.Client
             {
                 await pipeClient.ConnectAsync(linkedCts.Token);
 
-                var writer = new StreamWriter(pipeClient, new UTF8Encoding(false)) { AutoFlush = false };
-                var reader = new StreamReader(pipeClient, new UTF8Encoding(false));
+                await using var writer = new StreamWriter(pipeClient, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = false };
+                using var reader = new StreamReader(pipeClient, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: true, leaveOpen: true);
 
                 await this.requestSerializer.WriteAsync(writer, request, linkedCts.Token);
 
