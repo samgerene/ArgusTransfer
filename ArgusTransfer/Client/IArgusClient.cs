@@ -22,6 +22,7 @@ namespace ArgusTransfer.Client
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -172,5 +173,38 @@ namespace ArgusTransfer.Client
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
         /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
         Task<ArgusResponse> HeadAsync(string route, IReadOnlyDictionary<string, string> queryParameters, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a POST request with a streaming body to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="bodyStream">The <see cref="Stream"/> containing the request body</param>
+        /// <param name="contentType">The optional content type of the body. Defaults to application/octet-stream</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> PostAsync(string route, Stream bodyStream, string contentType = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a PUT request with a streaming body to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="bodyStream">The <see cref="Stream"/> containing the request body</param>
+        /// <param name="contentType">The optional content type of the body. Defaults to application/octet-stream</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> PutAsync(string route, Stream bodyStream, string contentType = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a PATCH request with a streaming body to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="bodyStream">The <see cref="Stream"/> containing the request body</param>
+        /// <param name="contentType">The optional content type of the body. Defaults to application/octet-stream</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        Task<ArgusResponse> PatchAsync(string route, Stream bodyStream, string contentType = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
     }
 }

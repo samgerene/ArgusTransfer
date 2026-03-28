@@ -134,6 +134,68 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
+        /// Asynchronously writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>.
+        /// This method supports streaming bodies via chunked transfer encoding.
+        /// </summary>
+        /// <param name="writer">
+        /// The <see cref="StreamWriter"/> to write to
+        /// </param>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> to serialize
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        public async Task WriteAsync(StreamWriter writer, ArgusResponse response, CancellationToken cancellationToken = default)
+        {
+            if (!response.IsStreamed)
+            {
+                this.Write(writer, response);
+                return;
+            }
+
+            var sb = new StringBuilder();
+
+            sb.Append("ARGUS/1.0 ");
+            sb.Append(((int)response.StatusCode).ToString(CultureInfo.InvariantCulture));
+            sb.Append(' ');
+            sb.Append(response.StatusCode.ToReasonPhrase());
+            sb.Append("\r\n");
+
+            sb.Append("X-Correlation-Token: ");
+            sb.Append(response.CorrelationToken.ToString());
+            sb.Append("\r\n");
+
+            sb.Append("X-Timestamp: ");
+            sb.Append(response.Timestamp.ToString("o", CultureInfo.InvariantCulture));
+            sb.Append("\r\n");
+
+            foreach (var header in response.Headers)
+            {
+                sb.Append(header.Key);
+                sb.Append(": ");
+                sb.Append(header.Value);
+                sb.Append("\r\n");
+            }
+
+            if (!response.Headers.ContainsKey("Content-Type"))
+            {
+                sb.Append("Content-Type: application/octet-stream\r\n");
+            }
+
+            sb.Append("Transfer-Encoding: chunked\r\n");
+            sb.Append("\r\n");
+
+            await writer.WriteAsync(sb.ToString());
+            await writer.FlushAsync(cancellationToken);
+
+            await ArgusChunkedEncoding.WriteChunkedAsync(response.BodyStream, writer, cancellationToken: cancellationToken);
+        }
+
+        /// <summary>
         /// Writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>
         /// using a serializer resolved from the specified accept content type
         /// </summary>
@@ -187,7 +249,14 @@ namespace ArgusTransfer.Serialization
                 contentLength = ParseHeader(line, response, contentLength);
             }
 
-            if (contentLength > 0)
+            var isChunked = response.Headers.TryGetValue("Transfer-Encoding", out var te)
+                && string.Equals(te, "chunked", StringComparison.OrdinalIgnoreCase);
+
+            if (isChunked)
+            {
+                response.BodyStream = ArgusChunkedEncoding.ReadChunked(reader);
+            }
+            else if (contentLength > 0)
             {
                 var contentType = response.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
                 var resolvedSerializer = this.ResolveSerializer(contentType);
@@ -249,7 +318,14 @@ namespace ArgusTransfer.Serialization
                 contentLength = ParseHeader(line, response, contentLength);
             }
 
-            if (contentLength > 0)
+            var isChunked = response.Headers.TryGetValue("Transfer-Encoding", out var teValue)
+                && string.Equals(teValue, "chunked", StringComparison.OrdinalIgnoreCase);
+
+            if (isChunked)
+            {
+                response.BodyStream = await ArgusChunkedEncoding.ReadChunkedAsync(reader, cancellationToken: cancellationToken);
+            }
+            else if (contentLength > 0)
             {
                 var contentType = response.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
                 var resolvedSerializer = this.ResolveSerializer(contentType);
@@ -388,28 +464,43 @@ namespace ArgusTransfer.Serialization
 
             string serializedBody = null;
 
-            if (!string.IsNullOrEmpty(response.Body))
+            if (response.IsStreamed)
             {
-                serializedBody = serializer.WriteBody(response.Body);
-                var bodyBytes = Encoding.UTF8.GetByteCount(serializedBody);
-
                 if (!response.Headers.ContainsKey("Content-Type"))
                 {
-                    sb.Append("Content-Type: ");
-                    sb.Append(serializer.ContentType);
+                    sb.Append("Content-Type: application/octet-stream\r\n");
+                }
+
+                sb.Append("Transfer-Encoding: chunked\r\n");
+                sb.Append("\r\n");
+
+                ArgusChunkedEncoding.WriteChunked(response.BodyStream, sb);
+            }
+            else
+            {
+                if (!string.IsNullOrEmpty(response.Body))
+                {
+                    serializedBody = serializer.WriteBody(response.Body);
+                    var bodyBytes = Encoding.UTF8.GetByteCount(serializedBody);
+
+                    if (!response.Headers.ContainsKey("Content-Type"))
+                    {
+                        sb.Append("Content-Type: ");
+                        sb.Append(serializer.ContentType);
+                        sb.Append("\r\n");
+                    }
+
+                    sb.Append("Content-Length: ");
+                    sb.Append(bodyBytes.ToString(CultureInfo.InvariantCulture));
                     sb.Append("\r\n");
                 }
 
-                sb.Append("Content-Length: ");
-                sb.Append(bodyBytes.ToString(CultureInfo.InvariantCulture));
                 sb.Append("\r\n");
-            }
 
-            sb.Append("\r\n");
-
-            if (serializedBody != null)
-            {
-                sb.Append(serializedBody);
+                if (serializedBody != null)
+                {
+                    sb.Append(serializedBody);
+                }
             }
 
             return sb.ToString();

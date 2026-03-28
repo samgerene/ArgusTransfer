@@ -114,31 +114,46 @@ namespace ArgusTransfer.Serialization
 
             string serializedBody = null;
 
-            if (!string.IsNullOrEmpty(request.Body))
+            if (request.IsStreamed)
             {
-                var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
-                var resolvedSerializer = this.ResolveSerializer(contentType);
-
-                serializedBody = resolvedSerializer.WriteBody(request.Body);
-                var bodyBytes = Encoding.UTF8.GetByteCount(serializedBody);
-
                 if (!request.Headers.ContainsKey("Content-Type"))
                 {
-                    sb.Append("Content-Type: ");
-                    sb.Append(resolvedSerializer.ContentType);
+                    sb.Append("Content-Type: application/octet-stream\r\n");
+                }
+
+                sb.Append("Transfer-Encoding: chunked\r\n");
+                sb.Append("\r\n");
+
+                ArgusChunkedEncoding.WriteChunked(request.BodyStream, sb);
+            }
+            else
+            {
+                if (!string.IsNullOrEmpty(request.Body))
+                {
+                    var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+                    var resolvedSerializer = this.ResolveSerializer(contentType);
+
+                    serializedBody = resolvedSerializer.WriteBody(request.Body);
+                    var bodyBytes = Encoding.UTF8.GetByteCount(serializedBody);
+
+                    if (!request.Headers.ContainsKey("Content-Type"))
+                    {
+                        sb.Append("Content-Type: ");
+                        sb.Append(resolvedSerializer.ContentType);
+                        sb.Append("\r\n");
+                    }
+
+                    sb.Append("Content-Length: ");
+                    sb.Append(bodyBytes.ToString(CultureInfo.InvariantCulture));
                     sb.Append("\r\n");
                 }
 
-                sb.Append("Content-Length: ");
-                sb.Append(bodyBytes.ToString(CultureInfo.InvariantCulture));
                 sb.Append("\r\n");
-            }
 
-            sb.Append("\r\n");
-
-            if (serializedBody != null)
-            {
-                sb.Append(serializedBody);
+                if (serializedBody != null)
+                {
+                    sb.Append(serializedBody);
+                }
             }
 
             return sb.ToString();
@@ -157,6 +172,68 @@ namespace ArgusTransfer.Serialization
         {
             writer.Write(this.Write(request));
             writer.Flush();
+        }
+
+        /// <summary>
+        /// Asynchronously writes an <see cref="ArgusRequest"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>.
+        /// This method supports streaming bodies via chunked transfer encoding.
+        /// </summary>
+        /// <param name="writer">
+        /// The <see cref="StreamWriter"/> to write to
+        /// </param>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> to serialize
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        public async Task WriteAsync(StreamWriter writer, ArgusRequest request, CancellationToken cancellationToken = default)
+        {
+            if (!request.IsStreamed)
+            {
+                this.Write(writer, request);
+                return;
+            }
+
+            var sb = new StringBuilder();
+
+            sb.Append(request.Verb.ToString());
+            sb.Append(' ');
+            sb.Append(request.Route);
+            sb.Append(ArgusQueryStringHelper.BuildQueryString(request.QueryParameters));
+            sb.Append(" ARGUS/1.0\r\n");
+
+            sb.Append("X-Correlation-Token: ");
+            sb.Append(request.CorrelationToken.ToString());
+            sb.Append("\r\n");
+
+            sb.Append("X-Timestamp: ");
+            sb.Append(request.Timestamp.ToString("o", CultureInfo.InvariantCulture));
+            sb.Append("\r\n");
+
+            foreach (var header in request.Headers)
+            {
+                sb.Append(header.Key);
+                sb.Append(": ");
+                sb.Append(header.Value);
+                sb.Append("\r\n");
+            }
+
+            if (!request.Headers.ContainsKey("Content-Type"))
+            {
+                sb.Append("Content-Type: application/octet-stream\r\n");
+            }
+
+            sb.Append("Transfer-Encoding: chunked\r\n");
+            sb.Append("\r\n");
+
+            await writer.WriteAsync(sb.ToString());
+            await writer.FlushAsync(cancellationToken);
+
+            await ArgusChunkedEncoding.WriteChunkedAsync(request.BodyStream, writer, cancellationToken: cancellationToken);
         }
 
         /// <summary>
@@ -197,33 +274,43 @@ namespace ArgusTransfer.Serialization
                 contentLength = ParseHeader(line, request, contentLength);
             }
 
-            if (maxBodySize > 0 && contentLength > maxBodySize)
+            var isChunked = request.Headers.TryGetValue("Transfer-Encoding", out var te)
+                && string.Equals(te, "chunked", StringComparison.OrdinalIgnoreCase);
+
+            if (isChunked)
             {
-                throw new InvalidOperationException(
-                    $"Request body size {contentLength} bytes exceeds the maximum allowed size of {maxBodySize} bytes.");
+                request.BodyStream = ArgusChunkedEncoding.ReadChunked(reader, maxBodySize);
             }
-
-            if (contentLength > 0)
+            else
             {
-                var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
-                var resolvedSerializer = this.ResolveSerializer(contentType);
-
-                var bodyChars = new char[contentLength];
-                var totalRead = 0;
-
-                while (totalRead < contentLength)
+                if (maxBodySize > 0 && contentLength > maxBodySize)
                 {
-                    var read = reader.Read(bodyChars, totalRead, contentLength - totalRead);
-
-                    if (read == 0)
-                    {
-                        break;
-                    }
-
-                    totalRead += read;
+                    throw new InvalidOperationException(
+                        $"Request body size {contentLength} bytes exceeds the maximum allowed size of {maxBodySize} bytes.");
                 }
 
-                request.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
+                if (contentLength > 0)
+                {
+                    var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+                    var resolvedSerializer = this.ResolveSerializer(contentType);
+
+                    var bodyChars = new char[contentLength];
+                    var totalRead = 0;
+
+                    while (totalRead < contentLength)
+                    {
+                        var read = reader.Read(bodyChars, totalRead, contentLength - totalRead);
+
+                        if (read == 0)
+                        {
+                            break;
+                        }
+
+                        totalRead += read;
+                    }
+
+                    request.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
+                }
             }
 
             return request;
@@ -268,33 +355,43 @@ namespace ArgusTransfer.Serialization
                 contentLength = ParseHeader(line, request, contentLength);
             }
 
-            if (maxBodySize > 0 && contentLength > maxBodySize)
+            var isChunked = request.Headers.TryGetValue("Transfer-Encoding", out var teValue)
+                && string.Equals(teValue, "chunked", StringComparison.OrdinalIgnoreCase);
+
+            if (isChunked)
             {
-                throw new InvalidOperationException(
-                    $"Request body size {contentLength} bytes exceeds the maximum allowed size of {maxBodySize} bytes.");
+                request.BodyStream = await ArgusChunkedEncoding.ReadChunkedAsync(reader, maxBodySize, cancellationToken);
             }
-
-            if (contentLength > 0)
+            else
             {
-                var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
-                var resolvedSerializer = this.ResolveSerializer(contentType);
-
-                var bodyChars = new char[contentLength];
-                var totalRead = 0;
-
-                while (totalRead < contentLength)
+                if (maxBodySize > 0 && contentLength > maxBodySize)
                 {
-                    var read = await reader.ReadAsync(bodyChars, totalRead, contentLength - totalRead);
-
-                    if (read == 0)
-                    {
-                        break;
-                    }
-
-                    totalRead += read;
+                    throw new InvalidOperationException(
+                        $"Request body size {contentLength} bytes exceeds the maximum allowed size of {maxBodySize} bytes.");
                 }
 
-                request.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
+                if (contentLength > 0)
+                {
+                    var contentType = request.Headers.TryGetValue("Content-Type", out var ct) ? ct : null;
+                    var resolvedSerializer = this.ResolveSerializer(contentType);
+
+                    var bodyChars = new char[contentLength];
+                    var totalRead = 0;
+
+                    while (totalRead < contentLength)
+                    {
+                        var read = await reader.ReadAsync(bodyChars, totalRead, contentLength - totalRead);
+
+                        if (read == 0)
+                        {
+                            break;
+                        }
+
+                        totalRead += read;
+                    }
+
+                    request.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
+                }
             }
 
             return request;

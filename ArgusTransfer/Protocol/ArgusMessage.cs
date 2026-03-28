@@ -22,12 +22,23 @@ namespace ArgusTransfer.Protocol
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
 
     /// <summary>
     /// Abstract class from which all Argus messages derive
     /// </summary>
     public abstract class ArgusMessage
     {
+        /// <summary>
+        /// Backing field for <see cref="Body"/>
+        /// </summary>
+        private string body;
+
+        /// <summary>
+        /// Backing field for <see cref="BodyStream"/>
+        /// </summary>
+        private Stream bodyStream;
+
         /// <summary>
         /// A token that can be used to correlate messages
         /// </summary>
@@ -44,8 +55,36 @@ namespace ArgusTransfer.Protocol
         public Dictionary<string, string> Headers { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// The body of the message, typically used to carry a payload
+        /// The body of the message as a string, typically used to carry a text payload.
+        /// Setting this property clears <see cref="BodyStream"/>.
         /// </summary>
-        public string Body { get; set; }
+        public string Body
+        {
+            get => this.body;
+            set
+            {
+                this.body = value;
+                this.bodyStream = null;
+            }
+        }
+
+        /// <summary>
+        /// The body of the message as a <see cref="Stream"/>, used to carry large or binary payloads
+        /// via chunked transfer encoding. Setting this property clears <see cref="Body"/>.
+        /// </summary>
+        public Stream BodyStream
+        {
+            get => this.bodyStream;
+            set
+            {
+                this.bodyStream = value;
+                this.body = null;
+            }
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether this message carries a streamed body
+        /// </summary>
+        public bool IsStreamed => this.bodyStream != null;
     }
 }

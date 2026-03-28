@@ -80,7 +80,7 @@ namespace ArgusTransfer.Server
         /// <summary>
         /// Cancellation source for in-flight requests during shutdown drain
         /// </summary>
-        private CancellationTokenSource drainCts;
+        private CancellationTokenSource drainCancellationTokenSource;
 
         /// <summary>
         /// Semaphore used to limit the number of concurrently processed requests
@@ -177,7 +177,7 @@ namespace ArgusTransfer.Server
         /// </returns>
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            this.drainCts = new CancellationTokenSource();
+            this.drainCancellationTokenSource = new CancellationTokenSource();
             this.concurrencySemaphore = new SemaphoreSlim(this.options.MaxConcurrentRequests, this.options.MaxConcurrentRequests);
 
             while (!stoppingToken.IsCancellationRequested)
@@ -185,7 +185,7 @@ namespace ArgusTransfer.Server
                 var serverStream = new NamedPipeServerStream(this.options.PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
                 await serverStream.WaitForConnectionAsync(stoppingToken);
 
-                var requestToken = this.drainCts.Token;
+                var requestToken = this.drainCancellationTokenSource.Token;
                 var task = Task.Run(async () =>
                 {
                     var semaphoreAcquired = false;
@@ -272,15 +272,20 @@ namespace ArgusTransfer.Server
                             return;
                         }
 
-                        var acceptType2 = request.Accept;
-
-                        if (!string.IsNullOrEmpty(acceptType2))
+                        if (context.Response.IsStreamed)
                         {
-                            this.responseSerializer.Write(writer, context.Response, acceptType2);
+                            await this.responseSerializer.WriteAsync(writer, context.Response, requestToken);
                         }
                         else
                         {
-                            this.responseSerializer.Write(writer, context.Response);
+                            if (!string.IsNullOrEmpty(request.Accept))
+                            {
+                                this.responseSerializer.Write(writer, context.Response, request.Accept);
+                            }
+                            else
+                            {
+                                this.responseSerializer.Write(writer, context.Response);
+                            }
                         }
                     }
                     catch (InvalidOperationException ex)
@@ -353,11 +358,11 @@ namespace ArgusTransfer.Server
                 if (completed != drainTask)
                 {
                     this.logger.LogWarning("Shutdown drain timeout expired. Cancelling {Count} remaining request(s).", this.activeRequests.Count);
-                    this.drainCts?.Cancel();
+                    this.drainCancellationTokenSource?.Cancel();
                 }
             }
 
-            this.drainCts?.Dispose();
+            this.drainCancellationTokenSource?.Dispose();
             this.concurrencySemaphore?.Dispose();
         }
 

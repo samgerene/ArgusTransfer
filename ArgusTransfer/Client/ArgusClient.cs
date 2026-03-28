@@ -125,7 +125,14 @@ namespace ArgusTransfer.Client
                 var writer = new StreamWriter(pipeClient, new UTF8Encoding(false)) { AutoFlush = false };
                 var reader = new StreamReader(pipeClient, new UTF8Encoding(false));
 
-                this.requestSerializer.Write(writer, request);
+                if (request.IsStreamed)
+                {
+                    await this.requestSerializer.WriteAsync(writer, request, linkedCts.Token);
+                }
+                else
+                {
+                    this.requestSerializer.Write(writer, request);
+                }
 
                 var response = await this.responseSerializer.ReadAsync(reader, linkedCts.Token);
 
@@ -310,6 +317,63 @@ namespace ArgusTransfer.Client
         {
             var request = new ArgusRequest { Verb = ArgusVerb.HEAD, Route = route };
             CopyQueryParameters(queryParameters, request);
+            return this.SendAsync(request, timeout, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a POST request with a streaming body to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="bodyStream">The <see cref="Stream"/> containing the request body</param>
+        /// <param name="contentType">The optional content type of the body. Defaults to application/octet-stream</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> PostAsync(string route, Stream bodyStream, string contentType = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            return this.SendStreamAsync(ArgusVerb.POST, route, bodyStream, contentType, timeout, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a PUT request with a streaming body to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="bodyStream">The <see cref="Stream"/> containing the request body</param>
+        /// <param name="contentType">The optional content type of the body. Defaults to application/octet-stream</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> PutAsync(string route, Stream bodyStream, string contentType = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            return this.SendStreamAsync(ArgusVerb.PUT, route, bodyStream, contentType, timeout, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a PATCH request with a streaming body to the specified route
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="bodyStream">The <see cref="Stream"/> containing the request body</param>
+        /// <param name="contentType">The optional content type of the body. Defaults to application/octet-stream</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The <see cref="ArgusResponse"/> received from the server</returns>
+        public Task<ArgusResponse> PatchAsync(string route, Stream bodyStream, string contentType = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            return this.SendStreamAsync(ArgusVerb.PATCH, route, bodyStream, contentType, timeout, cancellationToken);
+        }
+
+        /// <summary>
+        /// Sends a request with a streaming body using the specified verb
+        /// </summary>
+        private Task<ArgusResponse> SendStreamAsync(ArgusVerb verb, string route, Stream bodyStream, string contentType, TimeSpan? timeout, CancellationToken cancellationToken)
+        {
+            var request = new ArgusRequest { Verb = verb, Route = route, BodyStream = bodyStream };
+
+            if (contentType != null)
+            {
+                request.Headers["Content-Type"] = contentType;
+            }
+
             return this.SendAsync(request, timeout, cancellationToken);
         }
 
