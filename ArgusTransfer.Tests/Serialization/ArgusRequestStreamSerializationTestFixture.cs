@@ -116,7 +116,7 @@ namespace ArgusTransfer.Tests.Serialization
             Assert.That(deserialized.IsStreamed, Is.True);
 
             var resultBytes = new byte[deserialized.BodyStream.Length];
-            deserialized.BodyStream.ReadExactly(resultBytes, 0, resultBytes.Length);
+            await deserialized.BodyStream.ReadExactlyAsync(resultBytes, 0, resultBytes.Length);
             Assert.That(Encoding.UTF8.GetString(resultBytes), Is.EqualTo(bodyData));
         }
 

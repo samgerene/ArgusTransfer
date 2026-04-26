@@ -549,7 +549,7 @@ namespace ArgusTransfer.Transport.Tests.Server
             handlerBarrier.SetResult();
             await request1Task;
 
-            cts.Cancel();
+            await cts.CancelAsync();
             await concurrencyService.StopAsync(CancellationToken.None);
         }
 
@@ -628,7 +628,7 @@ namespace ArgusTransfer.Transport.Tests.Server
             Assert.That(response2.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
             Assert.That(response2.Body, Is.EqualTo("fast"));
 
-            cts.Cancel();
+            await cts.CancelAsync();
             await concurrencyService.StopAsync(CancellationToken.None);
         }
 
@@ -699,7 +699,7 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             Assert.That(countService.CurrentRequestCount, Is.EqualTo(0));
 
-            cts.Cancel();
+            await cts.CancelAsync();
             await countService.StopAsync(CancellationToken.None);
         }
 
@@ -751,7 +751,7 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.NotAcceptable));
 
-            cts.Cancel();
+            await cts.CancelAsync();
             await acceptService.StopAsync(CancellationToken.None);
         }
     }

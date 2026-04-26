@@ -106,7 +106,7 @@ namespace ArgusTransfer.Tests.Serialization
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(string.Empty));
             using var reader = new StreamReader(stream);
 
-            Assert.That(async () => await this.serializer.ReadAsync(reader, CancellationToken.None),
+            await Assert.ThatAsync(async () => await this.serializer.ReadAsync(reader, CancellationToken.None),
                 Throws.TypeOf<FormatException>());
         }
     }

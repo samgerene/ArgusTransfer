@@ -61,7 +61,7 @@ namespace ArgusTransfer.Tests.Serialization
         [Test]
         public void Verify_that_TryGetSerializer_returns_false_for_unregistered_content_type()
         {
-            var result = this.registry.TryGetSerializer("application/xml", out IArgusBodySerializer serializer);
+            var result = this.registry.TryGetSerializer("application/xml", out _);
 
             Assert.That(result, Is.False);
         }
