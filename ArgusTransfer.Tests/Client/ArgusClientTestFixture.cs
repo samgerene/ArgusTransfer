@@ -664,5 +664,79 @@ namespace ArgusTransfer.Tests.Client
 
             Assert.Pass();
         }
+
+        [Test]
+        public async Task Verify_that_GetEnsureSuccessAsync_returns_response_when_status_is_2xx()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok,
+                    Body = "ok"
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+
+            var clientResponse = await client.GetEnsureSuccessAsync("/healthendpoint");
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(clientResponse.Body, Is.EqualTo("ok"));
+        }
+
+        [Test]
+        public void Verify_that_GetEnsureSuccessAsync_throws_when_status_is_not_2xx()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.NotFound,
+                    Body = "missing"
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+
+            var exception = Assert.ThrowsAsync<ArgusRequestException>(async () =>
+            {
+                await client.GetEnsureSuccessAsync("/healthendpoint");
+            });
+
+            serverTask.GetAwaiter().GetResult();
+
+            Assert.That(exception.StatusCode, Is.EqualTo(ArgusStatusCode.NotFound));
+            Assert.That(exception.ReasonPhrase, Is.EqualTo(ArgusStatusCode.NotFound.ToReasonPhrase()));
+            Assert.That(exception.ResponseBody, Is.EqualTo("missing"));
+        }
     }
 }
