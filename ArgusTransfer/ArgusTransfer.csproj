@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Version>1.0.2</Version>
+        <Version>1.0.3</Version>
         <LangVersion>14.0</LangVersion>
         <Company>Sam Gerené</Company>
         <Authors>Sam Gerené</Authors>
@@ -23,9 +23,9 @@
         <PackageIcon>argus-transfer-ico.png</PackageIcon>
         <PackageTags>pipe routing argus protocol</PackageTags>
         <PackageReleaseNotes>
-            
-            [Refactoring]
-            - ArgusTransportExtensions — Replaced AddHostedService{ArgusPipeHostBackgroundService}() with a factory overload that resolves IArgusBodySerializerRegistry first (preferred) and falls back to IArgusBodySerializer.
+            [Update] Microsoft.Extensions.DependencyInjection to version 10.0.7
+            [Update] Microsoft.Extensions.Hosting.Abstractions to version 10.0.7
+            [Update] Microsoft.Extensions.Logging.Abstractions to version 10.0.7
         </PackageReleaseNotes>
         <Nullable>disable</Nullable>
         <ImplicitUsings>disable</ImplicitUsings>
