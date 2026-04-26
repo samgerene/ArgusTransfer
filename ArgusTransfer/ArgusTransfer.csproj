@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Version>1.2.0</Version>
+        <Version>1.2.1</Version>
         <LangVersion>14.0</LangVersion>
         <Company>Sam Gerené</Company>
         <Authors>Sam Gerené</Authors>
@@ -23,6 +23,7 @@
         <PackageIcon>argus-transfer-ico.png</PackageIcon>
         <PackageTags>pipe routing argus protocol</PackageTags>
         <PackageReleaseNotes>
+            [Fix] default pipe ACL also grants the service-running account FullControl so subsequent pipe instances can be created (Authenticated Users alone lack CreateNewInstance, which broke the host loop after the first connection)
             [Add] ArgusPipeHostOptions.PipeSecurity for cross-session named-pipe access; default ACL grants Authenticated Users ReadWrite|Synchronize so user-session clients can connect to a pipe owned by a service running as LocalSystem
         </PackageReleaseNotes>
         <Nullable>disable</Nullable>

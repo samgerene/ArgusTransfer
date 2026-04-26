@@ -453,7 +453,10 @@ namespace ArgusTransfer.Server
         /// <see cref="ArgusPipeHostOptions.PipeSecurity"/> has been supplied. Grants the
         /// Authenticated Users group <see cref="PipeAccessRights.ReadWrite"/> and
         /// <see cref="PipeAccessRights.Synchronize"/>, which lets clients running as a regular
-        /// user connect to a pipe owned by a service running as LocalSystem.
+        /// user connect to a pipe owned by a service running as LocalSystem. The service-running
+        /// account itself is granted <see cref="PipeAccessRights.FullControl"/> so subsequent
+        /// instances of the pipe can be created (Authenticated Users alone do not get
+        /// <see cref="PipeAccessRights.CreateNewInstance"/>).
         /// </summary>
         /// <returns>
         /// The default <see cref="PipeSecurity"/>
@@ -462,6 +465,16 @@ namespace ArgusTransfer.Server
         private static PipeSecurity CreateDefaultPipeSecurity()
         {
             var security = new PipeSecurity();
+
+            using var current = WindowsIdentity.GetCurrent();
+
+            if (current.User != null)
+            {
+                security.AddAccessRule(new PipeAccessRule(
+                    current.User,
+                    PipeAccessRights.FullControl,
+                    AccessControlType.Allow));
+            }
 
             security.AddAccessRule(new PipeAccessRule(
                 new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null),
