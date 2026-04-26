@@ -52,6 +52,40 @@ namespace ArgusTransfer.Tests.Client
             this.responseSerializer = new ArgusResponseSerializer();
         }
 
+        /// <summary>
+        /// Runs a single-shot fake pipe server that reads one request, optionally validates it,
+        /// and writes back a response with the given status code and body
+        /// </summary>
+        /// <param name="pipeName">The name of the pipe to listen on</param>
+        /// <param name="validateRequest">Optional callback invoked with the deserialized request for assertions</param>
+        /// <param name="responseStatus">The status code to return to the client</param>
+        /// <param name="responseBody">The optional response body</param>
+        /// <returns>A task that completes once the server has written its response</returns>
+        private Task RunFakeServerAsync(string pipeName, Action<ArgusRequest> validateRequest, ArgusStatusCode responseStatus, string responseBody = null)
+        {
+            return Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                validateRequest?.Invoke(request);
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = responseStatus,
+                    Body = responseBody
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+        }
+
         [Test]
         public async Task Verify_that_SendAsync_round_trips_request_and_response()
         {
@@ -737,6 +771,284 @@ namespace ArgusTransfer.Tests.Client
             Assert.That(exception.StatusCode, Is.EqualTo(ArgusStatusCode.NotFound));
             Assert.That(exception.ReasonPhrase, Is.EqualTo(ArgusStatusCode.NotFound.ToReasonPhrase()));
             Assert.That(exception.ResponseBody, Is.EqualTo("missing"));
+        }
+
+        [Test]
+        public async Task Verify_that_SendEnsureSuccessAsync_forwards_request_and_returns_response()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.PUT));
+                Assert.That(r.Route, Is.EqualTo("/items"));
+            }, ArgusStatusCode.Ok, "ok");
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.SendEnsureSuccessAsync(new ArgusRequest { Verb = ArgusVerb.PUT, Route = "/items" });
+
+            await serverTask;
+            Assert.That(response.Body, Is.EqualTo("ok"));
+        }
+
+        [Test]
+        public async Task Verify_that_GetEnsureSuccessAsync_with_query_parameters_sends_query_parameters()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.GET));
+                Assert.That(r.QueryParameters["key"], Is.EqualTo("value"));
+            }, ArgusStatusCode.Ok);
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.GetEnsureSuccessAsync("/items", new Dictionary<string, string> { { "key", "value" } });
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_PostEnsureSuccessAsync_with_string_body_sends_body()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.POST));
+                Assert.That(r.Body, Is.EqualTo("post-body"));
+            }, ArgusStatusCode.Created);
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.PostEnsureSuccessAsync("/items", "post-body");
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Created));
+        }
+
+        [Test]
+        public async Task Verify_that_PostEnsureSuccessAsync_with_query_parameters_sends_query_parameters_and_body()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.POST));
+                Assert.That(r.QueryParameters["key"], Is.EqualTo("value"));
+                Assert.That(r.Body, Is.EqualTo("post-body"));
+            }, ArgusStatusCode.Created);
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.PostEnsureSuccessAsync("/items", new Dictionary<string, string> { { "key", "value" } }, "post-body");
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Created));
+        }
+
+        [Test]
+        public async Task Verify_that_PostEnsureSuccessAsync_with_stream_sends_body_and_content_type()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.POST));
+                Assert.That(r.Headers[ArgusHeaderNames.ContentType], Is.EqualTo("application/json"));
+                Assert.That(r.BodyStream, Is.Not.Null);
+            }, ArgusStatusCode.Created);
+
+            using var client = new ArgusClient(pipeName);
+            using var bodyStream = new MemoryStream(Encoding.UTF8.GetBytes("stream-body"));
+
+            var response = await client.PostEnsureSuccessAsync("/items", bodyStream, "application/json");
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Created));
+        }
+
+        [Test]
+        public async Task Verify_that_PutEnsureSuccessAsync_with_string_body_sends_body()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.PUT));
+                Assert.That(r.Body, Is.EqualTo("put-body"));
+            }, ArgusStatusCode.Ok);
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.PutEnsureSuccessAsync("/items", "put-body");
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_PutEnsureSuccessAsync_with_query_parameters_sends_query_parameters_and_body()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.PUT));
+                Assert.That(r.QueryParameters["key"], Is.EqualTo("value"));
+                Assert.That(r.Body, Is.EqualTo("put-body"));
+            }, ArgusStatusCode.Ok);
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.PutEnsureSuccessAsync("/items", new Dictionary<string, string> { { "key", "value" } }, "put-body");
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_PutEnsureSuccessAsync_with_stream_sends_body_without_explicit_content_type()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.PUT));
+                Assert.That(r.BodyStream, Is.Not.Null);
+            }, ArgusStatusCode.Ok);
+
+            using var client = new ArgusClient(pipeName);
+            using var bodyStream = new MemoryStream(Encoding.UTF8.GetBytes("stream-body"));
+
+            var response = await client.PutEnsureSuccessAsync("/items", bodyStream);
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_PatchEnsureSuccessAsync_with_string_body_sends_body()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.PATCH));
+                Assert.That(r.Body, Is.EqualTo("patch-body"));
+            }, ArgusStatusCode.Ok);
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.PatchEnsureSuccessAsync("/items", "patch-body");
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_PatchEnsureSuccessAsync_with_query_parameters_sends_query_parameters_and_body()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.PATCH));
+                Assert.That(r.QueryParameters["key"], Is.EqualTo("value"));
+                Assert.That(r.Body, Is.EqualTo("patch-body"));
+            }, ArgusStatusCode.Ok);
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.PatchEnsureSuccessAsync("/items", new Dictionary<string, string> { { "key", "value" } }, "patch-body");
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_PatchEnsureSuccessAsync_with_stream_sends_body_and_content_type()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.PATCH));
+                Assert.That(r.Headers[ArgusHeaderNames.ContentType], Is.EqualTo("text/plain"));
+                Assert.That(r.BodyStream, Is.Not.Null);
+            }, ArgusStatusCode.Ok);
+
+            using var client = new ArgusClient(pipeName);
+            using var bodyStream = new MemoryStream(Encoding.UTF8.GetBytes("stream-body"));
+
+            var response = await client.PatchEnsureSuccessAsync("/items", bodyStream, "text/plain");
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_DeleteEnsureSuccessAsync_sends_DELETE()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.DELETE));
+                Assert.That(r.Route, Is.EqualTo("/items"));
+            }, ArgusStatusCode.Ok);
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.DeleteEnsureSuccessAsync("/items");
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_DeleteEnsureSuccessAsync_with_query_parameters_sends_query_parameters()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.DELETE));
+                Assert.That(r.QueryParameters["key"], Is.EqualTo("value"));
+            }, ArgusStatusCode.Ok);
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.DeleteEnsureSuccessAsync("/items", new Dictionary<string, string> { { "key", "value" } });
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_HeadEnsureSuccessAsync_sends_HEAD()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.HEAD));
+                Assert.That(r.Route, Is.EqualTo("/items"));
+            }, ArgusStatusCode.Ok);
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.HeadEnsureSuccessAsync("/items");
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_HeadEnsureSuccessAsync_with_query_parameters_sends_query_parameters()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Verb, Is.EqualTo(ArgusVerb.HEAD));
+                Assert.That(r.QueryParameters["key"], Is.EqualTo("value"));
+            }, ArgusStatusCode.Ok);
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.HeadEnsureSuccessAsync("/items", new Dictionary<string, string> { { "key", "value" } });
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
         }
 
         [Test]
