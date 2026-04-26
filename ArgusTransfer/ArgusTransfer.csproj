@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Version>1.0.3</Version>
+        <Version>1.1.0</Version>
         <LangVersion>14.0</LangVersion>
         <Company>Sam Gerené</Company>
         <Authors>Sam Gerené</Authors>
@@ -26,6 +26,7 @@
             [Update] Microsoft.Extensions.DependencyInjection to version 10.0.7
             [Update] Microsoft.Extensions.Hosting.Abstractions to version 10.0.7
             [Update] Microsoft.Extensions.Logging.Abstractions to version 10.0.7
+            [Add] EnsureSuccessStatusCode helper and EnsureSuccessAsync client overloads; fixes #23
         </PackageReleaseNotes>
         <Nullable>disable</Nullable>
         <ImplicitUsings>disable</ImplicitUsings>
