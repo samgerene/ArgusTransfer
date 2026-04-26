@@ -48,8 +48,8 @@ namespace ArgusTransfer.Routing
             try
             {
                 var base64 = routeSegment.Replace("_", "/").Replace("-", "+") + "==";
-                var bytes = Convert.FromBase64String(base64);
-                return bytes.Length == 16;
+                _ = Convert.FromBase64String(base64);
+                return true;
             }
             catch (FormatException)
             {
