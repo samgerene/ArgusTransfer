@@ -21,6 +21,7 @@
 namespace ArgusTransfer.Server
 {
     using System;
+    using System.IO.Pipes;
     using System.Threading;
 
     /// <summary>
@@ -32,6 +33,16 @@ namespace ArgusTransfer.Server
         /// Gets or sets the name of the named pipe to listen on. Defaults to "argus"
         /// </summary>
         public string PipeName { get; set; } = "argus";
+
+        /// <summary>
+        /// Gets or sets the <see cref="PipeSecurity"/> applied to the named pipe on Windows. When
+        /// <c>null</c>, the host applies a default ACL granting Authenticated Users
+        /// <see cref="PipeAccessRights.ReadWrite"/> and <see cref="PipeAccessRights.Synchronize"/>,
+        /// which lets a user-session client connect to a pipe owned by a service running as
+        /// LocalSystem. Set this to a custom <see cref="PipeSecurity"/> to lock the pipe down
+        /// further (e.g. to a specific group SID). Ignored on non-Windows platforms.
+        /// </summary>
+        public PipeSecurity PipeSecurity { get; set; }
 
         /// <summary>
         /// Gets or sets the maximum allowed request body size in bytes. Defaults to 1 MB (1,048,576 bytes).

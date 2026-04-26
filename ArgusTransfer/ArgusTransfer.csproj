@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Version>1.1.0</Version>
+        <Version>1.2.0</Version>
         <LangVersion>14.0</LangVersion>
         <Company>Sam Gerené</Company>
         <Authors>Sam Gerené</Authors>
@@ -23,10 +23,7 @@
         <PackageIcon>argus-transfer-ico.png</PackageIcon>
         <PackageTags>pipe routing argus protocol</PackageTags>
         <PackageReleaseNotes>
-            [Update] Microsoft.Extensions.DependencyInjection to version 10.0.7
-            [Update] Microsoft.Extensions.Hosting.Abstractions to version 10.0.7
-            [Update] Microsoft.Extensions.Logging.Abstractions to version 10.0.7
-            [Add] EnsureSuccessStatusCode helper and EnsureSuccessAsync client overloads; fixes #23
+            [Add] ArgusPipeHostOptions.PipeSecurity for cross-session named-pipe access; default ACL grants Authenticated Users ReadWrite|Synchronize so user-session clients can connect to a pipe owned by a service running as LocalSystem
         </PackageReleaseNotes>
         <Nullable>disable</Nullable>
         <ImplicitUsings>disable</ImplicitUsings>

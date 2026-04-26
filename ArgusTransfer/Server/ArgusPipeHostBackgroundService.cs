@@ -25,6 +25,9 @@ namespace ArgusTransfer.Server
     using System.IO;
     using System.IO.Pipes;
     using System.Linq;
+    using System.Runtime.Versioning;
+    using System.Security.AccessControl;
+    using System.Security.Principal;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -182,7 +185,7 @@ namespace ArgusTransfer.Server
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                var serverStream = new NamedPipeServerStream(this.options.PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                var serverStream = this.CreatePipeServer();
 
                 try
                 {
@@ -410,6 +413,62 @@ namespace ArgusTransfer.Server
             }
 
             return context.Response;
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="NamedPipeServerStream"/> for an incoming connection,
+        /// applying the configured (or default) <see cref="PipeSecurity"/> on Windows so a
+        /// user-session client can connect to a pipe owned by a service running as LocalSystem
+        /// </summary>
+        /// <returns>
+        /// The created <see cref="NamedPipeServerStream"/>
+        /// </returns>
+        private NamedPipeServerStream CreatePipeServer()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var security = this.options.PipeSecurity ?? CreateDefaultPipeSecurity();
+
+                return NamedPipeServerStreamAcl.Create(
+                    this.options.PipeName,
+                    PipeDirection.InOut,
+                    NamedPipeServerStream.MaxAllowedServerInstances,
+                    PipeTransmissionMode.Byte,
+                    PipeOptions.Asynchronous,
+                    inBufferSize: 0,
+                    outBufferSize: 0,
+                    pipeSecurity: security);
+            }
+
+            return new NamedPipeServerStream(
+                this.options.PipeName,
+                PipeDirection.InOut,
+                NamedPipeServerStream.MaxAllowedServerInstances,
+                PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous);
+        }
+
+        /// <summary>
+        /// Builds the default <see cref="PipeSecurity"/> applied when no
+        /// <see cref="ArgusPipeHostOptions.PipeSecurity"/> has been supplied. Grants the
+        /// Authenticated Users group <see cref="PipeAccessRights.ReadWrite"/> and
+        /// <see cref="PipeAccessRights.Synchronize"/>, which lets clients running as a regular
+        /// user connect to a pipe owned by a service running as LocalSystem.
+        /// </summary>
+        /// <returns>
+        /// The default <see cref="PipeSecurity"/>
+        /// </returns>
+        [SupportedOSPlatform("windows")]
+        private static PipeSecurity CreateDefaultPipeSecurity()
+        {
+            var security = new PipeSecurity();
+
+            security.AddAccessRule(new PipeAccessRule(
+                new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null),
+                PipeAccessRights.ReadWrite | PipeAccessRights.Synchronize,
+                AccessControlType.Allow));
+
+            return security;
         }
     }
 }
