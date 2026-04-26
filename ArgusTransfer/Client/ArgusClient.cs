@@ -358,6 +358,249 @@ namespace ArgusTransfer.Client
         }
 
         /// <summary>
+        /// Sends an <see cref="ArgusRequest"/> over the named pipe and validates that the
+        /// <see cref="ArgusResponse"/> indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="request">The <see cref="ArgusRequest"/> to send</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> SendEnsureSuccessAsync(ArgusRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.SendAsync(request, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a GET request to the specified route and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> GetEnsureSuccessAsync(string route, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.GetAsync(route, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a GET request to the specified route with query parameters and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> GetEnsureSuccessAsync(string route, IReadOnlyDictionary<string, string> queryParameters, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.GetAsync(route, queryParameters, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a POST request to the specified route and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> PostEnsureSuccessAsync(string route, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.PostAsync(route, body, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a POST request to the specified route with query parameters and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> PostEnsureSuccessAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.PostAsync(route, queryParameters, body, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a POST request with a streaming body to the specified route and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="bodyStream">The <see cref="Stream"/> containing the request body</param>
+        /// <param name="contentType">The optional content type of the body. Defaults to application/octet-stream</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> PostEnsureSuccessAsync(string route, Stream bodyStream, string contentType = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.PostAsync(route, bodyStream, contentType, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a PUT request to the specified route and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> PutEnsureSuccessAsync(string route, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.PutAsync(route, body, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a PUT request to the specified route with query parameters and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> PutEnsureSuccessAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.PutAsync(route, queryParameters, body, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a PUT request with a streaming body to the specified route and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="bodyStream">The <see cref="Stream"/> containing the request body</param>
+        /// <param name="contentType">The optional content type of the body. Defaults to application/octet-stream</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> PutEnsureSuccessAsync(string route, Stream bodyStream, string contentType = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.PutAsync(route, bodyStream, contentType, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a PATCH request to the specified route and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> PatchEnsureSuccessAsync(string route, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.PatchAsync(route, body, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a PATCH request to the specified route with query parameters and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="body">The optional request body</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> PatchEnsureSuccessAsync(string route, IReadOnlyDictionary<string, string> queryParameters, string body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.PatchAsync(route, queryParameters, body, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a PATCH request with a streaming body to the specified route and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="bodyStream">The <see cref="Stream"/> containing the request body</param>
+        /// <param name="contentType">The optional content type of the body. Defaults to application/octet-stream</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> PatchEnsureSuccessAsync(string route, Stream bodyStream, string contentType = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.PatchAsync(route, bodyStream, contentType, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a DELETE request to the specified route and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> DeleteEnsureSuccessAsync(string route, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.DeleteAsync(route, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a DELETE request to the specified route with query parameters and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> DeleteEnsureSuccessAsync(string route, IReadOnlyDictionary<string, string> queryParameters, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.DeleteAsync(route, queryParameters, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a HEAD request to the specified route and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> HeadEnsureSuccessAsync(string route, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.HeadAsync(route, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Sends a HEAD request to the specified route with query parameters and validates that the response indicates a successful (2xx) status code
+        /// </summary>
+        /// <param name="route">The route to send the request to</param>
+        /// <param name="queryParameters">The query parameters to include in the request</param>
+        /// <param name="timeout">An optional per-request timeout that overrides <see cref="DefaultTimeout"/></param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to signal cancellation</param>
+        /// <returns>The successful <see cref="ArgusResponse"/> received from the server</returns>
+        /// <exception cref="ArgusRequestException">Thrown when the response status code is outside the 2xx range</exception>
+        public async Task<ArgusResponse> HeadEnsureSuccessAsync(string route, IReadOnlyDictionary<string, string> queryParameters, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        {
+            var response = await this.HeadAsync(route, queryParameters, timeout, cancellationToken);
+            return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
         /// Sends a request with a streaming body using the specified verb
         /// </summary>
         private Task<ArgusResponse> SendStreamAsync(ArgusVerb verb, string route, Stream bodyStream, string contentType, TimeSpan? timeout, CancellationToken cancellationToken)

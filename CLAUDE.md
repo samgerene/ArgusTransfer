@@ -99,7 +99,7 @@ Text-based request/response wire format transmitted over named pipes.
 - **Explicit usings**: `ImplicitUsings` is disabled — all `using` directives must be written explicitly.
 - **LangVersion**: `14.0`
 - **Nullable**: `disable` in both `ArgusTransfer` and `ArgusTransfer.Tests`
-- **XML doc comments**: required on all public types and members.
+- **XML doc comments**: required on all public types and members. **Never use `/// <inheritdoc />`** — always write the full `<summary>`, `<param>`, `<returns>`, and `<exception>` blocks on the implementation, even when they duplicate the interface.
 - **License header**: every `.cs` file starts with the Apache-2.0 copyright block.
 
 ## Testing Conventions
