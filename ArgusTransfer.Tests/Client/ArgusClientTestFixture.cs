@@ -738,5 +738,133 @@ namespace ArgusTransfer.Tests.Client
             Assert.That(exception.ReasonPhrase, Is.EqualTo(ArgusStatusCode.NotFound.ToReasonPhrase()));
             Assert.That(exception.ResponseBody, Is.EqualTo("missing"));
         }
+
+        [Test]
+        public async Task Verify_that_PostAsync_with_stream_sends_body_and_content_type()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var payload = "stream-post-payload";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.POST));
+                Assert.That(request.Headers[ArgusHeaderNames.ContentType], Is.EqualTo("application/json"));
+                Assert.That(request.BodyStream, Is.Not.Null);
+
+                using var bodyReader = new StreamReader(request.BodyStream, new UTF8Encoding(false));
+                var receivedBody = await bodyReader.ReadToEndAsync();
+                Assert.That(receivedBody, Is.EqualTo(payload));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Created
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+            using var bodyStream = new MemoryStream(Encoding.UTF8.GetBytes(payload));
+
+            var clientResponse = await client.PostAsync("/upload", bodyStream, "application/json");
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Created));
+        }
+
+        [Test]
+        public async Task Verify_that_PutAsync_with_stream_sends_body_without_explicit_content_type()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var payload = "stream-put-payload";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.PUT));
+                Assert.That(request.BodyStream, Is.Not.Null);
+
+                using var bodyReader = new StreamReader(request.BodyStream, new UTF8Encoding(false));
+                var receivedBody = await bodyReader.ReadToEndAsync();
+                Assert.That(receivedBody, Is.EqualTo(payload));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+            using var bodyStream = new MemoryStream(Encoding.UTF8.GetBytes(payload));
+
+            var clientResponse = await client.PutAsync("/upload", bodyStream);
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_PatchAsync_with_stream_sends_body_and_content_type()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var payload = "stream-patch-payload";
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                Assert.That(request.Verb, Is.EqualTo(ArgusVerb.PATCH));
+                Assert.That(request.Headers[ArgusHeaderNames.ContentType], Is.EqualTo("text/plain"));
+                Assert.That(request.BodyStream, Is.Not.Null);
+
+                using var bodyReader = new StreamReader(request.BodyStream, new UTF8Encoding(false));
+                var receivedBody = await bodyReader.ReadToEndAsync();
+                Assert.That(receivedBody, Is.EqualTo(payload));
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            using var client = new ArgusClient(pipeName);
+            using var bodyStream = new MemoryStream(Encoding.UTF8.GetBytes(payload));
+
+            var clientResponse = await client.PatchAsync("/upload", bodyStream, "text/plain");
+
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
     }
 }
