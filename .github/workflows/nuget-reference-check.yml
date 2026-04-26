@@ -69,7 +69,7 @@ jobs:
       run: |
         set -e
         dotnet list ArgusTransfer.sln package --deprecated --include-transitive > deprecated.log
-        if [ -s deprecated.log ]; then
+        if grep -q "^   >" deprecated.log; then
           echo "Deprecated packages found"
           echo "deprecated=true" >> $GITHUB_OUTPUT
         else
@@ -82,7 +82,7 @@ jobs:
       run: |
         set -e
         dotnet list ArgusTransfer.sln package --vulnerable --include-transitive > vulnerabilities.log
-        if grep -q -i "\bcritical\b\|\bhigh\b\|\bmoderate\b\|\blow\b" vulnerabilities.log; then
+        if grep -q "^   >" vulnerabilities.log; then
           echo "Security Vulnerabilities found"
           echo "vulnerable=true" >> $GITHUB_OUTPUT
         else
