@@ -264,9 +264,9 @@ namespace ArgusTransfer.Server
                         {
                             await this.router.RouteAsync(context);
                         }
-                        catch (OperationCanceledException) when (!requestToken.IsCancellationRequested)
+                        catch (OperationCanceledException ex) when (!requestToken.IsCancellationRequested)
                         {
-                            this.logger.LogWarning(
+                            this.logger.LogWarning(ex,
                                 "Request {Verb} {Route} timed out after {Timeout}.",
                                 request.Verb, request.Route, this.options.RequestTimeout);
 
