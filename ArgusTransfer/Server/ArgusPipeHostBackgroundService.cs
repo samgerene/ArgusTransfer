@@ -313,7 +313,7 @@ namespace ArgusTransfer.Server
                                 Body = ex.Message
                             };
 
-                            await this.responseSerializer.WriteAsync(errorWriter, badRequest);
+                            await this.responseSerializer.WriteAsync(errorWriter, badRequest, requestToken);
                         }
                         catch
                         {
