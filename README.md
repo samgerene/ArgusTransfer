@@ -4,6 +4,43 @@
 
 ArgusTransfer is framework that provides routing over named pipes inspired by the HTTP 1.1 request/response protocol. It is typically used to host services running in the background for which you would like to expose a REST like API but running a fully fledged HTTP server is too heavy or not allowed.
 
+## Error Responses (Problem Details)
+
+ArgusTransfer provides `ArgusProblemDetails`, a structured error body modeled on [RFC 7807 Problem Details](https://www.rfc-editor.org/rfc/rfc7807), so that clients can parse errors consistently across services. Problem details are serialized as JSON with the content type `application/problem+json`.
+
+In a handler, use `ArgusContext.Problem`, which sets the response and uses the request correlation token as the `instance`:
+
+```csharp
+app.MapGet("/items/{id:Guid}", context =>
+{
+    context.Problem(ArgusStatusCode.NotFound, "Item not found", new Dictionary<string, object> { ["id"] = context.RouteValues["id"] });
+    return Task.CompletedTask;
+});
+```
+
+Or use one of the static factory methods (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `InternalServerError`, `ServiceUnavailable`):
+
+```csharp
+context.Response = ArgusProblemDetails.BadRequest("Validation failed", new Dictionary<string, object> { ["field"] = "name" });
+```
+
+This produces a body such as:
+
+```json
+{"type":"about:blank","title":"Bad Request","status":400,"detail":"Validation failed","field":"name"}
+```
+
+Entries in `Extensions` are written as top-level members, as specified by RFC 7807. On the client, read the problem details from a response:
+
+```csharp
+var response = await client.GetAsync("/items/42");
+
+if (ArgusProblemDetails.TryRead(response, out var problem))
+{
+    Console.WriteLine($"{problem.Title}: {problem.Detail}");
+}
+```
+
 ## Code Quality
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)

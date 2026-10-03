@@ -47,7 +47,7 @@ ArgusTransfer/
 ├── Client/          – ArgusClient
 ├── Extensions/      – DI extension methods
 ├── Middleware/      – Middleware implementations such as ArgusLoggingMiddleware
-├── Protocol/        – ArgusMessage, ArgusRequest, ArgusResponse, ArgusVerb, ArgusStatusCode, ArgusHeaderNames
+├── Protocol/        – ArgusMessage, ArgusRequest, ArgusResponse, ArgusVerb, ArgusStatusCode, ArgusHeaderNames, ArgusProblemDetails
 ├── Routing/         – ArgusRouter, route templates, modules
 ├── Serialization/   – Request/response serializers, body serializer registry, chunked encoding
 └── Server/          – ArgusPipeHostBackgroundService, ArgusPipeHostOptions
@@ -64,6 +64,7 @@ Text-based request/response wire format transmitted over named pipes.
 - **Standard headers**: `X-Correlation-Token`, `X-Timestamp`, `Content-Length`, `Content-Type`
 - **Verbs** (`ArgusVerb`): GET, POST, PUT, PATCH, HEAD, DELETE
 - **Status codes** (`ArgusStatusCode`): 200 Ok, 201 Created, 204 NoContent, 400 BadRequest, 401 Unauthorized, 403 Forbidden, 404 NotFound, 406 NotAcceptable, 409 Conflict, 422 UnprocessableEntity, 500 InternalServerError, 501 NotImplemented, 503 ServiceUnavailable
+- **Problem details** (`ArgusProblemDetails`): RFC 7807-style structured error body (`type`, `title`, `status`, `detail`, `instance`, plus `Extensions` written as top-level JSON members via `System.Text.Json`), sent with `Content-Type: application/problem+json`. Static factories (`BadRequest`, `NotFound`, …) return a ready `ArgusResponse`; `ArgusContext.Problem(...)` sets the response and uses the correlation token as `instance`; `ArgusProblemDetails.TryRead(response, out ...)` parses it on the client. The router and pipe host still emit their built-in errors as plain text.
 
 ### Routing
 
