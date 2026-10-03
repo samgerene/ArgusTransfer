@@ -169,7 +169,8 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
-        /// Resolves the <see cref="IArgusContentEncoding"/> named by a message's <c>Content-Encoding</c> header
+        /// Resolves the <see cref="IArgusContentEncoding"/> named by the <c>Content-Encoding</c> header of a message that is
+        /// about to be written. An unsupported encoding is a programming or configuration error of the sender.
         /// </summary>
         /// <param name="message">
         /// The <see cref="ArgusMessage"/> to inspect
@@ -185,15 +186,61 @@ namespace ArgusTransfer.Serialization
         /// </exception>
         public static IArgusContentEncoding ResolveContentEncoding(ArgusMessage message, IEnumerable<IArgusContentEncoding> encodings)
         {
+            return TryResolveContentEncoding(message, encodings, out var encoding)
+                ? encoding
+                : throw new InvalidOperationException(UnsupportedContentEncodingMessage(message));
+        }
+
+        /// <summary>
+        /// Resolves the <see cref="IArgusContentEncoding"/> named by the <c>Content-Encoding</c> header of a received message.
+        /// An unsupported encoding is a protocol violation by the peer.
+        /// </summary>
+        /// <param name="message">
+        /// The received <see cref="ArgusMessage"/>
+        /// </param>
+        /// <param name="encodings">
+        /// The supported encodings
+        /// </param>
+        /// <returns>
+        /// The encoding, or <c>null</c> when the header is absent or <c>identity</c>
+        /// </returns>
+        /// <exception cref="ArgusProtocolException">
+        /// Thrown when the header names an unsupported encoding or more than one encoding
+        /// </exception>
+        public static IArgusContentEncoding ResolveReceivedContentEncoding(ArgusMessage message, IEnumerable<IArgusContentEncoding> encodings)
+        {
+            return TryResolveContentEncoding(message, encodings, out var encoding)
+                ? encoding
+                : throw new ArgusProtocolException(UnsupportedContentEncodingMessage(message));
+        }
+
+        /// <summary>
+        /// Attempts to resolve the <see cref="IArgusContentEncoding"/> named by a message's <c>Content-Encoding</c> header
+        /// </summary>
+        /// <param name="message">
+        /// The <see cref="ArgusMessage"/> to inspect
+        /// </param>
+        /// <param name="encodings">
+        /// The supported encodings
+        /// </param>
+        /// <param name="encoding">
+        /// When this method returns <c>true</c>, the encoding, or <c>null</c> when the header is absent or <c>identity</c>
+        /// </param>
+        /// <returns>
+        /// <c>false</c> when the header names an unsupported encoding or more than one encoding; otherwise <c>true</c>
+        /// </returns>
+        public static bool TryResolveContentEncoding(ArgusMessage message, IEnumerable<IArgusContentEncoding> encodings, out IArgusContentEncoding encoding)
+        {
+            encoding = null;
+
             if (!HasContentEncoding(message))
             {
-                return null;
+                return true;
             }
 
-            var name = message.Headers[ArgusHeaderNames.ContentEncoding].Trim();
+            encoding = Find(encodings, message.Headers[ArgusHeaderNames.ContentEncoding].Trim());
 
-            return Find(encodings, name)
-                ?? throw new InvalidOperationException($"Unsupported Content-Encoding '{name}'.");
+            return encoding != null;
         }
 
         /// <summary>
@@ -263,7 +310,7 @@ namespace ArgusTransfer.Serialization
         /// <returns>
         /// A <see cref="MemoryStream"/> with the decompressed data, positioned at the beginning
         /// </returns>
-        /// <exception cref="InvalidOperationException">
+        /// <exception cref="ArgusProtocolException">
         /// Thrown when the decompressed data exceeds <paramref name="maxBodySize"/> or is not valid for the encoding
         /// </exception>
         public static async Task<MemoryStream> DecompressAsync(IArgusContentEncoding encoding, Stream source, long maxBodySize, CancellationToken cancellationToken)
@@ -283,7 +330,7 @@ namespace ArgusTransfer.Serialization
 
                     if (maxBodySize > 0 && totalBytes > maxBodySize)
                     {
-                        throw new InvalidOperationException(
+                        throw new ArgusProtocolException(
                             $"Decompressed body size exceeds the maximum allowed size of {maxBodySize} bytes.");
                     }
 
@@ -293,9 +340,9 @@ namespace ArgusTransfer.Serialization
             catch (InvalidDataException ex)
             {
                 await result.DisposeAsync();
-                throw new InvalidOperationException($"The body could not be decoded with Content-Encoding '{encoding.Name}'.", ex);
+                throw new ArgusProtocolException($"The body could not be decoded with Content-Encoding '{encoding.Name}'.", ex);
             }
-            catch (InvalidOperationException)
+            catch (ArgusProtocolException)
             {
                 await result.DisposeAsync();
                 throw;
@@ -303,6 +350,20 @@ namespace ArgusTransfer.Serialization
 
             result.Position = 0;
             return result;
+        }
+
+        /// <summary>
+        /// Builds the error message for an unsupported <c>Content-Encoding</c>
+        /// </summary>
+        /// <param name="message">
+        /// The <see cref="ArgusMessage"/> with the unsupported encoding
+        /// </param>
+        /// <returns>
+        /// The error message
+        /// </returns>
+        private static string UnsupportedContentEncodingMessage(ArgusMessage message)
+        {
+            return $"Unsupported Content-Encoding '{message.Headers[ArgusHeaderNames.ContentEncoding].Trim()}'.";
         }
 
         /// <summary>

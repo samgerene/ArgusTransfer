@@ -24,6 +24,8 @@ namespace ArgusTransfer.Tests.Serialization
     using System.IO;
     using System.Text;
 
+    using ArgusTransfer.Protocol;
+
     using ArgusTransfer.Serialization;
 
     using NUnit.Framework;
@@ -90,7 +92,7 @@ namespace ArgusTransfer.Tests.Serialization
 
             Assert.That(
                 () => ArgusChunkedEncoding.ReadChunked(reader, maxBodySize: 10),
-                Throws.TypeOf<InvalidOperationException>()
+                Throws.TypeOf<ArgusProtocolException>()
                     .With.Message.Contains("maximum allowed size"));
         }
 

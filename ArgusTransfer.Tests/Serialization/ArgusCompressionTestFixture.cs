@@ -224,17 +224,17 @@ namespace ArgusTransfer.Tests.Serialization
 
             await Assert.ThatAsync(
                 async () => await ArgusCompression.DecompressAsync(encoding, new MemoryStream(compressed), 1_000, CancellationToken.None),
-                Throws.TypeOf<InvalidOperationException>().With.Message.Contains("maximum allowed size"));
+                Throws.TypeOf<ArgusProtocolException>().With.Message.Contains("maximum allowed size"));
         }
 
         [Test]
-        public async Task Verify_that_DecompressAsync_reports_corrupt_data_as_InvalidOperationException()
+        public async Task Verify_that_DecompressAsync_reports_corrupt_data_as_ArgusProtocolException()
         {
             var corrupt = new MemoryStream(Encoding.ASCII.GetBytes("definitely not gzip"));
 
             await Assert.ThatAsync(
                 async () => await ArgusCompression.DecompressAsync(new GZipArgusContentEncoding(), corrupt, 0, CancellationToken.None),
-                Throws.TypeOf<InvalidOperationException>().With.InnerException.TypeOf<InvalidDataException>());
+                Throws.TypeOf<ArgusProtocolException>().With.InnerException.TypeOf<InvalidDataException>());
         }
     }
 }

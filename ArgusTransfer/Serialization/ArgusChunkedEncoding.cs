@@ -27,6 +27,8 @@ namespace ArgusTransfer.Serialization
     using System.Threading;
     using System.Threading.Tasks;
 
+    using ArgusTransfer.Protocol;
+
     /// <summary>
     /// Provides methods for reading and writing HTTP/1.1-style chunked transfer encoding
     /// used by the ARGUS/1.0 protocol for streaming message bodies
@@ -111,7 +113,7 @@ namespace ArgusTransfer.Serialization
         /// <exception cref="FormatException">
         /// Thrown when a chunk-size line is invalid or chunk data is not followed by a line terminator
         /// </exception>
-        /// <exception cref="InvalidOperationException">
+        /// <exception cref="ArgusProtocolException">
         /// Thrown when the body exceeds <paramref name="maxBodySize"/>
         /// </exception>
         /// <exception cref="EndOfStreamException">
@@ -402,7 +404,7 @@ namespace ArgusTransfer.Serialization
         /// <returns>
         /// The body size including the next chunk
         /// </returns>
-        /// <exception cref="InvalidOperationException">
+        /// <exception cref="ArgusProtocolException">
         /// Thrown when the body size exceeds <paramref name="maxBodySize"/>
         /// </exception>
         private static long AddChunkToTotal(long totalBytesRead, int chunkSize, long maxBodySize)
@@ -411,7 +413,7 @@ namespace ArgusTransfer.Serialization
 
             if (maxBodySize > 0 && totalBytesRead > maxBodySize)
             {
-                throw new InvalidOperationException(
+                throw new ArgusProtocolException(
                     $"Chunked body size exceeds the maximum allowed size of {maxBodySize} bytes.");
             }
 

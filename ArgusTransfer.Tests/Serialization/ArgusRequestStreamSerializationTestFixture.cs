@@ -188,7 +188,7 @@ namespace ArgusTransfer.Tests.Serialization
 
             Assert.That(
                 () => this.serializer.Read(text, maxBodySize: 5),
-                Throws.TypeOf<InvalidOperationException>()
+                Throws.TypeOf<ArgusProtocolException>()
                     .With.Message.Contains("maximum allowed size"));
         }
 
@@ -354,7 +354,7 @@ namespace ArgusTransfer.Tests.Serialization
 
             Assert.That(
                 async () => await this.serializer.ReadAsync(stream, CancellationToken.None, maxBodySize: 10),
-                Throws.TypeOf<InvalidOperationException>().With.Message.Contains("maximum allowed size"));
+                Throws.TypeOf<ArgusProtocolException>().With.Message.Contains("maximum allowed size"));
         }
 
         [Test]
@@ -368,7 +368,7 @@ namespace ArgusTransfer.Tests.Serialization
 
             Assert.That(
                 async () => await this.serializer.ReadAsync(stream, CancellationToken.None, maxBodySize: 10),
-                Throws.TypeOf<InvalidOperationException>().With.Message.Contains("maximum allowed size"));
+                Throws.TypeOf<ArgusProtocolException>().With.Message.Contains("maximum allowed size"));
         }
 
         [Test]
