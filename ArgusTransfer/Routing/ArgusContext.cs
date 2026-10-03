@@ -22,6 +22,7 @@ namespace ArgusTransfer.Routing
 {
     using System;
     using System.Collections.Generic;
+    using System.Security.Claims;
     using System.Threading;
 
     using ArgusTransfer.Protocol;
@@ -95,6 +96,12 @@ namespace ArgusTransfer.Routing
         /// Gets or sets the <see cref="IServiceProvider"/> for resolving request-scoped services
         /// </summary>
         public IServiceProvider RequestServices { get; set; }
+
+        /// <summary>
+        /// Gets or sets the authenticated caller. Set by <c>ArgusAuthenticationMiddleware</c> when the authentication handler
+        /// succeeds; <c>null</c> for anonymous requests or when no authentication is registered.
+        /// </summary>
+        public ClaimsPrincipal User { get; set; }
 
         /// <summary>
         /// Sets <see cref="Response"/> to an error response carrying an <see cref="ArgusProblemDetails"/> body

@@ -22,6 +22,7 @@ namespace ArgusTransfer.Extensions
 {
     using System;
 
+    using ArgusTransfer.Authentication;
     using ArgusTransfer.Middleware;
     using ArgusTransfer.Routing;
 
@@ -63,6 +64,45 @@ namespace ArgusTransfer.Extensions
             services.TryAddSingleton(sp => new ArgusExceptionHandlerMiddleware(
                 sp.GetService<ILogger<ArgusExceptionHandlerMiddleware>>() ?? NullLogger<ArgusExceptionHandlerMiddleware>.Instance,
                 sp.GetRequiredService<IOptions<ArgusExceptionHandlerOptions>>()));
+
+            return services;
+        }
+
+        /// <summary>
+        /// Registers <typeparamref name="THandler"/> as the singleton <see cref="IArgusAuthenticationHandler"/> and
+        /// <see cref="ArgusAuthenticationMiddleware"/> as a singleton, and optionally configures
+        /// <see cref="ArgusAuthenticationOptions"/>. The <see cref="ArgusRouter"/> created by
+        /// <see cref="ArgusModuleExtensions.AddArgusModules"/> registers the middleware as a global middleware directly after
+        /// the exception handler (when registered) and before any middleware added by modules, regardless of the order in which
+        /// the methods are called. When called more than once, the first registered handler is used.
+        /// </summary>
+        /// <typeparam name="THandler">
+        /// The <see cref="IArgusAuthenticationHandler"/> implementation; it must be thread-safe
+        /// </typeparam>
+        /// <param name="services">
+        /// The <see cref="IServiceCollection"/> to register services with
+        /// </param>
+        /// <param name="configure">
+        /// An optional <see cref="Action{ArgusAuthenticationOptions}"/> to configure the authentication options
+        /// </param>
+        /// <returns>
+        /// The <see cref="IServiceCollection"/> for method chaining
+        /// </returns>
+        public static IServiceCollection AddArgusAuthentication<THandler>(this IServiceCollection services, Action<ArgusAuthenticationOptions> configure = null)
+            where THandler : class, IArgusAuthenticationHandler
+        {
+            services.AddOptions();
+
+            if (configure != null)
+            {
+                services.Configure(configure);
+            }
+
+            services.TryAddSingleton<IArgusAuthenticationHandler, THandler>();
+            services.TryAddSingleton(sp => new ArgusAuthenticationMiddleware(
+                sp.GetRequiredService<IArgusAuthenticationHandler>(),
+                sp.GetService<ILogger<ArgusAuthenticationMiddleware>>() ?? NullLogger<ArgusAuthenticationMiddleware>.Instance,
+                sp.GetRequiredService<IOptions<ArgusAuthenticationOptions>>()));
 
             return services;
         }

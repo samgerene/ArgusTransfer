@@ -107,6 +107,35 @@ namespace ArgusTransfer.Tests.Extensions
         }
 
         [Test]
+        public void Verify_that_AddArgusAuthentication_registers_handler_middleware_and_options()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusAuthentication<ArgusTransfer.Tests.Middleware.BearerTokenTestHandler>(options => options.RequireAuthentication = false);
+
+            Assert.That(services.Single(d => d.ServiceType == typeof(ArgusTransfer.Authentication.IArgusAuthenticationHandler)).Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+            Assert.That(services.Single(d => d.ServiceType == typeof(ArgusAuthenticationMiddleware)).Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+
+            using var provider = services.BuildServiceProvider();
+
+            Assert.That(provider.GetRequiredService<ArgusTransfer.Authentication.IArgusAuthenticationHandler>(), Is.TypeOf<ArgusTransfer.Tests.Middleware.BearerTokenTestHandler>());
+            Assert.That(provider.GetRequiredService<ArgusAuthenticationMiddleware>(), Is.Not.Null);
+            Assert.That(provider.GetRequiredService<IOptions<ArgusTransfer.Authentication.ArgusAuthenticationOptions>>().Value.RequireAuthentication, Is.False);
+        }
+
+        [Test]
+        public void Verify_that_AddArgusAuthentication_called_twice_keeps_the_first_handler()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusAuthentication<ArgusTransfer.Tests.Middleware.BearerTokenTestHandler>();
+            services.AddArgusAuthentication<ArgusTransfer.Tests.Routing.ArgusModuleExtensionsTestFixture.ThrowingAuthenticationHandler>();
+
+            Assert.That(services.Count(d => d.ServiceType == typeof(ArgusTransfer.Authentication.IArgusAuthenticationHandler)), Is.EqualTo(1));
+            Assert.That(services.Count(d => d.ServiceType == typeof(ArgusAuthenticationMiddleware)), Is.EqualTo(1));
+        }
+
+        [Test]
         public void Verify_that_AddArgusExceptionHandler_registers_middleware_as_singleton()
         {
             var services = new ServiceCollection();
