@@ -45,18 +45,13 @@ namespace ArgusTransfer.Serialization
         private const int DefaultChunkSize = 8192;
 
         /// <summary>
-        /// The bytes of the line terminator
-        /// </summary>
-        private static readonly byte[] CrLf = { (byte)'\r', (byte)'\n' };
-
-        /// <summary>
         /// The bytes of the terminating zero-length chunk followed by the empty trailer line
         /// </summary>
         private static readonly byte[] LastChunk = Encoding.ASCII.GetBytes("0\r\n\r\n");
 
         /// <summary>
         /// Writes the contents of a <see cref="Stream"/> in chunked transfer encoding to another <see cref="Stream"/>,
-        /// copying the chunk data as raw bytes
+        /// copying the chunk data as raw bytes and optionally compressing it on the fly
         /// </summary>
         /// <param name="source">
         /// The <see cref="Stream"/> to read data from
@@ -64,8 +59,8 @@ namespace ArgusTransfer.Serialization
         /// <param name="destination">
         /// The <see cref="Stream"/> to write chunked data to
         /// </param>
-        /// <param name="chunkSize">
-        /// The maximum number of bytes per chunk
+        /// <param name="encoding">
+        /// The <see cref="IArgusContentEncoding"/> used to compress the data, or <c>null</c> to send it as is
         /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> used to signal cancellation
@@ -73,19 +68,25 @@ namespace ArgusTransfer.Serialization
         /// <returns>
         /// A <see cref="Task"/> representing the asynchronous operation
         /// </returns>
-        internal static async Task WriteChunkedAsync(Stream source, Stream destination, int chunkSize = DefaultChunkSize, CancellationToken cancellationToken = default)
+        internal static async Task WriteChunkedAsync(Stream source, Stream destination, IArgusContentEncoding encoding = null, CancellationToken cancellationToken = default)
         {
-            var buffer = new byte[chunkSize];
-            int bytesRead;
+            await using var chunked = new ArgusChunkedWriteStream(destination);
 
-            while ((bytesRead = await source.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
+            if (encoding == null)
             {
-                var sizeLine = Encoding.ASCII.GetBytes(bytesRead.ToString("x", CultureInfo.InvariantCulture) + "\r\n");
+                var buffer = new byte[DefaultChunkSize];
+                int bytesRead;
 
-                await destination.WriteAsync(sizeLine.AsMemory(), cancellationToken);
-                await destination.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
-                await destination.WriteAsync(CrLf.AsMemory(), cancellationToken);
-                await destination.FlushAsync(cancellationToken);
+                while ((bytesRead = await source.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
+                {
+                    await chunked.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                    await chunked.FlushAsync(cancellationToken);
+                }
+            }
+            else
+            {
+                await using var compressor = encoding.CreateCompressionStream(chunked);
+                await source.CopyToAsync(compressor, DefaultChunkSize, cancellationToken);
             }
 
             await destination.WriteAsync(LastChunk.AsMemory(), cancellationToken);

@@ -1233,6 +1233,21 @@ namespace ArgusTransfer.Tests.Client
         }
 
         [Test]
+        public void Verify_that_Compression_is_disabled_by_default_and_null_restores_defaults()
+        {
+            using var client = new ArgusClient("argus-test");
+
+            Assert.That(client.Compression, Is.Not.Null);
+            Assert.That(client.Compression.Enabled, Is.False);
+
+            client.Compression = new ArgusCompressionOptions { Enabled = true };
+            client.Compression = null;
+
+            Assert.That(client.Compression, Is.Not.Null);
+            Assert.That(client.Compression.Enabled, Is.False);
+        }
+
+        [Test]
         public void Verify_that_RetryPolicy_is_null_by_default()
         {
             using var client = new ArgusClient("argus-test");

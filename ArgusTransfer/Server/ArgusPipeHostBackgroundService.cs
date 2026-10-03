@@ -72,6 +72,11 @@ namespace ArgusTransfer.Server
         private readonly ArgusResponseSerializer responseSerializer;
 
         /// <summary>
+        /// The <see cref="ArgusCompressionOptions"/> in effect, taken from <see cref="ArgusPipeHostOptions.Compression"/>
+        /// </summary>
+        private ArgusCompressionOptions compression;
+
+        /// <summary>
         /// The <see cref="IArgusBodySerializerRegistry"/> used to resolve serializers by content type
         /// </summary>
         private readonly IArgusBodySerializerRegistry bodySerializerRegistry;
@@ -127,6 +132,7 @@ namespace ArgusTransfer.Server
             this.options = options.Value;
             this.requestSerializer = new ArgusRequestSerializer(bodySerializer);
             this.responseSerializer = new ArgusResponseSerializer(bodySerializer);
+            this.UseCompressionEncodings();
         }
 
         /// <summary>
@@ -157,6 +163,7 @@ namespace ArgusTransfer.Server
             this.bodySerializerRegistry = bodySerializerRegistry;
             this.requestSerializer = new ArgusRequestSerializer(bodySerializerRegistry);
             this.responseSerializer = new ArgusResponseSerializer(bodySerializerRegistry);
+            this.UseCompressionEncodings();
         }
 
         /// <summary>
@@ -284,6 +291,8 @@ namespace ArgusTransfer.Server
                         {
                             context.Response = this.CreateUnhandledExceptionResponse(request, ex);
                         }
+
+                        ArgusCompression.ApplyToResponse(request, context.Response, this.compression);
 
                         if (!string.IsNullOrEmpty(request.Accept))
                         {
@@ -415,6 +424,17 @@ namespace ArgusTransfer.Server
             }
 
             return context.Response;
+        }
+
+        /// <summary>
+        /// Takes the compression options from <see cref="ArgusPipeHostOptions.Compression"/> (or the defaults when it is
+        /// <c>null</c>) and points both serializers at their encodings, so compressed requests are decoded
+        /// </summary>
+        private void UseCompressionEncodings()
+        {
+            this.compression = this.options.Compression ?? new ArgusCompressionOptions();
+            this.requestSerializer.ContentEncodings = this.compression.Encodings;
+            this.responseSerializer.ContentEncodings = this.compression.Encodings;
         }
 
         /// <summary>

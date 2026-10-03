@@ -77,9 +77,7 @@ namespace ArgusTransfer.Extensions
         {
             services.AddTransient<IArgusClient>(sp =>
             {
-                var registry = sp.GetService<IArgusBodySerializerRegistry>();
-
-                var client = registry != null ? new ArgusClient(pipeName, registry) : new ArgusClient(pipeName);
+                var client = CreateClient(sp, pipeName);
 
                 if (defaultTimeout.HasValue)
                 {
@@ -93,7 +91,36 @@ namespace ArgusTransfer.Extensions
                     client.RetryPolicy = retryPolicy;
                 }
 
-                client.Logger = sp.GetService<ILogger<ArgusClient>>();
+                return client;
+            });
+
+            return services;
+        }
+
+        /// <summary>
+        /// Registers <see cref="IArgusClient"/> with a transient <see cref="ArgusClient"/> implementation and lets the caller
+        /// configure each client instance, for example its <see cref="ArgusClient.DefaultTimeout"/>,
+        /// <see cref="ArgusClient.RetryPolicy"/> or <see cref="ArgusClient.Compression"/>. The client receives an
+        /// <see cref="ILogger{ArgusClient}"/> when logging is registered.
+        /// </summary>
+        /// <param name="services">
+        /// The <see cref="IServiceCollection"/> to register services with
+        /// </param>
+        /// <param name="pipeName">
+        /// The name of the named pipe to connect to
+        /// </param>
+        /// <param name="configure">
+        /// An <see cref="Action{ArgusClient}"/> invoked for every created client; may be <c>null</c>
+        /// </param>
+        /// <returns>
+        /// The <see cref="IServiceCollection"/> for method chaining
+        /// </returns>
+        public static IServiceCollection AddArgusClient(this IServiceCollection services, string pipeName, Action<ArgusClient> configure)
+        {
+            services.AddTransient<IArgusClient>(sp =>
+            {
+                var client = CreateClient(sp, pipeName);
+                configure?.Invoke(client);
 
                 return client;
             });
@@ -136,6 +163,29 @@ namespace ArgusTransfer.Extensions
             });
 
             return services;
+        }
+
+        /// <summary>
+        /// Creates an <see cref="ArgusClient"/> that uses the registered <see cref="IArgusBodySerializerRegistry"/> and
+        /// <see cref="ILogger{ArgusClient}"/> when available
+        /// </summary>
+        /// <param name="serviceProvider">
+        /// The <see cref="IServiceProvider"/> to resolve services from
+        /// </param>
+        /// <param name="pipeName">
+        /// The name of the named pipe to connect to
+        /// </param>
+        /// <returns>
+        /// The created <see cref="ArgusClient"/>
+        /// </returns>
+        private static ArgusClient CreateClient(IServiceProvider serviceProvider, string pipeName)
+        {
+            var registry = serviceProvider.GetService<IArgusBodySerializerRegistry>();
+            var client = registry != null ? new ArgusClient(pipeName, registry) : new ArgusClient(pipeName);
+
+            client.Logger = serviceProvider.GetService<ILogger<ArgusClient>>();
+
+            return client;
         }
     }
 }

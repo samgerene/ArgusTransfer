@@ -941,5 +941,132 @@ namespace ArgusTransfer.Transport.Tests.Server
             await hostService.StopAsync(CancellationToken.None);
             cts.Dispose();
         }
+
+        private static readonly string CompressibleText = string.Concat(System.Linq.Enumerable.Repeat("compress me, compress me ", 400));
+
+        private static ArgusRouter CreateEchoRouter(Action<ArgusRequest> inspect = null)
+        {
+            var router = new ArgusRouter();
+            router.MapPost("/echo", context =>
+            {
+                inspect?.Invoke(context.Request);
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = context.Request.Body };
+                return Task.CompletedTask;
+            });
+
+            return router;
+        }
+
+        [Test]
+        public async Task Verify_that_compressed_request_and_response_round_trip_over_the_pipe()
+        {
+            var pipeName = $"argus-gzip-test-{Guid.NewGuid():N}";
+            ArgusRequest receivedRequest = null;
+
+            var options = new ArgusPipeHostOptions { PipeName = pipeName };
+            options.Compression.Enabled = true;
+
+            var (hostService, cts) = await this.StartHostAsync(CreateEchoRouter(r => receivedRequest = r), options);
+
+            using var client = new ArgusClient(pipeName);
+            client.Compression.Enabled = true;
+
+            var response = await client.PostAsync("/echo", CompressibleText, timeout: TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Is.EqualTo(CompressibleText));
+            Assert.That(response.Headers.ContainsKey(ArgusHeaderNames.ContentEncoding), Is.False, "decoded responses drop the header");
+            Assert.That(receivedRequest.Body, Is.EqualTo(CompressibleText));
+            Assert.That(receivedRequest.Headers.ContainsKey(ArgusHeaderNames.ContentEncoding), Is.False, "decoded requests drop the header");
+            Assert.That(receivedRequest.Headers[ArgusHeaderNames.AcceptEncoding], Is.EqualTo("gzip"));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_host_compresses_response_on_the_wire_only_when_accepted()
+        {
+            var pipeName = $"argus-gzip-wire-test-{Guid.NewGuid():N}";
+            var options = new ArgusPipeHostOptions { PipeName = pipeName };
+            options.Compression.Enabled = true;
+
+            var (hostService, cts) = await this.StartHostAsync(CreateEchoRouter(), options);
+
+            async Task<(string Head, ArgusResponse Response)> SendRawAsync(string acceptEncoding)
+            {
+                var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/echo", Body = CompressibleText };
+
+                if (acceptEncoding != null)
+                {
+                    request.Headers[ArgusHeaderNames.AcceptEncoding] = acceptEncoding;
+                }
+
+                using var pipe = new System.IO.Pipes.NamedPipeClientStream(".", pipeName, System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+                await pipe.ConnectAsync(5000);
+                await new ArgusRequestSerializer().WriteAsync(pipe, request);
+
+                using var raw = new System.IO.MemoryStream();
+                await pipe.CopyToAsync(raw);
+
+                var bytes = raw.ToArray();
+                var text = System.Text.Encoding.Latin1.GetString(bytes);
+                var head = text.Substring(0, text.IndexOf("\r\n\r\n", StringComparison.Ordinal));
+
+                raw.Position = 0;
+                return (head, await new ArgusResponseSerializer().ReadAsync(raw, CancellationToken.None));
+            }
+
+            var (acceptedHead, acceptedResponse) = await SendRawAsync("gzip");
+            var (plainHead, plainResponse) = await SendRawAsync(null);
+
+            Assert.That(acceptedHead, Does.Contain("Content-Encoding: gzip"));
+            Assert.That(acceptedResponse.Body, Is.EqualTo(CompressibleText));
+            Assert.That(plainHead, Does.Not.Contain("Content-Encoding"));
+            Assert.That(plainResponse.Body, Is.EqualTo(CompressibleText));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_host_decodes_compressed_request_when_its_own_compression_is_disabled()
+        {
+            var pipeName = $"argus-gzip-decode-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(CreateEchoRouter(), new ArgusPipeHostOptions { PipeName = pipeName });
+
+            using var client = new ArgusClient(pipeName);
+            client.Compression.Enabled = true;
+
+            var response = await client.PostAsync("/echo", CompressibleText, timeout: TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Is.EqualTo(CompressibleText));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_host_rejects_request_whose_decompressed_size_exceeds_the_limit()
+        {
+            var pipeName = $"argus-gzip-bomb-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(CreateEchoRouter(), new ArgusPipeHostOptions { PipeName = pipeName, MaxRequestBodySize = 10_000 });
+
+            using var client = new ArgusClient(pipeName);
+            client.Compression.Enabled = true;
+
+            var response = await client.PostAsync("/echo", new string('a', 200_000), timeout: TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
+            Assert.That(response.Body, Does.Contain("Decompressed body size"));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
     }
 }

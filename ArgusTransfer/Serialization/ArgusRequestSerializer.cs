@@ -21,6 +21,7 @@
 namespace ArgusTransfer.Serialization
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using System.Text;
     using System.Threading;
@@ -42,6 +43,11 @@ namespace ArgusTransfer.Serialization
         /// The <see cref="IArgusBodySerializerRegistry"/> used to resolve serializers by content type
         /// </summary>
         private readonly IArgusBodySerializerRegistry bodySerializerRegistry;
+
+        /// <summary>
+        /// Backing field for <see cref="ContentEncodings"/>
+        /// </summary>
+        private IList<IArgusContentEncoding> contentEncodings = new List<IArgusContentEncoding> { new GZipArgusContentEncoding() };
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ArgusRequestSerializer"/> class
@@ -76,6 +82,24 @@ namespace ArgusTransfer.Serialization
             this.bodySerializerRegistry = bodySerializerRegistry;
         }
 
+        /// <summary>
+        /// Gets or sets the content encodings used by the <see cref="Stream"/> overloads: a body whose <c>Content-Encoding</c>
+        /// header names one of them is compressed when written and decompressed when read (the header is then removed).
+        /// Contains a <see cref="GZipArgusContentEncoding"/> by default. The text-based overloads do not support content
+        /// encodings and throw <see cref="InvalidOperationException"/> for a message with a <c>Content-Encoding</c>.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when the value is <c>null</c>
+        /// </exception>
+        public IList<IArgusContentEncoding> ContentEncodings
+        {
+            get => this.contentEncodings;
+            set
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                this.contentEncodings = value;
+            }
+        }
         /// <summary>
         /// Serializes an <see cref="ArgusRequest"/> to its text wire format representation
         /// </summary>
@@ -161,7 +185,9 @@ namespace ArgusTransfer.Serialization
             ArgumentNullException.ThrowIfNull(stream);
             ArgumentNullException.ThrowIfNull(request);
 
-            return ArgusWireFormat.WriteAsync(stream, request, () => this.Write(request), () => BuildStreamedHead(request), cancellationToken);
+            var serializer = this.ResolveSerializer(ArgusWireFormat.GetContentType(request));
+
+            return ArgusWireFormat.WriteAsync(stream, request, sb => AppendRequestLine(sb, request), serializer, this.contentEncodings, cancellationToken);
         }
 
         /// <summary>
@@ -258,27 +284,6 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
-        /// Builds the request line and headers of a request with a streamed body, including the
-        /// <c>Transfer-Encoding: chunked</c> header and the empty line that ends the header block
-        /// </summary>
-        /// <param name="request">
-        /// The <see cref="ArgusRequest"/> with a streamed body
-        /// </param>
-        /// <returns>
-        /// The header block in ARGUS/1.0 wire format
-        /// </returns>
-        private static string BuildStreamedHead(ArgusRequest request)
-        {
-            var sb = new StringBuilder();
-
-            AppendRequestLine(sb, request);
-            ArgusWireFormat.AppendStandardHeaders(sb, request);
-            ArgusWireFormat.AppendStreamedHeaderTail(sb, request);
-
-            return sb.ToString();
-        }
-
-        /// <summary>
         /// Parses the request line (e.g. "POST /healthendpoint ARGUS/1.0") into an <see cref="ArgusRequest"/>
         /// </summary>
         /// <param name="requestLine">
@@ -348,7 +353,7 @@ namespace ArgusTransfer.Serialization
         private async Task<ArgusRequest> ReadCoreAsync(IArgusMessageSource source, long maxBodySize, CancellationToken cancellationToken)
         {
             var request = ParseRequestLine(await source.ReadLineAsync(cancellationToken));
-            await ArgusWireFormat.ReadHeadersAndBodyAsync(source, request, maxBodySize, this.ResolveSerializer, cancellationToken);
+            await ArgusWireFormat.ReadHeadersAndBodyAsync(source, request, maxBodySize, this.ResolveSerializer, this.contentEncodings, cancellationToken);
 
             return request;
         }

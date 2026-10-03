@@ -164,10 +164,30 @@ namespace ArgusTransfer.Serialization
         /// </exception>
         public async Task<string> ReadBodyAsync(int byteCount, CancellationToken cancellationToken)
         {
-            var bodyBytes = new byte[byteCount];
-            await this.ReadExactlyAsync(bodyBytes.AsMemory(), cancellationToken);
+            return Encoding.UTF8.GetString(await this.ReadBytesAsync(byteCount, cancellationToken));
+        }
 
-            return Encoding.UTF8.GetString(bodyBytes);
+        /// <summary>
+        /// Reads exactly <paramref name="byteCount"/> bytes
+        /// </summary>
+        /// <param name="byteCount">
+        /// The number of bytes to read
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// The bytes read
+        /// </returns>
+        /// <exception cref="EndOfStreamException">
+        /// Thrown when the stream ends before <paramref name="byteCount"/> bytes were read
+        /// </exception>
+        public async Task<byte[]> ReadBytesAsync(int byteCount, CancellationToken cancellationToken)
+        {
+            var bytes = new byte[byteCount];
+            await this.ReadExactlyAsync(bytes.AsMemory(), cancellationToken);
+
+            return bytes;
         }
 
         /// <summary>
