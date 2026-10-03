@@ -25,7 +25,7 @@ namespace ArgusTransfer.Tests.Routing
     using ArgusTransfer.Routing;
 
     using NUnit.Framework;
-    
+
     /// <summary>
     /// Suite of tests for the <see cref="ArgusRouteTemplateParser"/> class
     /// </summary>

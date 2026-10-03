@@ -83,7 +83,7 @@ namespace ArgusTransfer.Sample
                 {
                     context.Response = new ArgusResponse
                     {
-    
+
                         StatusCode = ArgusStatusCode.Ok,
                         Body = JsonSerializer.Serialize(item, SerializerOptions)
                     };
@@ -124,7 +124,7 @@ namespace ArgusTransfer.Sample
                 {
                     context.Response = new ArgusResponse
                     {
-    
+
                         StatusCode = ArgusStatusCode.NotFound
                     };
 
@@ -153,7 +153,7 @@ namespace ArgusTransfer.Sample
                 {
                     context.Response = new ArgusResponse
                     {
-    
+
                         StatusCode = ArgusStatusCode.Ok,
                         Body = JsonSerializer.Serialize(item, SerializerOptions)
                     };

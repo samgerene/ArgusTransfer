@@ -227,7 +227,7 @@ namespace ArgusTransfer.Tests.Client
         }
 
         [Test]
-        public void Verify_that_SendAsync_throws_TimeoutException_when_server_is_slow()
+        public async Task Verify_that_SendAsync_throws_TimeoutException_when_server_is_slow()
         {
             var pipeName = $"argus-timeout-test-{Guid.NewGuid():N}";
 
@@ -242,14 +242,14 @@ namespace ArgusTransfer.Tests.Client
             using var client = new ArgusClient(pipeName);
             var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/test" };
 
-            Assert.ThrowsAsync<TimeoutException>(async () =>
+            await Assert.ThrowsAsync<TimeoutException>(async () =>
             {
                 await client.SendAsync(request, timeout: TimeSpan.FromMilliseconds(200));
             });
         }
 
         [Test]
-        public void Verify_that_per_request_timeout_overrides_default()
+        public async Task Verify_that_per_request_timeout_overrides_default()
         {
             var pipeName = $"argus-timeout-override-{Guid.NewGuid():N}";
 
@@ -266,7 +266,7 @@ namespace ArgusTransfer.Tests.Client
             var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/test" };
 
             // Short per-request timeout should override the long default
-            Assert.ThrowsAsync<TimeoutException>(async () =>
+            await Assert.ThrowsAsync<TimeoutException>(async () =>
             {
                 await client.SendAsync(request, timeout: TimeSpan.FromMilliseconds(200));
             });
@@ -735,7 +735,7 @@ namespace ArgusTransfer.Tests.Client
         }
 
         [Test]
-        public void Verify_that_GetEnsureSuccessAsync_throws_when_status_is_not_2xx()
+        public async Task Verify_that_GetEnsureSuccessAsync_throws_when_status_is_not_2xx()
         {
             var pipeName = $"argus-test-{Guid.NewGuid()}";
 
@@ -761,12 +761,12 @@ namespace ArgusTransfer.Tests.Client
 
             using var client = new ArgusClient(pipeName);
 
-            var exception = Assert.ThrowsAsync<ArgusRequestException>(async () =>
+            var exception = await Assert.ThrowsAsync<ArgusRequestException>(async () =>
             {
                 await client.GetEnsureSuccessAsync("/healthendpoint");
             });
 
-            serverTask.GetAwaiter().GetResult();
+            await serverTask;
 
             Assert.That(exception.StatusCode, Is.EqualTo(ArgusStatusCode.NotFound));
             Assert.That(exception.ReasonPhrase, Is.EqualTo(ArgusStatusCode.NotFound.ToReasonPhrase()));

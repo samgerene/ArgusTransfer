@@ -21,7 +21,7 @@
 namespace ArgusTransfer.Sample
 {
     using System.Diagnostics.CodeAnalysis;
-    
+
     using ArgusTransfer.Extensions;
     using ArgusTransfer.Routing;
 

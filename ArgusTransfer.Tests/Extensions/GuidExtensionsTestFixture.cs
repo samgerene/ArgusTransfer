@@ -24,7 +24,7 @@ namespace ArgusTransfer.Tests.Extensions
     using System.Linq;
 
     using ArgusTransfer.Extensions;
-    
+
     using NUnit.Framework;
 
     /// <summary>
