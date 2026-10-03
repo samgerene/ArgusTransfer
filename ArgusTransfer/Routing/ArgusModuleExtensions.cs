@@ -23,6 +23,8 @@ namespace ArgusTransfer.Routing
     using System.Linq;
     using System.Reflection;
 
+    using ArgusTransfer.Middleware;
+
     using Microsoft.Extensions.DependencyInjection;
 
     /// <summary>
@@ -33,7 +35,9 @@ namespace ArgusTransfer.Routing
         /// <summary>
         /// Scans the calling assembly for <see cref="IArgusModule"/> implementations,
         /// registers them as transient services, and registers <see cref="ArgusRouter"/>
-        /// as a singleton via a factory that resolves all modules and calls <see cref="IArgusModule.AddRoutes"/>
+        /// as a singleton via a factory that resolves all modules and calls <see cref="IArgusModule.AddRoutes"/>.
+        /// When an <see cref="ArgusExceptionHandlerMiddleware"/> is registered (see <c>AddArgusExceptionHandler()</c>),
+        /// it is added to the router as the outermost global middleware before the modules add their routes
         /// </summary>
         /// <param name="services">
         /// The <see cref="IServiceCollection"/> to register services with
@@ -56,6 +60,14 @@ namespace ArgusTransfer.Routing
             services.AddSingleton<ArgusRouter>(sp =>
             {
                 var router = new ArgusRouter();
+
+                var exceptionHandler = sp.GetService<ArgusExceptionHandlerMiddleware>();
+
+                if (exceptionHandler != null)
+                {
+                    router.UseMiddleware(exceptionHandler);
+                }
+
                 var modules = sp.GetServices<IArgusModule>();
 
                 foreach (var module in modules)
