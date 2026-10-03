@@ -239,9 +239,12 @@ namespace ArgusTransfer.Serialization
         /// <returns>
         /// A <see cref="Task"/> representing the asynchronous operation
         /// </returns>
+        /// <exception cref="ArgusProtocolException">
+        /// Thrown when the body exceeds <paramref name="maxBodySize"/>, or the <c>Content-Encoding</c> is unsupported or the
+        /// compressed body is invalid
+        /// </exception>
         /// <exception cref="InvalidOperationException">
-        /// Thrown when the body exceeds <paramref name="maxBodySize"/>, the <c>Content-Encoding</c> is unsupported or the
-        /// compressed body is invalid, or a compressed body is read from a text source
+        /// Thrown when a compressed body is read from a text source
         /// </exception>
         public static async Task ReadHeadersAndBodyAsync(IArgusMessageSource source, ArgusMessage message, long maxBodySize, Func<string, IArgusBodySerializer> resolveSerializer, IEnumerable<IArgusContentEncoding> encodings, CancellationToken cancellationToken)
         {
@@ -253,7 +256,7 @@ namespace ArgusTransfer.Serialization
                 contentLength = ParseHeader(line, message, contentLength);
             }
 
-            var encoding = ArgusCompression.ResolveContentEncoding(message, encodings);
+            var encoding = ArgusCompression.ResolveReceivedContentEncoding(message, encodings);
 
             if (encoding != null)
             {
@@ -495,14 +498,14 @@ namespace ArgusTransfer.Serialization
         /// <param name="maxBodySize">
         /// The maximum allowed body size in bytes. A value of 0 disables the limit.
         /// </param>
-        /// <exception cref="InvalidOperationException">
+        /// <exception cref="ArgusProtocolException">
         /// Thrown when <paramref name="contentLength"/> exceeds <paramref name="maxBodySize"/>
         /// </exception>
         private static void EnsureWithinLimit(int contentLength, long maxBodySize)
         {
             if (maxBodySize > 0 && contentLength > maxBodySize)
             {
-                throw new InvalidOperationException(
+                throw new ArgusProtocolException(
                     $"Request body size {contentLength} bytes exceeds the maximum allowed size of {maxBodySize} bytes.");
             }
         }

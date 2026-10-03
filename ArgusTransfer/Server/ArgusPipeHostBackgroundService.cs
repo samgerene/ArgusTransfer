@@ -294,6 +294,15 @@ namespace ArgusTransfer.Server
 
                         context.Response ??= this.CreateMissingResponse(request);
 
+                        if (!ArgusCompression.TryResolveContentEncoding(context.Response, this.compression.Encodings, out _))
+                        {
+                            // A handler set a Content-Encoding the host cannot produce: a server fault, reported before
+                            // anything is written so the client still receives a well-formed 500
+                            context.Response = this.CreateUnhandledExceptionResponse(
+                                request,
+                                new InvalidOperationException($"The response has an unsupported Content-Encoding '{context.Response.Headers[ArgusHeaderNames.ContentEncoding]}'."));
+                        }
+
                         ArgusCompression.ApplyToResponse(request, context.Response, this.compression);
 
                         if (!string.IsNullOrEmpty(request.Accept))
@@ -305,8 +314,10 @@ namespace ArgusTransfer.Server
                             await this.responseSerializer.WriteAsync(serverStream, context.Response, requestToken);
                         }
                     }
-                    catch (InvalidOperationException ex)
+                    catch (Exception ex) when (ex is ArgusProtocolException or FormatException)
                     {
+                        // Only violations by the request itself (limits, unsupported or corrupt Content-Encoding, a malformed
+                        // request) are answered with 400; their messages describe the client's own input
                         logger.LogWarning(ex, "Request rejected: {Message}", ex.Message);
 
                         try

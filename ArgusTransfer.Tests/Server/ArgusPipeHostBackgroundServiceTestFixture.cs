@@ -842,6 +842,55 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public async Task Verify_that_malformed_request_over_the_pipe_returns_BadRequest()
+        {
+            var pipeName = $"argus-malformed-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(new ArgusRouter(), new ArgusPipeHostOptions { PipeName = pipeName });
+
+            using var pipe = new System.IO.Pipes.NamedPipeClientStream(".", pipeName, System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+            await pipe.ConnectAsync(5000);
+
+            var malformed = System.Text.Encoding.ASCII.GetBytes("FETCH /items ARGUS/1.0\r\n\r\n");
+            await pipe.WriteAsync(malformed);
+
+            var response = await new ArgusResponseSerializer().ReadAsync(pipe, CancellationToken.None);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
+            Assert.That(response.Body, Does.Contain("Unknown verb"));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_response_with_unsupported_Content_Encoding_returns_InternalServerError_not_BadRequest()
+        {
+            var pipeName = $"argus-response-encoding-test-{Guid.NewGuid():N}";
+            var router = new ArgusRouter();
+            router.MapGet("/items", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = "data" };
+                context.Response.Headers[ArgusHeaderNames.ContentEncoding] = "br";
+                return Task.CompletedTask;
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(router, new ArgusPipeHostOptions { PipeName = pipeName });
+
+            using var client = new ArgusClient(pipeName);
+            var response = await client.GetAsync("/items", timeout: TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.InternalServerError));
+            Assert.That(ArgusProblemDetails.TryRead(response, out var problem), Is.True);
+            Assert.That(problem.Detail, Is.EqualTo(ArgusExceptionHandlerMiddleware.GenericErrorDetail));
+            Assert.That(response.Body, Does.Not.Contain("Unsupported"));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
         public async Task Verify_that_missing_response_over_the_pipe_returns_InternalServerError_and_is_not_retried()
         {
             var pipeName = $"argus-missing-response-test-{Guid.NewGuid():N}";

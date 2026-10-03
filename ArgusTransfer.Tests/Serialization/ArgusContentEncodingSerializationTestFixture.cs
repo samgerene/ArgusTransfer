@@ -161,7 +161,7 @@ namespace ArgusTransfer.Tests.Serialization
 
             Assert.That(
                 async () => await this.requestSerializer.ReadAsync(stream, CancellationToken.None),
-                Throws.TypeOf<InvalidOperationException>().With.Message.Contains("br"));
+                Throws.TypeOf<ArgusProtocolException>().With.Message.Contains("br"));
         }
 
         [Test]
@@ -178,7 +178,7 @@ namespace ArgusTransfer.Tests.Serialization
 
             Assert.That(
                 async () => await this.requestSerializer.ReadAsync(stream, CancellationToken.None, maxBodySize: 10_000),
-                Throws.TypeOf<InvalidOperationException>().With.Message.Contains("Decompressed body size"));
+                Throws.TypeOf<ArgusProtocolException>().With.Message.Contains("Decompressed body size"));
         }
 
         [Test]

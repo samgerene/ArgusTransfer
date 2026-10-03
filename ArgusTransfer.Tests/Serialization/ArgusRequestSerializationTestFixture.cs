@@ -365,7 +365,7 @@ namespace ArgusTransfer.Tests.Serialization
 
             Assert.That(
                 () => this.serializer.Read(text, maxBodySize: 100),
-                Throws.TypeOf<InvalidOperationException>()
+                Throws.TypeOf<ArgusProtocolException>()
                     .With.Message.Contains("exceeds the maximum allowed size"));
         }
 
