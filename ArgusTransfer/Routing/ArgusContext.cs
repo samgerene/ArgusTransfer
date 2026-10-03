@@ -95,5 +95,41 @@ namespace ArgusTransfer.Routing
         /// Gets or sets the <see cref="IServiceProvider"/> for resolving request-scoped services
         /// </summary>
         public IServiceProvider RequestServices { get; set; }
+
+        /// <summary>
+        /// Sets <see cref="Response"/> to an error response carrying an <see cref="ArgusProblemDetails"/> body
+        /// whose <see cref="ArgusProblemDetails.Instance"/> is the <see cref="CorrelationToken"/> of this request
+        /// </summary>
+        /// <param name="statusCode">
+        /// The <see cref="ArgusStatusCode"/> of the problem
+        /// </param>
+        /// <param name="detail">
+        /// A human-readable explanation specific to this occurrence of the problem
+        /// </param>
+        /// <param name="extensions">
+        /// Optional additional context to include as top-level members
+        /// </param>
+        /// <param name="title">
+        /// An optional title; defaults to the reason phrase of <paramref name="statusCode"/>
+        /// </param>
+        /// <param name="type">
+        /// An optional error category identifier; defaults to <see cref="ArgusProblemDetails.DefaultType"/>
+        /// </param>
+        /// <returns>
+        /// The <see cref="ArgusResponse"/> assigned to <see cref="Response"/>
+        /// </returns>
+        public ArgusResponse Problem(
+            ArgusStatusCode statusCode,
+            string detail = null,
+            IDictionary<string, object> extensions = null,
+            string title = null,
+            string type = null)
+        {
+            var problem = ArgusProblemDetails.Create(statusCode, detail, extensions, title, type, this.CorrelationToken.ToString());
+
+            this.Response = problem.ToResponse();
+
+            return this.Response;
+        }
     }
 }
