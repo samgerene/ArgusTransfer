@@ -791,6 +791,88 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public async Task Verify_that_HandleRequestAsync_returns_InternalServerError_when_handler_sets_no_response()
+        {
+            var router = new ArgusRouter();
+            router.MapGet("/forgetful", _ => Task.CompletedTask);
+
+            var hostService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                Options.Create(new ArgusPipeHostOptions()),
+                new PlainTextArgusBodySerializer());
+
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/forgetful" };
+
+            var response = await hostService.HandleRequestAsync(request);
+
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.InternalServerError));
+            Assert.That(response.CorrelationToken, Is.EqualTo(request.CorrelationToken));
+            Assert.That(ArgusProblemDetails.TryRead(response, out var problem), Is.True);
+            Assert.That(problem.Detail, Is.EqualTo(ArgusExceptionHandlerMiddleware.GenericErrorDetail));
+            Assert.That(problem.Instance, Is.EqualTo(request.CorrelationToken.ToString()));
+
+            this.mockLogger.Verify(
+                l => l.Log(
+                    LogLevel.Error,
+                    It.IsAny<EventId>(),
+                    It.IsAny<It.IsAnyType>(),
+                    null,
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Once);
+        }
+
+        [Test]
+        public async Task Verify_that_HandleRequestAsync_returns_InternalServerError_without_body_for_HEAD_without_response()
+        {
+            var router = new ArgusRouter();
+            router.MapHead("/forgetful", _ => Task.CompletedTask);
+
+            var hostService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                Options.Create(new ArgusPipeHostOptions()),
+                new PlainTextArgusBodySerializer());
+
+            var response = await hostService.HandleRequestAsync(new ArgusRequest { Verb = ArgusVerb.HEAD, Route = "/forgetful" });
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.InternalServerError));
+            Assert.That(response.Body, Is.Null);
+        }
+
+        [Test]
+        public async Task Verify_that_missing_response_over_the_pipe_returns_InternalServerError_and_is_not_retried()
+        {
+            var pipeName = $"argus-missing-response-test-{Guid.NewGuid():N}";
+            var invocationCount = 0;
+
+            var router = new ArgusRouter();
+            router.MapGet("/forgetful", _ =>
+            {
+                Interlocked.Increment(ref invocationCount);
+                return Task.CompletedTask;
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(router, new ArgusPipeHostOptions { PipeName = pipeName });
+
+            using var client = new ArgusClient(pipeName)
+            {
+                RetryPolicy = new ArgusRetryPolicy { InitialDelay = TimeSpan.FromMilliseconds(10) }
+            };
+
+            var response = await client.GetAsync("/forgetful", timeout: TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.InternalServerError));
+            Assert.That(ArgusProblemDetails.TryRead(response, out _), Is.True);
+            Assert.That(invocationCount, Is.EqualTo(1));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
         public async Task Verify_that_HandleRequestAsync_returns_InternalServerError_without_body_for_HEAD()
         {
             var router = new ArgusRouter();

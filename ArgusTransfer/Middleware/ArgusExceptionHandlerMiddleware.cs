@@ -119,7 +119,7 @@ namespace ArgusTransfer.Middleware
         /// The correlation token of the failed request, used as the problem's instance and the response correlation token
         /// </param>
         /// <param name="exception">
-        /// The unhandled <see cref="Exception"/>
+        /// The unhandled <see cref="Exception"/>, or <c>null</c> when there is none (only the generic detail is used then)
         /// </param>
         /// <param name="includeExceptionDetails">
         /// Whether to include the exception message, type and stack trace in the response
@@ -132,7 +132,7 @@ namespace ArgusTransfer.Middleware
             Dictionary<string, object> extensions = null;
             var detail = GenericErrorDetail;
 
-            if (includeExceptionDetails)
+            if (includeExceptionDetails && exception != null)
             {
                 detail = exception.Message;
                 extensions = new Dictionary<string, object>

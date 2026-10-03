@@ -292,6 +292,8 @@ namespace ArgusTransfer.Server
                             context.Response = this.CreateUnhandledExceptionResponse(request, ex);
                         }
 
+                        context.Response ??= this.CreateMissingResponse(request);
+
                         ArgusCompression.ApplyToResponse(request, context.Response, this.compression);
 
                         if (!string.IsNullOrEmpty(request.Accept))
@@ -423,7 +425,7 @@ namespace ArgusTransfer.Server
                 return this.CreateUnhandledExceptionResponse(argusRequest, ex);
             }
 
-            return context.Response;
+            return context.Response ?? this.CreateMissingResponse(argusRequest);
         }
 
         /// <summary>
@@ -461,7 +463,44 @@ namespace ArgusTransfer.Server
                 request.Route,
                 request.CorrelationToken);
 
-            var response = ArgusExceptionHandlerMiddleware.CreateErrorResponse(request.CorrelationToken, exception, includeExceptionDetails: false);
+            return CreateInternalServerErrorResponse(request);
+        }
+
+        /// <summary>
+        /// Logs that the routing pipeline completed without setting <see cref="ArgusContext.Response"/> -- a handler or
+        /// middleware bug -- and creates a generic <see cref="ArgusStatusCode.InternalServerError"/> problem details
+        /// response, so the client receives a response instead of a closed connection (which a retrying client would resend)
+        /// </summary>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> that was being processed
+        /// </param>
+        /// <returns>
+        /// The 500 <see cref="ArgusResponse"/>
+        /// </returns>
+        private ArgusResponse CreateMissingResponse(ArgusRequest request)
+        {
+            this.logger.LogError(
+                "Processing {Verb} {Route} [{CorrelationToken}] completed without a response; the handler or a middleware did not set ArgusContext.Response. Returning 500.",
+                request.Verb,
+                request.Route,
+                request.CorrelationToken);
+
+            return CreateInternalServerErrorResponse(request);
+        }
+
+        /// <summary>
+        /// Creates the generic <see cref="ArgusStatusCode.InternalServerError"/> problem details response for a request,
+        /// without a body for <see cref="ArgusVerb.HEAD"/> requests
+        /// </summary>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> that was being processed
+        /// </param>
+        /// <returns>
+        /// The 500 <see cref="ArgusResponse"/>
+        /// </returns>
+        private static ArgusResponse CreateInternalServerErrorResponse(ArgusRequest request)
+        {
+            var response = ArgusExceptionHandlerMiddleware.CreateErrorResponse(request.CorrelationToken, null, includeExceptionDetails: false);
 
             if (request.Verb == ArgusVerb.HEAD)
             {
