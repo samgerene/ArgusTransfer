@@ -44,9 +44,10 @@ After making code changes, follow this verification sequence before considering 
 
 ```
 ArgusTransfer/
+├── Authentication/  – IArgusAuthenticationHandler, ArgusAuthenticationResult/Status/Options, endpoint extensions
 ├── Client/          – ArgusClient
 ├── Extensions/      – DI extension methods
-├── Middleware/      – Middleware implementations: ArgusLoggingMiddleware, ArgusExceptionHandlerMiddleware (+ options)
+├── Middleware/      – Middleware implementations: ArgusLoggingMiddleware, ArgusExceptionHandlerMiddleware (+ options), ArgusAuthenticationMiddleware
 ├── Protocol/        – ArgusMessage, ArgusRequest, ArgusResponse, ArgusVerb, ArgusStatusCode, ArgusHeaderNames, ArgusProblemDetails
 ├── Routing/         – ArgusRouter, route templates, modules
 ├── Serialization/   – Request/response serializers, body serializer registry, chunked encoding
@@ -93,6 +94,8 @@ Optional retry (`ArgusClient.RetryPolicy`, `null` = disabled) via `ArgusRetryPol
 
 Exception handling is layered: if routing throws (anything except `OperationCanceledException`, which maps to 503 on timeout), the host logs it and returns a generic 500 `ArgusProblemDetails` response (no exception details) instead of dropping the connection; dropping it would make clients with a retry policy re-execute the request. `ArgusExceptionHandlerMiddleware` customizes this inside the pipeline (`IncludeExceptionDetails` for development) and rethrows cancellation of `ArgusContext.RequestAborted` so timeouts still reach the host. Both build the response via the internal `ArgusExceptionHandlerMiddleware.CreateErrorResponse`.
 
+Authentication: `ArgusAuthenticationMiddleware` calls the singleton `IArgusAuthenticationHandler` for every routed request, sets `ArgusContext.User` (a `ClaimsPrincipal`) on success, and short-circuits endpoints that require authentication with a 401 (`NoResult`/`Failure`, or a `null` result) or 403 (`Forbidden`) problem-details response. Requirement = `ArgusAuthenticationOptions.RequireAuthentication` (default `true`), overridden per endpoint by the `"authorize"` metadata (`.RequireAuthentication()` / `.AllowAnonymous()`); an unparsable metadata value requires authentication. Global middleware order built by `AddArgusModules()`: exception handler → authentication → module middleware → endpoint middleware.
+
 ### DI Integration
 
 - `services.AddArgusModules()` — scans the calling assembly for `IArgusModule` implementations, registers them as transient, and registers `ArgusRouter` as a singleton that wires up all module routes.
@@ -102,6 +105,7 @@ Exception handling is layered: if routing throws (anything except `OperationCanc
 - `services.AddArgusClient(string pipeName, TimeSpan? defaultTimeout, Action<ArgusRetryPolicy> configureRetry)` — same, plus a configured `ArgusRetryPolicy` and `ILogger<ArgusClient>` when logging is registered (separate overload to keep the original signature binary compatible).
 - `services.AddArgusPlainTextProtocol()` — registers `PlainTextArgusBodySerializer`, the enumerable `IArgusBodySerializer`, and `IArgusBodySerializerRegistry`.
 - `services.AddArgusBodySerializer<T>()` — registers an additional `IArgusBodySerializer` implementation (deduplicated via `TryAddEnumerable`).
+- `services.AddArgusAuthentication<THandler>(Action<ArgusAuthenticationOptions>?)` — registers the handler (singleton, first registration wins) and `ArgusAuthenticationMiddleware`; the router adds it right after the exception handler.
 - `services.AddArgusExceptionHandler(Action<ArgusExceptionHandlerOptions>?)` — registers `ArgusExceptionHandlerMiddleware` as a singleton; the `ArgusRouter` factory in `AddArgusModules()` adds it as the outermost global middleware before modules run `AddRoutes`, independent of registration order.
 
 ## Git Conventions

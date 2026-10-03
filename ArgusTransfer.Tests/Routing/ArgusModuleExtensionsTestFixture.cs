@@ -112,6 +112,60 @@ namespace ArgusTransfer.Tests.Routing
         }
 
         [Test]
+        public async Task Verify_that_registered_authentication_runs_before_module_middleware()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusModules();
+            services.AddArgusAuthentication<ArgusTransfer.Tests.Middleware.BearerTokenTestHandler>();
+
+            using var provider = services.BuildServiceProvider();
+            var router = provider.GetRequiredService<ArgusRouter>();
+
+            // Without credentials the request is rejected before the throwing module middleware runs
+            var anonymous = new ArgusContext(new ArgusRequest { Verb = ArgusVerb.GET, Route = "/exception-handler-test" }, CancellationToken.None);
+            await router.RouteAsync(anonymous);
+
+            Assert.That(anonymous.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Unauthorized));
+
+            // With credentials the request passes authentication and reaches the module middleware
+            var authenticatedRequest = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/exception-handler-test" };
+            authenticatedRequest.SetAuthorization("Bearer", "secret");
+            var authenticated = new ArgusContext(authenticatedRequest, CancellationToken.None);
+
+            Assert.That(async () => await router.RouteAsync(authenticated), Throws.TypeOf<InvalidOperationException>());
+        }
+
+        [Test]
+        public async Task Verify_that_exception_handler_wraps_authentication()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusModules();
+            services.AddArgusAuthentication<ThrowingAuthenticationHandler>();
+            services.AddArgusExceptionHandler();
+
+            using var provider = services.BuildServiceProvider();
+            var router = provider.GetRequiredService<ArgusRouter>();
+
+            var context = new ArgusContext(new ArgusRequest { Verb = ArgusVerb.GET, Route = "/module-test" }, CancellationToken.None);
+            await router.RouteAsync(context);
+
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.InternalServerError));
+        }
+
+        /// <summary>
+        /// An authentication handler that always throws, used to verify middleware ordering
+        /// </summary>
+        public class ThrowingAuthenticationHandler : ArgusTransfer.Authentication.IArgusAuthenticationHandler
+        {
+            public Task<ArgusTransfer.Authentication.ArgusAuthenticationResult> AuthenticateAsync(ArgusContext context)
+            {
+                throw new InvalidOperationException("token store unavailable");
+            }
+        }
+
+        [Test]
         public void Verify_that_without_exception_handler_module_middleware_exception_propagates()
         {
             var services = new ServiceCollection();

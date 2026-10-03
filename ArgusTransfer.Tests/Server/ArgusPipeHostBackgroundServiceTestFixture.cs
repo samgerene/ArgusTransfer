@@ -25,6 +25,7 @@ namespace ArgusTransfer.Transport.Tests.Server
     using System.Threading;
     using System.Threading.Tasks;
 
+    using ArgusTransfer.Authentication;
     using ArgusTransfer.Client;
     using ArgusTransfer.Middleware;
 
@@ -955,6 +956,50 @@ namespace ArgusTransfer.Transport.Tests.Server
             });
 
             return router;
+        }
+
+        [Test]
+        public async Task Verify_that_authentication_middleware_protects_endpoints_over_the_pipe()
+        {
+            var pipeName = $"argus-authentication-test-{Guid.NewGuid():N}";
+            string authenticatedUser = null;
+
+            var router = new ArgusRouter();
+            router.UseMiddleware(new ArgusAuthenticationMiddleware(
+                new ArgusTransfer.Tests.Middleware.BearerTokenTestHandler(),
+                new Mock<ILogger<ArgusAuthenticationMiddleware>>().Object));
+            router.MapGet("/secure", context =>
+            {
+                authenticatedUser = context.User?.Identity?.Name;
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok };
+                return Task.CompletedTask;
+            });
+            router.MapGet("/health", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok };
+                return Task.CompletedTask;
+            }).AllowAnonymous();
+
+            var (hostService, cts) = await this.StartHostAsync(router, new ArgusPipeHostOptions { PipeName = pipeName });
+
+            using var client = new ArgusClient(pipeName);
+
+            var anonymous = await client.GetAsync("/secure", timeout: TimeSpan.FromSeconds(5));
+            var health = await client.GetAsync("/health", timeout: TimeSpan.FromSeconds(5));
+
+            var authenticatedRequest = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/secure" };
+            authenticatedRequest.SetAuthorization("Bearer", "secret");
+            var authenticated = await client.SendAsync(authenticatedRequest, TimeSpan.FromSeconds(5));
+
+            Assert.That(anonymous.StatusCode, Is.EqualTo(ArgusStatusCode.Unauthorized));
+            Assert.That(ArgusProblemDetails.TryRead(anonymous, out _), Is.True);
+            Assert.That(health.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(authenticated.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(authenticatedUser, Is.EqualTo("alice"));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
         }
 
         [Test]

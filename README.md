@@ -87,6 +87,54 @@ app.MapGet("/items", context =>
 
 The raw header value is available as `request.Authorization`. Values containing line breaks are rejected, so a value cannot inject additional headers. The header carries credentials, so do not log it.
 
+## Authentication
+
+`ArgusAuthenticationMiddleware` authenticates every request with a pluggable `IArgusAuthenticationHandler` and rejects requests to protected endpoints with `401 Unauthorized` or `403 Forbidden` problem details. Implement a handler, typically from the `Authorization` header:
+
+```csharp
+public class ApiKeyHandler : IArgusAuthenticationHandler
+{
+    public Task<ArgusAuthenticationResult> AuthenticateAsync(ArgusContext context)
+    {
+        var request = context.Request;
+
+        if (request.AuthorizationScheme == null)
+        {
+            return Task.FromResult(ArgusAuthenticationResult.NoResult());           // 401
+        }
+
+        if (!string.Equals(request.AuthorizationScheme, "ApiKey", StringComparison.OrdinalIgnoreCase)
+            || !IsValidKey(request.AuthorizationParameter))
+        {
+            return Task.FromResult(ArgusAuthenticationResult.Fail("Invalid API key")); // 401
+        }
+
+        var identity = new ClaimsIdentity(new[] { new Claim(ClaimTypes.Name, "reporting-service") }, "ApiKey");
+        return Task.FromResult(ArgusAuthenticationResult.Success(new ClaimsPrincipal(identity)));
+    }
+}
+```
+
+Register it; the router runs authentication right after the exception handler and before any module middleware:
+
+```csharp
+services.AddArgusModules();
+services.AddArgusAuthentication<ApiKeyHandler>();
+```
+
+All endpoints require an authenticated caller by default. Use `.AllowAnonymous()` to open an endpoint, or set `RequireAuthentication = false` and protect individual endpoints with `.RequireAuthentication()`:
+
+```csharp
+app.MapGet("/health", HealthHandler).AllowAnonymous();
+app.MapGet("/items", context =>
+{
+    var caller = context.User.Identity.Name;   // the authenticated ClaimsPrincipal
+    // ...
+});
+```
+
+Return `ArgusAuthenticationResult.Forbidden(...)` for callers whose credentials are valid but who may not access the endpoint (403). Handlers are singletons and must be thread-safe. The `Authorization` header is supplied by the client, so its value is only as trustworthy as the credential it carries (e.g. a secret token).
+
 ## Compression
 
 Request and response bodies can be compressed with gzip using the `Content-Encoding` header. Compression is opt-in on both sides:
