@@ -58,6 +58,30 @@ services.AddArgusExceptionHandler(options =>
 
 The router created by `AddArgusModules()` registers the middleware as the outermost global middleware, so it also catches exceptions thrown by middleware that modules add. The problem details `instance` is the request correlation token, which also appears in the error log entry. Cancellation caused by the request timeout or server shutdown is not handled by the middleware, so the host still responds with `503 Service Unavailable` in that case.
 
+## Compression
+
+Request and response bodies can be compressed with gzip using the `Content-Encoding` header. Compression is opt-in on both sides:
+
+```csharp
+// Server: compress responses of at least 1 KB for clients that accept gzip
+services.AddArgusPipeHost(options =>
+{
+    options.PipeName = "my-pipe";
+    options.Compression.Enabled = true;
+    options.Compression.MinimumBodySize = 1024; // default
+});
+
+// Client: send Accept-Encoding: gzip and compress request bodies of at least 1 KB
+services.AddArgusClient("my-pipe", client => client.Compression.Enabled = true);
+```
+
+- The host always decodes compressed requests, even when its own compression is disabled. `MaxRequestBodySize` limits both the compressed and the decompressed size, which protects against "zip bombs".
+- The host compresses a response only when the request's `Accept-Encoding` header accepts the encoding.
+- The client compresses request bodies whenever its compression is enabled, so only enable it against a server that supports compression (this version or later).
+- Received bodies are decompressed transparently, and the `Content-Encoding` header is removed.
+- Streamed bodies are compressed on the fly in chunked transfer encoding.
+- Other encodings can be added by implementing `IArgusContentEncoding` and adding them to `Compression.Encodings`.
+
 ## Retrying Transient Pipe Failures
 
 `ArgusClient` can automatically retry requests that fail because of transient named pipe errors, for example when the pipe breaks while the server restarts. Retries are disabled by default. Enable them by registering the client with a retry policy:

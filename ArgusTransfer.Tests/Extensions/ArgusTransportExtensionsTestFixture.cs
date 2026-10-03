@@ -158,6 +158,26 @@ namespace ArgusTransfer.Tests.Extensions
         }
 
         [Test]
+        public void Verify_that_AddArgusClient_with_configure_action_configures_each_client()
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+
+            services.AddArgusClient("test-pipe", client =>
+            {
+                client.DefaultTimeout = TimeSpan.FromSeconds(7);
+                client.Compression.Enabled = true;
+            });
+
+            using var provider = services.BuildServiceProvider();
+            using var client = (ArgusClient)provider.GetRequiredService<IArgusClient>();
+
+            Assert.That(client.DefaultTimeout, Is.EqualTo(TimeSpan.FromSeconds(7)));
+            Assert.That(client.Compression.Enabled, Is.True);
+            Assert.That(client.Logger, Is.InstanceOf<ILogger<ArgusClient>>());
+        }
+
+        [Test]
         public void Verify_that_AddArgusClient_without_configureRetry_leaves_retries_disabled()
         {
             var services = new ServiceCollection();

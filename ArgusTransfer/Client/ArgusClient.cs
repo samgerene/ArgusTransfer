@@ -66,6 +66,11 @@ namespace ArgusTransfer.Client
         private ILogger logger = NullLogger.Instance;
 
         /// <summary>
+        /// Backing field for <see cref="Compression"/>
+        /// </summary>
+        private ArgusCompressionOptions compression = new ArgusCompressionOptions();
+
+        /// <summary>
         /// Gets or sets the default timeout for requests. Defaults to 30 seconds.
         /// The timeout applies to the whole call, including retries and the delays between them.
         /// </summary>
@@ -88,6 +93,24 @@ namespace ArgusTransfer.Client
         }
 
         /// <summary>
+        /// Gets or sets the <see cref="ArgusCompressionOptions"/> for request and response bodies. Compression is disabled by
+        /// default; compressed responses are always decoded when their encoding is one of the configured encodings.
+        /// When <see cref="ArgusCompressionOptions.Enabled"/> is <c>true</c>, the client adds an <c>Accept-Encoding</c>
+        /// header to each request and a <c>Content-Encoding</c> header to requests whose body reaches
+        /// <see cref="ArgusCompressionOptions.MinimumBodySize"/>, and compresses those bodies. Enable it only when the
+        /// server supports the encoding. Assigning <c>null</c> restores the defaults.
+        /// </summary>
+        public ArgusCompressionOptions Compression
+        {
+            get => this.compression;
+            set
+            {
+                this.compression = value ?? new ArgusCompressionOptions();
+                this.UseCompressionEncodings();
+            }
+        }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ArgusClient"/> class
         /// </summary>
         /// <param name="pipeName">
@@ -102,6 +125,7 @@ namespace ArgusTransfer.Client
             var body = bodySerializer ?? new PlainTextArgusBodySerializer();
             this.requestSerializer = new ArgusRequestSerializer(body);
             this.responseSerializer = new ArgusResponseSerializer(body);
+            this.UseCompressionEncodings();
         }
 
         /// <summary>
@@ -120,6 +144,7 @@ namespace ArgusTransfer.Client
             this.pipeName = pipeName;
             this.requestSerializer = new ArgusRequestSerializer(bodySerializerRegistry);
             this.responseSerializer = new ArgusResponseSerializer(bodySerializerRegistry);
+            this.UseCompressionEncodings();
         }
 
         /// <summary>
@@ -145,6 +170,8 @@ namespace ArgusTransfer.Client
         public async Task<ArgusResponse> SendAsync(ArgusRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(this.disposed, this);
+
+            ArgusCompression.ApplyToRequest(request, this.compression);
 
             var effectiveTimeout = timeout ?? this.DefaultTimeout;
             using var timeoutCts = new CancellationTokenSource(effectiveTimeout);
@@ -663,6 +690,16 @@ namespace ArgusTransfer.Client
         {
             var response = await this.HeadAsync(route, queryParameters, timeout, cancellationToken);
             return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Points both serializers at the encodings of the current <see cref="Compression"/> options, so that encodings added
+        /// to <see cref="ArgusCompressionOptions.Encodings"/> are used for compressing requests and decoding responses
+        /// </summary>
+        private void UseCompressionEncodings()
+        {
+            this.requestSerializer.ContentEncodings = this.compression.Encodings;
+            this.responseSerializer.ContentEncodings = this.compression.Encodings;
         }
 
         /// <summary>

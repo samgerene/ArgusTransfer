@@ -31,6 +31,16 @@ namespace ArgusTransfer.Protocol
         public const string Accept = "Accept";
 
         /// <summary>
+        /// The Accept-Encoding header name
+        /// </summary>
+        public const string AcceptEncoding = "Accept-Encoding";
+
+        /// <summary>
+        /// The Content-Encoding header name
+        /// </summary>
+        public const string ContentEncoding = "Content-Encoding";
+
+        /// <summary>
         /// The Content-Type header name
         /// </summary>
         public const string ContentType = "Content-Type";

@@ -24,6 +24,8 @@ namespace ArgusTransfer.Server
     using System.IO.Pipes;
     using System.Threading;
 
+    using ArgusTransfer.Serialization;
+
     /// <summary>
     /// Configuration options for the <see cref="ArgusPipeHostBackgroundService"/>
     /// </summary>
@@ -67,5 +69,14 @@ namespace ArgusTransfer.Server
         /// Defaults to 10. When the limit is reached, new requests receive a 503 Service Unavailable response.
         /// </summary>
         public int MaxConcurrentRequests { get; set; } = 10;
+
+        /// <summary>
+        /// Gets or sets the <see cref="ArgusCompressionOptions"/> for request and response bodies. Requests compressed with
+        /// one of the configured encodings are always decoded; <see cref="MaxRequestBodySize"/> limits both the compressed
+        /// and the decompressed size. When <see cref="ArgusCompressionOptions.Enabled"/> is <c>true</c>, responses whose body
+        /// reaches <see cref="ArgusCompressionOptions.MinimumBodySize"/> are compressed if the request's
+        /// <c>Accept-Encoding</c> header accepts one of the configured encodings. Disabled by default.
+        /// </summary>
+        public ArgusCompressionOptions Compression { get; set; } = new ArgusCompressionOptions();
     }
 }

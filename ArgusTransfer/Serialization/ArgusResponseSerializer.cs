@@ -21,6 +21,7 @@
 namespace ArgusTransfer.Serialization
 {
     using System;
+    using System.Collections.Generic;
     using System.Globalization;
     using System.IO;
     using System.Text;
@@ -43,6 +44,11 @@ namespace ArgusTransfer.Serialization
         /// The <see cref="IArgusBodySerializerRegistry"/> used to resolve serializers by content type
         /// </summary>
         private readonly IArgusBodySerializerRegistry bodySerializerRegistry;
+
+        /// <summary>
+        /// Backing field for <see cref="ContentEncodings"/>
+        /// </summary>
+        private IList<IArgusContentEncoding> contentEncodings = new List<IArgusContentEncoding> { new GZipArgusContentEncoding() };
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ArgusResponseSerializer"/> class
@@ -76,6 +82,24 @@ namespace ArgusTransfer.Serialization
             this.bodySerializerRegistry = bodySerializerRegistry;
         }
 
+        /// <summary>
+        /// Gets or sets the content encodings used by the <see cref="Stream"/> overloads: a body whose <c>Content-Encoding</c>
+        /// header names one of them is compressed when written and decompressed when read (the header is then removed).
+        /// Contains a <see cref="GZipArgusContentEncoding"/> by default. The text-based overloads do not support content
+        /// encodings and throw <see cref="InvalidOperationException"/> for a message with a <c>Content-Encoding</c>.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when the value is <c>null</c>
+        /// </exception>
+        public IList<IArgusContentEncoding> ContentEncodings
+        {
+            get => this.contentEncodings;
+            set
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                this.contentEncodings = value;
+            }
+        }
         /// <summary>
         /// Serializes an <see cref="ArgusResponse"/> to its text wire format representation
         /// </summary>
@@ -227,7 +251,9 @@ namespace ArgusTransfer.Serialization
             ArgumentNullException.ThrowIfNull(stream);
             ArgumentNullException.ThrowIfNull(response);
 
-            return ArgusWireFormat.WriteAsync(stream, response, () => this.Write(response), () => BuildStreamedHead(response), cancellationToken);
+            var serializer = this.ResolveSerializer(ArgusWireFormat.GetContentType(response));
+
+            return ArgusWireFormat.WriteAsync(stream, response, sb => AppendStatusLine(sb, response), serializer, this.contentEncodings, cancellationToken);
         }
 
         /// <summary>
@@ -258,7 +284,14 @@ namespace ArgusTransfer.Serialization
             ArgumentNullException.ThrowIfNull(stream);
             ArgumentNullException.ThrowIfNull(response);
 
-            return ArgusWireFormat.WriteAsync(stream, response, () => this.Write(response, acceptContentType), () => BuildStreamedHead(response), cancellationToken);
+            var serializer = this.ResolveSerializer(acceptContentType);
+
+            if (!response.Headers.ContainsKey(ArgusHeaderNames.ContentType))
+            {
+                response.Headers[ArgusHeaderNames.ContentType] = serializer.ContentType;
+            }
+
+            return ArgusWireFormat.WriteAsync(stream, response, sb => AppendStatusLine(sb, response), serializer, this.contentEncodings, cancellationToken);
         }
 
         /// <summary>
@@ -372,27 +405,6 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
-        /// Builds the status line and headers of a response with a streamed body, including the
-        /// <c>Transfer-Encoding: chunked</c> header and the empty line that ends the header block
-        /// </summary>
-        /// <param name="response">
-        /// The <see cref="ArgusResponse"/> with a streamed body
-        /// </param>
-        /// <returns>
-        /// The header block in ARGUS/1.0 wire format
-        /// </returns>
-        private static string BuildStreamedHead(ArgusResponse response)
-        {
-            var sb = new StringBuilder();
-
-            AppendStatusLine(sb, response);
-            ArgusWireFormat.AppendStandardHeaders(sb, response);
-            ArgusWireFormat.AppendStreamedHeaderTail(sb, response);
-
-            return sb.ToString();
-        }
-
-        /// <summary>
         /// Parses the status line (e.g. "ARGUS/1.0 200 OK") into an <see cref="ArgusResponse"/>
         /// </summary>
         /// <param name="statusLine">
@@ -465,7 +477,7 @@ namespace ArgusTransfer.Serialization
                 ?? throw new EndOfStreamException("The stream ended before a status line was received.");
 
             var response = ParseStatusLine(statusLine);
-            await ArgusWireFormat.ReadHeadersAndBodyAsync(source, response, 0, this.ResolveSerializer, cancellationToken);
+            await ArgusWireFormat.ReadHeadersAndBodyAsync(source, response, 0, this.ResolveSerializer, this.contentEncodings, cancellationToken);
 
             return response;
         }

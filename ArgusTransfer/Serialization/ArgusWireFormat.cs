@@ -21,6 +21,7 @@
 namespace ArgusTransfer.Serialization
 {
     using System;
+    using System.Collections.Generic;
     using System.Globalization;
     using System.IO;
     using System.Text;
@@ -39,6 +40,12 @@ namespace ArgusTransfer.Serialization
         /// The name of the header that signals chunked transfer encoding
         /// </summary>
         private const string TransferEncodingHeader = "Transfer-Encoding";
+
+        /// <summary>
+        /// The error message for a compressed body on a text-based read or write path
+        /// </summary>
+        private const string TextFormContentEncodingMessage =
+            "A body with a Content-Encoding is binary and can only be written and read with the Stream overloads.";
 
         /// <summary>
         /// Appends the correlation token, timestamp and custom headers of a message
@@ -103,8 +110,13 @@ namespace ArgusTransfer.Serialization
         /// <param name="serializer">
         /// The <see cref="IArgusBodySerializer"/> used for a string body
         /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the message has a <c>Content-Encoding</c>, which the text form cannot carry
+        /// </exception>
         public static void AppendBody(StringBuilder sb, ArgusMessage message, IArgusBodySerializer serializer)
         {
+            EnsureNoContentEncoding(message);
+
             if (message.IsStreamed)
             {
                 AppendStreamedHeaderTail(sb, message);
@@ -117,17 +129,7 @@ namespace ArgusTransfer.Serialization
             if (!string.IsNullOrEmpty(message.Body))
             {
                 serializedBody = serializer.WriteBody(message.Body);
-
-                if (!message.Headers.ContainsKey(ArgusHeaderNames.ContentType))
-                {
-                    sb.Append(ArgusHeaderNames.ContentType + ": ");
-                    sb.Append(serializer.ContentType);
-                    sb.Append("\r\n");
-                }
-
-                sb.Append(ArgusHeaderNames.ContentLength + ": ");
-                sb.Append(Encoding.UTF8.GetByteCount(serializedBody).ToString(CultureInfo.InvariantCulture));
-                sb.Append("\r\n");
+                AppendContentHeaders(sb, message, serializer, Encoding.UTF8.GetByteCount(serializedBody));
             }
 
             sb.Append("\r\n");
@@ -139,8 +141,10 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
-        /// Writes a message to a <see cref="Stream"/>. A message with a streamed body is written as its header block followed
-        /// by the body as raw bytes in chunked transfer encoding; any other message is written as its UTF-8 encoded text form.
+        /// Writes a message to a <see cref="Stream"/>. The header block is encoded as UTF-8. A string body is serialized,
+        /// encoded as UTF-8 and announced with <c>Content-Length</c> in bytes; a streamed body is copied as raw bytes in
+        /// chunked transfer encoding. When the message has a <c>Content-Encoding</c> header, the body is compressed with
+        /// that encoding first.
         /// </summary>
         /// <param name="stream">
         /// The <see cref="Stream"/> to write to
@@ -148,45 +152,14 @@ namespace ArgusTransfer.Serialization
         /// <param name="message">
         /// The <see cref="ArgusMessage"/> to write
         /// </param>
-        /// <param name="serialize">
-        /// Produces the complete text form of a message without a streamed body
+        /// <param name="appendStartLine">
+        /// Appends the request or status line
         /// </param>
-        /// <param name="buildStreamedHead">
-        /// Produces the header block of a message with a streamed body
+        /// <param name="serializer">
+        /// The <see cref="IArgusBodySerializer"/> used for a string body
         /// </param>
-        /// <param name="cancellationToken">
-        /// The <see cref="CancellationToken"/> used to signal cancellation
-        /// </param>
-        /// <returns>
-        /// A <see cref="Task"/> representing the asynchronous operation
-        /// </returns>
-        public static async Task WriteAsync(Stream stream, ArgusMessage message, Func<string> serialize, Func<string> buildStreamedHead, CancellationToken cancellationToken)
-        {
-            if (message.IsStreamed)
-            {
-                await stream.WriteAsync(Encoding.UTF8.GetBytes(buildStreamedHead()).AsMemory(), cancellationToken);
-                await ArgusChunkedEncoding.WriteChunkedAsync(message.BodyStream, stream, cancellationToken: cancellationToken);
-                return;
-            }
-
-            await stream.WriteAsync(Encoding.UTF8.GetBytes(serialize()).AsMemory(), cancellationToken);
-            await stream.FlushAsync(cancellationToken);
-        }
-
-        /// <summary>
-        /// Reads the header block and the body of a message from an <see cref="IArgusMessageSource"/>
-        /// </summary>
-        /// <param name="source">
-        /// The <see cref="IArgusMessageSource"/> positioned after the request or status line
-        /// </param>
-        /// <param name="message">
-        /// The <see cref="ArgusMessage"/> to populate
-        /// </param>
-        /// <param name="maxBodySize">
-        /// The maximum allowed body size in bytes. A value of 0 disables the limit.
-        /// </param>
-        /// <param name="resolveSerializer">
-        /// Resolves the <see cref="IArgusBodySerializer"/> for a content type
+        /// <param name="encodings">
+        /// The supported content encodings
         /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> used to signal cancellation
@@ -195,9 +168,82 @@ namespace ArgusTransfer.Serialization
         /// A <see cref="Task"/> representing the asynchronous operation
         /// </returns>
         /// <exception cref="InvalidOperationException">
-        /// Thrown when the body exceeds <paramref name="maxBodySize"/>
+        /// Thrown when the <c>Content-Encoding</c> header names an unsupported encoding
         /// </exception>
-        public static async Task ReadHeadersAndBodyAsync(IArgusMessageSource source, ArgusMessage message, long maxBodySize, Func<string, IArgusBodySerializer> resolveSerializer, CancellationToken cancellationToken)
+        public static async Task WriteAsync(Stream stream, ArgusMessage message, Action<StringBuilder> appendStartLine, IArgusBodySerializer serializer, IEnumerable<IArgusContentEncoding> encodings, CancellationToken cancellationToken)
+        {
+            var encoding = ArgusCompression.ResolveContentEncoding(message, encodings);
+            var head = new StringBuilder();
+
+            appendStartLine(head);
+            AppendStandardHeaders(head, message);
+
+            if (message.IsStreamed)
+            {
+                AppendStreamedHeaderTail(head, message);
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(head.ToString()).AsMemory(), cancellationToken);
+                await ArgusChunkedEncoding.WriteChunkedAsync(message.BodyStream, stream, encoding, cancellationToken);
+                return;
+            }
+
+            byte[] body = null;
+
+            if (!string.IsNullOrEmpty(message.Body))
+            {
+                body = Encoding.UTF8.GetBytes(serializer.WriteBody(message.Body));
+
+                if (encoding != null)
+                {
+                    body = ArgusCompression.Compress(encoding, body);
+                }
+
+                AppendContentHeaders(head, message, serializer, body.Length);
+            }
+
+            head.Append("\r\n");
+
+            // Send the header block and the body in a single write: on an unbuffered pipe each write blocks until the
+            // peer reads it, and a server that rejects the request after the headers never reads a separately written body
+            var headBytes = Encoding.UTF8.GetBytes(head.ToString());
+            var wireBytes = new byte[headBytes.Length + (body?.Length ?? 0)];
+            headBytes.CopyTo(wireBytes, 0);
+            body?.CopyTo(wireBytes, headBytes.Length);
+
+            await stream.WriteAsync(wireBytes.AsMemory(), cancellationToken);
+            await stream.FlushAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// Reads the header block and the body of a message from an <see cref="IArgusMessageSource"/>. A body with a
+        /// <c>Content-Encoding</c> is decompressed and the header is removed, so the message describes the decoded body.
+        /// </summary>
+        /// <param name="source">
+        /// The <see cref="IArgusMessageSource"/> positioned after the request or status line
+        /// </param>
+        /// <param name="message">
+        /// The <see cref="ArgusMessage"/> to populate
+        /// </param>
+        /// <param name="maxBodySize">
+        /// The maximum allowed body size in bytes, applied to both the wire size and the decompressed size.
+        /// A value of 0 disables the limit.
+        /// </param>
+        /// <param name="resolveSerializer">
+        /// Resolves the <see cref="IArgusBodySerializer"/> for a content type
+        /// </param>
+        /// <param name="encodings">
+        /// The supported content encodings
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the body exceeds <paramref name="maxBodySize"/>, the <c>Content-Encoding</c> is unsupported or the
+        /// compressed body is invalid, or a compressed body is read from a text source
+        /// </exception>
+        public static async Task ReadHeadersAndBodyAsync(IArgusMessageSource source, ArgusMessage message, long maxBodySize, Func<string, IArgusBodySerializer> resolveSerializer, IEnumerable<IArgusContentEncoding> encodings, CancellationToken cancellationToken)
         {
             var contentLength = -1;
             string line;
@@ -205,6 +251,20 @@ namespace ArgusTransfer.Serialization
             while (!string.IsNullOrEmpty(line = await source.ReadLineAsync(cancellationToken)))
             {
                 contentLength = ParseHeader(line, message, contentLength);
+            }
+
+            var encoding = ArgusCompression.ResolveContentEncoding(message, encodings);
+
+            if (encoding != null)
+            {
+                if (source is not ArgusWireReader wireReader)
+                {
+                    throw new InvalidOperationException(TextFormContentEncodingMessage);
+                }
+
+                await ReadEncodedBodyAsync(wireReader, message, contentLength, maxBodySize, resolveSerializer, encoding, cancellationToken);
+                message.Headers.Remove(ArgusHeaderNames.ContentEncoding);
+                return;
             }
 
             if (IsChunked(message))
@@ -218,6 +278,54 @@ namespace ArgusTransfer.Serialization
             if (contentLength > 0)
             {
                 message.Body = resolveSerializer(GetContentType(message)).ReadBody(await source.ReadBodyAsync(contentLength, cancellationToken));
+            }
+        }
+
+        /// <summary>
+        /// Reads a compressed body and stores the decompressed result on the message. The wire size and the decompressed
+        /// size are both limited by <paramref name="maxBodySize"/>.
+        /// </summary>
+        /// <param name="reader">
+        /// The <see cref="ArgusWireReader"/> positioned at the start of the body
+        /// </param>
+        /// <param name="message">
+        /// The <see cref="ArgusMessage"/> to populate
+        /// </param>
+        /// <param name="contentLength">
+        /// The announced content length, or -1
+        /// </param>
+        /// <param name="maxBodySize">
+        /// The maximum allowed body size in bytes. A value of 0 disables the limit.
+        /// </param>
+        /// <param name="resolveSerializer">
+        /// Resolves the <see cref="IArgusBodySerializer"/> for a content type
+        /// </param>
+        /// <param name="encoding">
+        /// The <see cref="IArgusContentEncoding"/> the body is compressed with
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        private static async Task ReadEncodedBodyAsync(ArgusWireReader reader, ArgusMessage message, int contentLength, long maxBodySize, Func<string, IArgusBodySerializer> resolveSerializer, IArgusContentEncoding encoding, CancellationToken cancellationToken)
+        {
+            if (IsChunked(message))
+            {
+                await using var compressed = await reader.ReadChunkedAsync(maxBodySize, cancellationToken);
+                message.BodyStream = await ArgusCompression.DecompressAsync(encoding, compressed, maxBodySize, cancellationToken);
+                return;
+            }
+
+            EnsureWithinLimit(contentLength, maxBodySize);
+
+            if (contentLength > 0)
+            {
+                using var compressed = new MemoryStream(await reader.ReadBytesAsync(contentLength, cancellationToken));
+                await using var decompressed = await ArgusCompression.DecompressAsync(encoding, compressed, maxBodySize, cancellationToken);
+
+                message.Body = resolveSerializer(GetContentType(message)).ReadBody(Encoding.UTF8.GetString(decompressed.ToArray()));
             }
         }
 
@@ -237,7 +345,8 @@ namespace ArgusTransfer.Serialization
         /// Resolves the <see cref="IArgusBodySerializer"/> for a content type
         /// </param>
         /// <exception cref="InvalidOperationException">
-        /// Thrown when the body exceeds <paramref name="maxBodySize"/>
+        /// Thrown when the body exceeds <paramref name="maxBodySize"/>, or the message has a <c>Content-Encoding</c>,
+        /// which the text form cannot carry
         /// </exception>
         public static void ReadHeadersAndBody(StringReader reader, ArgusMessage message, long maxBodySize, Func<string, IArgusBodySerializer> resolveSerializer)
         {
@@ -248,6 +357,8 @@ namespace ArgusTransfer.Serialization
             {
                 contentLength = ParseHeader(line, message, contentLength);
             }
+
+            EnsureNoContentEncoding(message);
 
             if (IsChunked(message))
             {
@@ -394,6 +505,53 @@ namespace ArgusTransfer.Serialization
                 throw new InvalidOperationException(
                     $"Request body size {contentLength} bytes exceeds the maximum allowed size of {maxBodySize} bytes.");
             }
+        }
+
+        /// <summary>
+        /// Throws when a message has a <c>Content-Encoding</c> other than <c>identity</c>, because the text-based
+        /// read and write paths cannot carry the binary compressed body
+        /// </summary>
+        /// <param name="message">
+        /// The <see cref="ArgusMessage"/> to inspect
+        /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the message has a <c>Content-Encoding</c>
+        /// </exception>
+        private static void EnsureNoContentEncoding(ArgusMessage message)
+        {
+            if (ArgusCompression.HasContentEncoding(message))
+            {
+                throw new InvalidOperationException(TextFormContentEncodingMessage);
+            }
+        }
+
+        /// <summary>
+        /// Appends the <c>Content-Type</c> header (when the message has none) and the <c>Content-Length</c> header of a string body
+        /// </summary>
+        /// <param name="sb">
+        /// The <see cref="StringBuilder"/> to append to
+        /// </param>
+        /// <param name="message">
+        /// The <see cref="ArgusMessage"/> whose body is written
+        /// </param>
+        /// <param name="serializer">
+        /// The <see cref="IArgusBodySerializer"/> whose content type is used as the default
+        /// </param>
+        /// <param name="byteCount">
+        /// The body length in bytes as written on the wire
+        /// </param>
+        private static void AppendContentHeaders(StringBuilder sb, ArgusMessage message, IArgusBodySerializer serializer, int byteCount)
+        {
+            if (!message.Headers.ContainsKey(ArgusHeaderNames.ContentType))
+            {
+                sb.Append(ArgusHeaderNames.ContentType + ": ");
+                sb.Append(serializer.ContentType);
+                sb.Append("\r\n");
+            }
+
+            sb.Append(ArgusHeaderNames.ContentLength + ": ");
+            sb.Append(byteCount.ToString(CultureInfo.InvariantCulture));
+            sb.Append("\r\n");
         }
     }
 }
