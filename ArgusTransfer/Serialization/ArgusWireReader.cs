@@ -76,8 +76,13 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
-        /// Reads a line terminated by <c>\n</c> (optionally preceded by <c>\r</c>) and decodes it as UTF-8
+        /// Reads a line terminated by <c>\n</c> (optionally preceded by <c>\r</c>) and decodes it as UTF-8. The line is
+        /// rejected as soon as it grows beyond <paramref name="maxLength"/>, so a peer cannot make the reader buffer an
+        /// unbounded line.
         /// </summary>
+        /// <param name="maxLength">
+        /// The maximum length of the line in bytes, excluding its terminator
+        /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> used to signal cancellation
         /// </param>
@@ -85,7 +90,10 @@ namespace ArgusTransfer.Serialization
         /// The line without its terminator, or <c>null</c> when the stream ended before any byte of the line was read.
         /// A final line without a terminator is returned as is.
         /// </returns>
-        public async ValueTask<string> ReadLineAsync(CancellationToken cancellationToken)
+        /// <exception cref="ArgusLineTooLongException">
+        /// Thrown when the line is longer than <paramref name="maxLength"/> bytes
+        /// </exception>
+        public async ValueTask<string> ReadLineAsync(int maxLength, CancellationToken cancellationToken)
         {
             using var line = new MemoryStream();
 
@@ -93,7 +101,7 @@ namespace ArgusTransfer.Serialization
             {
                 if (this.position == this.length && !await this.FillAsync(cancellationToken))
                 {
-                    return line.Length == 0 ? null : Decode(line);
+                    return line.Length == 0 ? null : Decode(line, maxLength);
                 }
 
                 var newLineIndex = Array.IndexOf(this.buffer, (byte)'\n', this.position, this.length - this.position);
@@ -102,13 +110,20 @@ namespace ArgusTransfer.Serialization
                 {
                     line.Write(this.buffer, this.position, this.length - this.position);
                     this.position = this.length;
+
+                    // Allow one extra byte for a '\r' that may precede the terminator
+                    if (line.Length > (long)maxLength + 1)
+                    {
+                        throw new ArgusLineTooLongException(maxLength);
+                    }
+
                     continue;
                 }
 
                 line.Write(this.buffer, this.position, newLineIndex - this.position);
                 this.position = newLineIndex + 1;
 
-                return Decode(line);
+                return Decode(line, maxLength);
             }
         }
 
@@ -213,10 +228,16 @@ namespace ArgusTransfer.Serialization
         /// <param name="line">
         /// The <see cref="MemoryStream"/> containing the bytes of the line
         /// </param>
+        /// <param name="maxLength">
+        /// The maximum length of the line in bytes, excluding its terminator
+        /// </param>
         /// <returns>
         /// The decoded line
         /// </returns>
-        private static string Decode(MemoryStream line)
+        /// <exception cref="ArgusLineTooLongException">
+        /// Thrown when the line is longer than <paramref name="maxLength"/> bytes
+        /// </exception>
+        private static string Decode(MemoryStream line, int maxLength)
         {
             var bytes = line.GetBuffer();
             var count = (int)line.Length;
@@ -224,6 +245,11 @@ namespace ArgusTransfer.Serialization
             if (count > 0 && bytes[count - 1] == (byte)'\r')
             {
                 count--;
+            }
+
+            if (count > maxLength)
+            {
+                throw new ArgusLineTooLongException(maxLength);
             }
 
             return Encoding.UTF8.GetString(bytes, 0, count);

@@ -42,6 +42,11 @@ namespace ArgusTransfer.Serialization
         private const string TransferEncodingHeader = "Transfer-Encoding";
 
         /// <summary>
+        /// The default maximum size in bytes of a header block: the request or status line plus all header lines
+        /// </summary>
+        public const int DefaultMaxHeaderSize = 32 * 1024;
+
+        /// <summary>
         /// The error message for a compressed body on a text-based read or write path
         /// </summary>
         private const string TextFormContentEncodingMessage =
@@ -220,6 +225,9 @@ namespace ArgusTransfer.Serialization
         /// <param name="source">
         /// The <see cref="IArgusMessageSource"/> positioned after the request or status line
         /// </param>
+        /// <param name="headerBudget">
+        /// The <see cref="ArgusHeaderBudget"/> that limits the header block, already charged for the request or status line
+        /// </param>
         /// <param name="message">
         /// The <see cref="ArgusMessage"/> to populate
         /// </param>
@@ -240,18 +248,18 @@ namespace ArgusTransfer.Serialization
         /// A <see cref="Task"/> representing the asynchronous operation
         /// </returns>
         /// <exception cref="ArgusProtocolException">
-        /// Thrown when the body exceeds <paramref name="maxBodySize"/>, or the <c>Content-Encoding</c> is unsupported or the
-        /// compressed body is invalid
+        /// Thrown when the header block or the body exceeds its maximum size, or the <c>Content-Encoding</c> is unsupported
+        /// or the compressed body is invalid
         /// </exception>
         /// <exception cref="InvalidOperationException">
         /// Thrown when a compressed body is read from a text source
         /// </exception>
-        public static async Task ReadHeadersAndBodyAsync(IArgusMessageSource source, ArgusMessage message, long maxBodySize, Func<string, IArgusBodySerializer> resolveSerializer, IEnumerable<IArgusContentEncoding> encodings, CancellationToken cancellationToken)
+        public static async Task ReadHeadersAndBodyAsync(IArgusMessageSource source, ArgusHeaderBudget headerBudget, ArgusMessage message, long maxBodySize, Func<string, IArgusBodySerializer> resolveSerializer, IEnumerable<IArgusContentEncoding> encodings, CancellationToken cancellationToken)
         {
             var contentLength = -1;
             string line;
 
-            while (!string.IsNullOrEmpty(line = await source.ReadLineAsync(cancellationToken)))
+            while (!string.IsNullOrEmpty(line = await headerBudget.ReadLineAsync(source, cancellationToken)))
             {
                 contentLength = ParseHeader(line, message, contentLength);
             }

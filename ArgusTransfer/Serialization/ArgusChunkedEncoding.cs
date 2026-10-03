@@ -47,6 +47,11 @@ namespace ArgusTransfer.Serialization
         private const int DefaultChunkSize = 8192;
 
         /// <summary>
+        /// The maximum length in bytes of a chunk-size line or chunk terminator line read by the byte-level reader
+        /// </summary>
+        private const int MaxChunkLineLength = 1024;
+
+        /// <summary>
         /// The bytes of the terminating zero-length chunk followed by the empty trailer line
         /// </summary>
         private static readonly byte[] LastChunk = Encoding.ASCII.GetBytes("0\r\n\r\n");
@@ -127,7 +132,7 @@ namespace ArgusTransfer.Serialization
 
             while (true)
             {
-                var sizeLine = await reader.ReadLineAsync(cancellationToken)
+                var sizeLine = await reader.ReadLineAsync(MaxChunkLineLength, cancellationToken)
                     ?? throw new EndOfStreamException("The stream ended before the terminating chunk was received.");
 
                 if (sizeLine.Length == 0)
@@ -140,7 +145,7 @@ namespace ArgusTransfer.Serialization
                 if (chunkSize == 0)
                 {
                     // Read the trailing empty line after the terminating chunk
-                    await reader.ReadLineAsync(cancellationToken);
+                    await reader.ReadLineAsync(MaxChunkLineLength, cancellationToken);
                     break;
                 }
 
@@ -157,7 +162,7 @@ namespace ArgusTransfer.Serialization
                     remaining -= count;
                 }
 
-                var terminator = await reader.ReadLineAsync(cancellationToken);
+                var terminator = await reader.ReadLineAsync(MaxChunkLineLength, cancellationToken);
 
                 if (terminator == null)
                 {

@@ -132,7 +132,7 @@ namespace ArgusTransfer.Server
             this.options = options.Value;
             this.requestSerializer = new ArgusRequestSerializer(bodySerializer);
             this.responseSerializer = new ArgusResponseSerializer(bodySerializer);
-            this.UseCompressionEncodings();
+            this.ConfigureSerializers();
         }
 
         /// <summary>
@@ -163,7 +163,7 @@ namespace ArgusTransfer.Server
             this.bodySerializerRegistry = bodySerializerRegistry;
             this.requestSerializer = new ArgusRequestSerializer(bodySerializerRegistry);
             this.responseSerializer = new ArgusResponseSerializer(bodySerializerRegistry);
-            this.UseCompressionEncodings();
+            this.ConfigureSerializers();
         }
 
         /// <summary>
@@ -440,11 +440,14 @@ namespace ArgusTransfer.Server
         }
 
         /// <summary>
-        /// Takes the compression options from <see cref="ArgusPipeHostOptions.Compression"/> (or the defaults when it is
-        /// <c>null</c>) and points both serializers at their encodings, so compressed requests are decoded
+        /// Applies the host options to the serializers: the request header size limit from
+        /// <see cref="ArgusPipeHostOptions.MaxRequestHeaderSize"/>, and the encodings from <see cref="ArgusPipeHostOptions.Compression"/>
+        /// (or the defaults when it is <c>null</c>) so compressed requests are decoded
         /// </summary>
-        private void UseCompressionEncodings()
+        private void ConfigureSerializers()
         {
+            this.requestSerializer.MaxHeaderSize = this.options.MaxRequestHeaderSize;
+
             this.compression = this.options.Compression ?? new ArgusCompressionOptions();
             this.requestSerializer.ContentEncodings = this.compression.Encodings;
             this.responseSerializer.ContentEncodings = this.compression.Encodings;

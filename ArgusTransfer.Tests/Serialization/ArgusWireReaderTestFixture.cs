@@ -27,6 +27,7 @@ namespace ArgusTransfer.Tests.Serialization
     using System.Threading;
     using System.Threading.Tasks;
 
+    using ArgusTransfer.Protocol;
     using ArgusTransfer.Serialization;
 
     using NUnit.Framework;
@@ -37,6 +38,8 @@ namespace ArgusTransfer.Tests.Serialization
     [TestFixture]
     public class ArgusWireReaderTestFixture
     {
+        private const int NoLimit = int.MaxValue;
+
         /// <summary>
         /// A read-only stream that returns at most one byte per read, like a pipe delivering partial reads
         /// </summary>
@@ -68,10 +71,10 @@ namespace ArgusTransfer.Tests.Serialization
         {
             var reader = new ArgusWireReader(new MemoryStream(Encoding.UTF8.GetBytes("first\r\nsecond\nthird")));
 
-            Assert.That(await reader.ReadLineAsync(CancellationToken.None), Is.EqualTo("first"));
-            Assert.That(await reader.ReadLineAsync(CancellationToken.None), Is.EqualTo("second"));
-            Assert.That(await reader.ReadLineAsync(CancellationToken.None), Is.EqualTo("third"));
-            Assert.That(await reader.ReadLineAsync(CancellationToken.None), Is.Null);
+            Assert.That(await reader.ReadLineAsync(NoLimit, CancellationToken.None), Is.EqualTo("first"));
+            Assert.That(await reader.ReadLineAsync(NoLimit, CancellationToken.None), Is.EqualTo("second"));
+            Assert.That(await reader.ReadLineAsync(NoLimit, CancellationToken.None), Is.EqualTo("third"));
+            Assert.That(await reader.ReadLineAsync(NoLimit, CancellationToken.None), Is.Null);
         }
 
         [Test]
@@ -79,8 +82,8 @@ namespace ArgusTransfer.Tests.Serialization
         {
             var reader = new ArgusWireReader(new MemoryStream(Encoding.UTF8.GetBytes("\r\n")));
 
-            Assert.That(await reader.ReadLineAsync(CancellationToken.None), Is.Empty);
-            Assert.That(await reader.ReadLineAsync(CancellationToken.None), Is.Null);
+            Assert.That(await reader.ReadLineAsync(NoLimit, CancellationToken.None), Is.Empty);
+            Assert.That(await reader.ReadLineAsync(NoLimit, CancellationToken.None), Is.Null);
         }
 
         [Test]
@@ -88,7 +91,7 @@ namespace ArgusTransfer.Tests.Serialization
         {
             var reader = new ArgusWireReader(new MemoryStream());
 
-            Assert.That(await reader.ReadLineAsync(CancellationToken.None), Is.Null);
+            Assert.That(await reader.ReadLineAsync(NoLimit, CancellationToken.None), Is.Null);
         }
 
         [Test]
@@ -96,7 +99,7 @@ namespace ArgusTransfer.Tests.Serialization
         {
             var reader = new ArgusWireReader(new TrickleStream(Encoding.UTF8.GetBytes("X-Name: héllo €\r\n")));
 
-            Assert.That(await reader.ReadLineAsync(CancellationToken.None), Is.EqualTo("X-Name: héllo €"));
+            Assert.That(await reader.ReadLineAsync(NoLimit, CancellationToken.None), Is.EqualTo("X-Name: héllo €"));
         }
 
         [Test]
@@ -105,8 +108,8 @@ namespace ArgusTransfer.Tests.Serialization
             var longLine = new string('a', 20_000);
             var reader = new ArgusWireReader(new MemoryStream(Encoding.UTF8.GetBytes(longLine + "\r\nnext\r\n")));
 
-            Assert.That(await reader.ReadLineAsync(CancellationToken.None), Is.EqualTo(longLine));
-            Assert.That(await reader.ReadLineAsync(CancellationToken.None), Is.EqualTo("next"));
+            Assert.That(await reader.ReadLineAsync(NoLimit, CancellationToken.None), Is.EqualTo(longLine));
+            Assert.That(await reader.ReadLineAsync(NoLimit, CancellationToken.None), Is.EqualTo("next"));
         }
 
         [Test]
@@ -116,7 +119,7 @@ namespace ArgusTransfer.Tests.Serialization
             var data = Encoding.ASCII.GetBytes("header\r\n").Concat(payload).ToArray();
             var reader = new ArgusWireReader(new MemoryStream(data));
 
-            await reader.ReadLineAsync(CancellationToken.None);
+            await reader.ReadLineAsync(NoLimit, CancellationToken.None);
 
             var body = new byte[256];
             await reader.ReadExactlyAsync(body.AsMemory(), CancellationToken.None);
@@ -147,6 +150,74 @@ namespace ArgusTransfer.Tests.Serialization
             await reader.ReadExactlyAsync(body.AsMemory(), CancellationToken.None);
 
             Assert.That(body, Is.EqualTo(payload));
+        }
+
+        [TestCase("12345\r\n")]
+        [TestCase("12345\n")]
+        [TestCase("12345")]
+        public async Task Verify_that_ReadLineAsync_accepts_a_line_of_exactly_the_maximum_length(string data)
+        {
+            var reader = new ArgusWireReader(new MemoryStream(Encoding.ASCII.GetBytes(data)));
+
+            Assert.That(await reader.ReadLineAsync(5, CancellationToken.None), Is.EqualTo("12345"));
+        }
+
+        [TestCase("123456\r\n")]
+        [TestCase("123456")]
+        public void Verify_that_ReadLineAsync_rejects_a_line_longer_than_the_maximum(string data)
+        {
+            var reader = new ArgusWireReader(new MemoryStream(Encoding.ASCII.GetBytes(data)));
+
+            Assert.That(async () => await reader.ReadLineAsync(5, CancellationToken.None), Throws.InstanceOf<ArgusProtocolException>());
+        }
+
+        [Test]
+        public void Verify_that_ReadLineAsync_stops_reading_an_endless_line_at_the_limit()
+        {
+            var stream = new EndlessStream();
+            var reader = new ArgusWireReader(stream);
+
+            Assert.That(async () => await reader.ReadLineAsync(16 * 1024, CancellationToken.None), Throws.InstanceOf<ArgusProtocolException>());
+            Assert.That(stream.BytesRead, Is.LessThan(64 * 1024), "the reader must not keep buffering beyond the limit");
+        }
+
+        /// <summary>
+        /// A stream that returns 'a' bytes forever and counts how many were read
+        /// </summary>
+        private sealed class EndlessStream : Stream
+        {
+            public long BytesRead { get; private set; }
+
+            public override bool CanRead => true;
+
+            public override bool CanSeek => false;
+
+            public override bool CanWrite => false;
+
+            public override long Length => throw new NotSupportedException();
+
+            public override long Position
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                buffer.AsSpan(offset, count).Fill((byte)'a');
+                this.BytesRead += count;
+                return count;
+            }
+
+            public override void Flush()
+            {
+            }
+
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         }
 
         [Test]

@@ -372,6 +372,86 @@ namespace ArgusTransfer.Tests.Serialization
         }
 
         [Test]
+        public void Verify_that_MaxHeaderSize_defaults_to_32_KB_and_rejects_invalid_values()
+        {
+            Assert.That(this.serializer.MaxHeaderSize, Is.EqualTo(32 * 1024));
+            Assert.That(() => this.serializer.MaxHeaderSize = 0, Throws.TypeOf<ArgumentOutOfRangeException>());
+            Assert.That(() => this.serializer.MaxHeaderSize = -1, Throws.TypeOf<ArgumentOutOfRangeException>());
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_rejects_an_over_long_header_line()
+        {
+            var wire = "GET /items ARGUS/1.0\r\nX-Big: " + new string('x', 40 * 1024) + "\r\n\r\n";
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(wire));
+
+            Assert.That(
+                async () => await this.serializer.ReadAsync(stream, CancellationToken.None),
+                Throws.TypeOf<ArgusProtocolException>().With.Message.Contains("header block exceeds the maximum allowed size of 32768 bytes"));
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_rejects_too_many_headers()
+        {
+            var headers = new StringBuilder("GET /items ARGUS/1.0\r\n");
+
+            for (var i = 0; i < 2_000; i++)
+            {
+                headers.Append("X-Header-").Append(i).Append(": value\r\n");
+            }
+
+            headers.Append("\r\n");
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(headers.ToString()));
+
+            Assert.That(async () => await this.serializer.ReadAsync(stream, CancellationToken.None), Throws.TypeOf<ArgusProtocolException>());
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_counts_the_request_line_towards_the_limit()
+        {
+            this.serializer.MaxHeaderSize = 64;
+            var wire = "GET /" + new string('a', 100) + " ARGUS/1.0\r\n\r\n";
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(wire));
+
+            Assert.That(async () => await this.serializer.ReadAsync(stream, CancellationToken.None), Throws.TypeOf<ArgusProtocolException>());
+        }
+
+        [Test]
+        public async Task Verify_that_Stream_overload_accepts_headers_within_a_custom_limit()
+        {
+            this.serializer.MaxHeaderSize = 256;
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items" };
+            request.Headers["X-Small"] = "value";
+
+            using var stream = new MemoryStream();
+            await this.serializer.WriteAsync(stream, request);
+            stream.Position = 0;
+
+            var result = await this.serializer.ReadAsync(stream, CancellationToken.None);
+
+            Assert.That(result.Headers["X-Small"], Is.EqualTo("value"));
+        }
+
+        [Test]
+        public void Verify_that_StreamReader_overload_rejects_an_over_long_header_line()
+        {
+            this.serializer.MaxHeaderSize = 1024;
+            var wire = "GET /items ARGUS/1.0\r\nX-Big: " + new string('x', 2048) + "\r\n\r\n";
+            using var reader = new StreamReader(new MemoryStream(Encoding.UTF8.GetBytes(wire)));
+
+            Assert.That(async () => await this.serializer.ReadAsync(reader, CancellationToken.None), Throws.TypeOf<ArgusProtocolException>());
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_rejects_an_over_long_chunk_size_line()
+        {
+            var wire = "POST /upload ARGUS/1.0\r\nTransfer-Encoding: chunked\r\n\r\n" + new string('0', 4096) + "\r\n";
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(wire));
+
+            Assert.That(async () => await this.serializer.ReadAsync(stream, CancellationToken.None), Throws.InstanceOf<ArgusProtocolException>());
+        }
+
+        [Test]
         public async Task Verify_that_StreamReader_overload_counts_Content_Length_in_bytes()
         {
             // "héllo" is 5 characters but 6 bytes; the trailing data must not be read into the body
