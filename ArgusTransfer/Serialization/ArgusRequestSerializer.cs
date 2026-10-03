@@ -21,7 +21,6 @@
 namespace ArgusTransfer.Serialization
 {
     using System;
-    using System.Globalization;
     using System.IO;
     using System.Text;
     using System.Threading;
@@ -90,71 +89,9 @@ namespace ArgusTransfer.Serialization
         {
             var sb = new StringBuilder();
 
-            sb.Append(request.Verb.ToString());
-            sb.Append(' ');
-            sb.Append(request.Route);
-            sb.Append(ArgusQueryStringHelper.BuildQueryString(request.QueryParameters));
-            sb.Append(" ARGUS/1.0\r\n");
-
-            sb.Append(ArgusHeaderNames.CorrelationToken + ": ");
-            sb.Append(request.CorrelationToken.ToString());
-            sb.Append("\r\n");
-
-            sb.Append(ArgusHeaderNames.Timestamp + ": ");
-            sb.Append(request.Timestamp.ToString("o", CultureInfo.InvariantCulture));
-            sb.Append("\r\n");
-
-            foreach (var header in request.Headers)
-            {
-                sb.Append(header.Key);
-                sb.Append(": ");
-                sb.Append(header.Value);
-                sb.Append("\r\n");
-            }
-
-            string serializedBody = null;
-
-            if (request.IsStreamed)
-            {
-                if (!request.Headers.ContainsKey(ArgusHeaderNames.ContentType))
-                {
-                    sb.Append(ArgusHeaderNames.ContentType + ": application/octet-stream\r\n");
-                }
-
-                sb.Append("Transfer-Encoding: chunked\r\n");
-                sb.Append("\r\n");
-
-                ArgusChunkedEncoding.WriteChunked(request.BodyStream, sb);
-            }
-            else
-            {
-                if (!string.IsNullOrEmpty(request.Body))
-                {
-                    var contentType = request.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
-                    var resolvedSerializer = this.ResolveSerializer(contentType);
-
-                    serializedBody = resolvedSerializer.WriteBody(request.Body);
-                    var bodyBytes = Encoding.UTF8.GetByteCount(serializedBody);
-
-                    if (!request.Headers.ContainsKey(ArgusHeaderNames.ContentType))
-                    {
-                        sb.Append(ArgusHeaderNames.ContentType + ": ");
-                        sb.Append(resolvedSerializer.ContentType);
-                        sb.Append("\r\n");
-                    }
-
-                    sb.Append(ArgusHeaderNames.ContentLength + ": ");
-                    sb.Append(bodyBytes.ToString(CultureInfo.InvariantCulture));
-                    sb.Append("\r\n");
-                }
-
-                sb.Append("\r\n");
-
-                if (serializedBody != null)
-                {
-                    sb.Append(serializedBody);
-                }
-            }
+            AppendRequestLine(sb, request);
+            ArgusWireFormat.AppendStandardHeaders(sb, request);
+            ArgusWireFormat.AppendBody(sb, request, this.ResolveSerializer(ArgusWireFormat.GetContentType(request)));
 
             return sb.ToString();
         }
@@ -176,7 +113,8 @@ namespace ArgusTransfer.Serialization
 
         /// <summary>
         /// Asynchronously writes an <see cref="ArgusRequest"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>.
-        /// This method supports streaming bodies via chunked transfer encoding.
+        /// This method supports streaming bodies via chunked transfer encoding. The writer is flushed and the message is
+        /// written as bytes to its <see cref="StreamWriter.BaseStream"/>, so binary streamed bodies are preserved.
         /// </summary>
         /// <param name="writer">
         /// The <see cref="StreamWriter"/> to write to
@@ -192,49 +130,38 @@ namespace ArgusTransfer.Serialization
         /// </returns>
         public async Task WriteAsync(StreamWriter writer, ArgusRequest request, CancellationToken cancellationToken = default)
         {
-            if (!request.IsStreamed)
-            {
-                await writer.WriteAsync(this.Write(request));
-                await writer.FlushAsync(cancellationToken);
-                return;
-            }
+            ArgumentNullException.ThrowIfNull(writer);
 
-            var sb = new StringBuilder();
-
-            sb.Append(request.Verb.ToString());
-            sb.Append(' ');
-            sb.Append(request.Route);
-            sb.Append(ArgusQueryStringHelper.BuildQueryString(request.QueryParameters));
-            sb.Append(" ARGUS/1.0\r\n");
-
-            sb.Append(ArgusHeaderNames.CorrelationToken + ": ");
-            sb.Append(request.CorrelationToken.ToString());
-            sb.Append("\r\n");
-
-            sb.Append(ArgusHeaderNames.Timestamp + ": ");
-            sb.Append(request.Timestamp.ToString("o", CultureInfo.InvariantCulture));
-            sb.Append("\r\n");
-
-            foreach (var header in request.Headers)
-            {
-                sb.Append(header.Key);
-                sb.Append(": ");
-                sb.Append(header.Value);
-                sb.Append("\r\n");
-            }
-
-            if (!request.Headers.ContainsKey(ArgusHeaderNames.ContentType))
-            {
-                sb.Append(ArgusHeaderNames.ContentType + ": application/octet-stream\r\n");
-            }
-
-            sb.Append("Transfer-Encoding: chunked\r\n");
-            sb.Append("\r\n");
-
-            await writer.WriteAsync(sb.ToString());
             await writer.FlushAsync(cancellationToken);
+            await this.WriteAsync(writer.BaseStream, request, cancellationToken);
+        }
 
-            await ArgusChunkedEncoding.WriteChunkedAsync(request.BodyStream, writer, cancellationToken: cancellationToken);
+        /// <summary>
+        /// Asynchronously writes an <see cref="ArgusRequest"/> in ARGUS/1.0 wire format to a <see cref="Stream"/>.
+        /// The header block and a string body are encoded as UTF-8; a streamed body is copied as raw bytes using
+        /// chunked transfer encoding.
+        /// </summary>
+        /// <param name="stream">
+        /// The <see cref="Stream"/> to write to
+        /// </param>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> to serialize
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="stream"/> or <paramref name="request"/> is <c>null</c>
+        /// </exception>
+        public Task WriteAsync(Stream stream, ArgusRequest request, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            ArgumentNullException.ThrowIfNull(request);
+
+            return ArgusWireFormat.WriteAsync(stream, request, () => this.Write(request), () => BuildStreamedHead(request), cancellationToken);
         }
 
         /// <summary>
@@ -253,66 +180,8 @@ namespace ArgusTransfer.Serialization
         {
             using var reader = new StringReader(text);
 
-            var requestLine = reader.ReadLine();
-
-            if (string.IsNullOrWhiteSpace(requestLine))
-            {
-                throw new FormatException("Missing request line.");
-            }
-
-            var request = ParseRequestLine(requestLine);
-            var contentLength = -1;
-
-            string line;
-
-            while ((line = reader.ReadLine()) != null)
-            {
-                if (line.Length == 0)
-                {
-                    break;
-                }
-
-                contentLength = ParseHeader(line, request, contentLength);
-            }
-
-            var isChunked = request.Headers.TryGetValue("Transfer-Encoding", out var te)
-                && string.Equals(te, "chunked", StringComparison.OrdinalIgnoreCase);
-
-            if (isChunked)
-            {
-                request.BodyStream = ArgusChunkedEncoding.ReadChunked(reader, maxBodySize);
-            }
-            else
-            {
-                if (maxBodySize > 0 && contentLength > maxBodySize)
-                {
-                    throw new InvalidOperationException(
-                        $"Request body size {contentLength} bytes exceeds the maximum allowed size of {maxBodySize} bytes.");
-                }
-
-                if (contentLength > 0)
-                {
-                    var contentType = request.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
-                    var resolvedSerializer = this.ResolveSerializer(contentType);
-
-                    var bodyChars = new char[contentLength];
-                    var totalRead = 0;
-
-                    while (totalRead < contentLength)
-                    {
-                        var read = reader.Read(bodyChars, totalRead, contentLength - totalRead);
-
-                        if (read == 0)
-                        {
-                            break;
-                        }
-
-                        totalRead += read;
-                    }
-
-                    request.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
-                }
-            }
+            var request = ParseRequestLine(reader.ReadLine());
+            ArgusWireFormat.ReadHeadersAndBody(reader, request, maxBodySize, this.ResolveSerializer);
 
             return request;
         }
@@ -332,77 +201,102 @@ namespace ArgusTransfer.Serialization
         /// <returns>
         /// The deserialized <see cref="ArgusRequest"/>
         /// </returns>
-        public async Task<ArgusRequest> ReadAsync(StreamReader reader, CancellationToken cancellationToken, long maxBodySize = 0)
+        public Task<ArgusRequest> ReadAsync(StreamReader reader, CancellationToken cancellationToken, long maxBodySize = 0)
         {
-            var requestLine = await reader.ReadLineAsync(cancellationToken);
+            return this.ReadCoreAsync(new ArgusTextMessageSource(reader), maxBodySize, cancellationToken);
+        }
 
-            if (string.IsNullOrWhiteSpace(requestLine))
-            {
-                throw new FormatException("Missing request line.");
-            }
+        /// <summary>
+        /// Asynchronously deserializes an <see cref="ArgusRequest"/> from a <see cref="Stream"/>. <c>Content-Length</c>
+        /// and chunk sizes are honored as byte counts and a streamed body is read as raw bytes, so binary bodies are preserved.
+        /// </summary>
+        /// <param name="stream">
+        /// The <see cref="Stream"/> to read from. The method reads one message and may buffer bytes that belong to it only
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <param name="maxBodySize">
+        /// The maximum allowed body size in bytes. Pass 0 for no limit.
+        /// </param>
+        /// <returns>
+        /// The deserialized <see cref="ArgusRequest"/>
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="stream"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="FormatException">
+        /// Thrown when the request line is missing or malformed, or a chunk is malformed
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the body exceeds <paramref name="maxBodySize"/>
+        /// </exception>
+        /// <exception cref="EndOfStreamException">
+        /// Thrown when the stream ends before the complete body was received
+        /// </exception>
+        public Task<ArgusRequest> ReadAsync(Stream stream, CancellationToken cancellationToken, long maxBodySize = 0)
+        {
+            return this.ReadCoreAsync(new ArgusWireReader(stream), maxBodySize, cancellationToken);
+        }
 
-            var request = ParseRequestLine(requestLine);
-            var contentLength = -1;
+        /// <summary>
+        /// Appends the request line (e.g. "POST /healthendpoint ARGUS/1.0")
+        /// </summary>
+        /// <param name="sb">
+        /// The <see cref="StringBuilder"/> to append to
+        /// </param>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> whose verb, route and query parameters are written
+        /// </param>
+        private static void AppendRequestLine(StringBuilder sb, ArgusRequest request)
+        {
+            sb.Append(request.Verb.ToString());
+            sb.Append(' ');
+            sb.Append(request.Route);
+            sb.Append(ArgusQueryStringHelper.BuildQueryString(request.QueryParameters));
+            sb.Append(" ARGUS/1.0\r\n");
+        }
 
-            string line;
+        /// <summary>
+        /// Builds the request line and headers of a request with a streamed body, including the
+        /// <c>Transfer-Encoding: chunked</c> header and the empty line that ends the header block
+        /// </summary>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> with a streamed body
+        /// </param>
+        /// <returns>
+        /// The header block in ARGUS/1.0 wire format
+        /// </returns>
+        private static string BuildStreamedHead(ArgusRequest request)
+        {
+            var sb = new StringBuilder();
 
-            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
-            {
-                if (line.Length == 0)
-                {
-                    break;
-                }
+            AppendRequestLine(sb, request);
+            ArgusWireFormat.AppendStandardHeaders(sb, request);
+            ArgusWireFormat.AppendStreamedHeaderTail(sb, request);
 
-                contentLength = ParseHeader(line, request, contentLength);
-            }
-
-            var isChunked = request.Headers.TryGetValue("Transfer-Encoding", out var teValue)
-                && string.Equals(teValue, "chunked", StringComparison.OrdinalIgnoreCase);
-
-            if (isChunked)
-            {
-                request.BodyStream = await ArgusChunkedEncoding.ReadChunkedAsync(reader, maxBodySize, cancellationToken);
-            }
-            else
-            {
-                if (maxBodySize > 0 && contentLength > maxBodySize)
-                {
-                    throw new InvalidOperationException(
-                        $"Request body size {contentLength} bytes exceeds the maximum allowed size of {maxBodySize} bytes.");
-                }
-
-                if (contentLength > 0)
-                {
-                    var contentType = request.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
-                    var resolvedSerializer = this.ResolveSerializer(contentType);
-
-                    var bodyChars = new char[contentLength];
-                    var totalRead = 0;
-
-                    while (totalRead < contentLength)
-                    {
-                        var read = await reader.ReadAsync(bodyChars, totalRead, contentLength - totalRead);
-
-                        if (read == 0)
-                        {
-                            break;
-                        }
-
-                        totalRead += read;
-                    }
-
-                    request.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
-                }
-            }
-
-            return request;
+            return sb.ToString();
         }
 
         /// <summary>
         /// Parses the request line (e.g. "POST /healthendpoint ARGUS/1.0") into an <see cref="ArgusRequest"/>
         /// </summary>
+        /// <param name="requestLine">
+        /// The request line, or <c>null</c> when the input ended before it
+        /// </param>
+        /// <returns>
+        /// A new <see cref="ArgusRequest"/> with the verb, route and query parameters set
+        /// </returns>
+        /// <exception cref="FormatException">
+        /// Thrown when the request line is missing or malformed, or the verb is unknown
+        /// </exception>
         private static ArgusRequest ParseRequestLine(string requestLine)
         {
+            if (string.IsNullOrWhiteSpace(requestLine))
+            {
+                throw new FormatException("Missing request line.");
+            }
+
             var parts = requestLine.Split(' ');
 
             if (parts.Length < 3)
@@ -437,61 +331,40 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
-        /// Parses a single header line and applies it to the request
+        /// Reads a complete request from an <see cref="IArgusMessageSource"/>
         /// </summary>
-        private static int ParseHeader(string line, ArgusRequest request, int contentLength)
+        /// <param name="source">
+        /// The <see cref="IArgusMessageSource"/> to read from
+        /// </param>
+        /// <param name="maxBodySize">
+        /// The maximum allowed body size in bytes. A value of 0 disables the limit.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// The deserialized <see cref="ArgusRequest"/>
+        /// </returns>
+        private async Task<ArgusRequest> ReadCoreAsync(IArgusMessageSource source, long maxBodySize, CancellationToken cancellationToken)
         {
-            var colonIndex = line.IndexOf(':');
+            var request = ParseRequestLine(await source.ReadLineAsync(cancellationToken));
+            await ArgusWireFormat.ReadHeadersAndBodyAsync(source, request, maxBodySize, this.ResolveSerializer, cancellationToken);
 
-            if (colonIndex < 0)
-            {
-                return contentLength;
-            }
-
-            var name = line.AsSpan(0, colonIndex).Trim().ToString();
-            var value = line.AsSpan(colonIndex + 1).Trim().ToString();
-
-            if (string.Equals(name, ArgusHeaderNames.CorrelationToken, StringComparison.OrdinalIgnoreCase))
-            {
-                if (Guid.TryParse(value, out var guid))
-                {
-                    request.CorrelationToken = guid;
-                }
-            }
-            else if (string.Equals(name, ArgusHeaderNames.Timestamp, StringComparison.OrdinalIgnoreCase))
-            {
-                if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var timestamp))
-                {
-                    request.Timestamp = timestamp;
-                }
-            }
-            else if (string.Equals(name, ArgusHeaderNames.ContentLength, StringComparison.OrdinalIgnoreCase))
-            {
-                if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var length) && length >= 0)
-                {
-                    contentLength = length;
-                }
-            }
-            else
-            {
-                request.Headers[name] = value;
-            }
-
-            return contentLength;
+            return request;
         }
 
         /// <summary>
         /// Resolves the appropriate <see cref="IArgusBodySerializer"/> for the specified content type
         /// </summary>
+        /// <param name="contentType">
+        /// The content type to resolve, or <c>null</c>
+        /// </param>
+        /// <returns>
+        /// The serializer registered for <paramref name="contentType"/>, or the default serializer
+        /// </returns>
         private IArgusBodySerializer ResolveSerializer(string contentType)
         {
-            if (this.bodySerializerRegistry != null && contentType != null
-                && this.bodySerializerRegistry.TryGetSerializer(contentType, out var resolved))
-            {
-                return resolved;
-            }
-
-            return this.bodySerializer;
+            return ArgusWireFormat.ResolveSerializer(this.bodySerializerRegistry, this.bodySerializer, contentType);
         }
     }
 }

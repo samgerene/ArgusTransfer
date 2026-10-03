@@ -205,11 +205,7 @@ namespace ArgusTransfer.Server
 
                     try
                     {
-                        using var reader = new StreamReader(serverStream);
-                        await using var writer = new StreamWriter(serverStream);
-                        writer.AutoFlush = true;
-
-                        var request = await this.requestSerializer.ReadAsync(reader, requestToken, this.options.MaxRequestBodySize);
+                        var request = await this.requestSerializer.ReadAsync(serverStream, requestToken, this.options.MaxRequestBodySize);
 
                         if (!await this.concurrencySemaphore.WaitAsync(0))
                         {
@@ -226,7 +222,7 @@ namespace ArgusTransfer.Server
                                 Body = "Server concurrency limit reached"
                             };
 
-                            await this.responseSerializer.WriteAsync(writer, rejectResponse, requestToken);
+                            await this.responseSerializer.WriteAsync(serverStream, rejectResponse, requestToken);
                             return;
                         }
 
@@ -246,7 +242,7 @@ namespace ArgusTransfer.Server
                                     CorrelationToken = request.CorrelationToken
                                 };
 
-                                await this.responseSerializer.WriteAsync(writer, notAcceptable, requestToken);
+                                await this.responseSerializer.WriteAsync(serverStream, notAcceptable, requestToken);
                                 return;
                             }
                         }
@@ -277,7 +273,7 @@ namespace ArgusTransfer.Server
                                 Body = "Request processing timed out"
                             };
 
-                            await this.responseSerializer.WriteAsync(writer, timeoutResponse, requestToken);
+                            await this.responseSerializer.WriteAsync(serverStream, timeoutResponse, requestToken);
                             return;
                         }
                         catch (OperationCanceledException)
@@ -291,11 +287,11 @@ namespace ArgusTransfer.Server
 
                         if (!string.IsNullOrEmpty(request.Accept))
                         {
-                            await this.responseSerializer.WriteAsync(writer, context.Response, request.Accept, requestToken);
+                            await this.responseSerializer.WriteAsync(serverStream, context.Response, request.Accept, requestToken);
                         }
                         else
                         {
-                            await this.responseSerializer.WriteAsync(writer, context.Response, requestToken);
+                            await this.responseSerializer.WriteAsync(serverStream, context.Response, requestToken);
                         }
                     }
                     catch (InvalidOperationException ex)
@@ -304,16 +300,13 @@ namespace ArgusTransfer.Server
 
                         try
                         {
-                            await using var errorWriter = new StreamWriter(serverStream);
-                            errorWriter.AutoFlush = true;
-
                             var badRequest = new ArgusResponse
                             {
                                 StatusCode = ArgusStatusCode.BadRequest,
                                 Body = ex.Message
                             };
 
-                            await this.responseSerializer.WriteAsync(errorWriter, badRequest, requestToken);
+                            await this.responseSerializer.WriteAsync(serverStream, badRequest, requestToken);
                         }
                         catch
                         {

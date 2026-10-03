@@ -191,5 +191,214 @@ namespace ArgusTransfer.Tests.Serialization
                 Throws.TypeOf<InvalidOperationException>()
                     .With.Message.Contains("maximum allowed size"));
         }
+
+        private static byte[] AllByteValues()
+        {
+            var bytes = new byte[256];
+
+            for (var i = 0; i < bytes.Length; i++)
+            {
+                bytes[i] = (byte)i;
+            }
+
+            return bytes;
+        }
+
+        private static byte[] ToArray(Stream stream)
+        {
+            using var copy = new MemoryStream();
+            stream.CopyTo(copy);
+            return copy.ToArray();
+        }
+
+        [Test]
+        public async Task Verify_that_non_ascii_string_body_round_trips_via_Stream_overloads()
+        {
+            const string body = "héllo wörld € 😀";
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/echo", Body = body };
+
+            using var stream = new MemoryStream();
+            await this.serializer.WriteAsync(stream, request);
+
+            var wire = Encoding.UTF8.GetString(stream.ToArray());
+            Assert.That(wire, Does.Contain($"Content-Length: {Encoding.UTF8.GetByteCount(body)}\r\n"));
+
+            stream.Position = 0;
+            var result = await this.serializer.ReadAsync(stream, CancellationToken.None);
+
+            Assert.That(result.Body, Is.EqualTo(body));
+        }
+
+        [Test]
+        public async Task Verify_that_binary_streamed_body_round_trips_via_Stream_overloads()
+        {
+            var payload = AllByteValues();
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/upload", BodyStream = new MemoryStream(payload) };
+
+            using var stream = new MemoryStream();
+            await this.serializer.WriteAsync(stream, request);
+            stream.Position = 0;
+
+            var result = await this.serializer.ReadAsync(stream, CancellationToken.None);
+
+            Assert.That(ToArray(result.BodyStream), Is.EqualTo(payload));
+        }
+
+        [Test]
+        public async Task Verify_that_large_binary_streamed_body_spanning_many_chunks_round_trips()
+        {
+            var payload = new byte[100_000];
+            new Random(7).NextBytes(payload);
+            var request = new ArgusRequest { Verb = ArgusVerb.PUT, Route = "/upload", BodyStream = new MemoryStream(payload) };
+
+            using var stream = new MemoryStream();
+            await this.serializer.WriteAsync(stream, request);
+            stream.Position = 0;
+
+            var result = await this.serializer.ReadAsync(stream, CancellationToken.None);
+
+            Assert.That(ToArray(result.BodyStream), Is.EqualTo(payload));
+        }
+
+        [Test]
+        public async Task Verify_that_multibyte_text_split_across_chunk_boundaries_round_trips()
+        {
+            // 8191 ASCII bytes followed by multi-byte characters forces a character to straddle the 8 KiB chunk boundary
+            var text = new string('a', 8191) + "€€€ héllo";
+            var payload = Encoding.UTF8.GetBytes(text);
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/upload", BodyStream = new MemoryStream(payload) };
+
+            using var stream = new MemoryStream();
+            await this.serializer.WriteAsync(stream, request);
+            stream.Position = 0;
+
+            var result = await this.serializer.ReadAsync(stream, CancellationToken.None);
+
+            Assert.That(Encoding.UTF8.GetString(ToArray(result.BodyStream)), Is.EqualTo(text));
+        }
+
+        [Test]
+        public async Task Verify_that_StreamWriter_overload_writes_binary_streamed_body_byte_safe()
+        {
+            var payload = AllByteValues();
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/upload", BodyStream = new MemoryStream(payload) };
+
+            using var stream = new MemoryStream();
+            await using (var writer = new StreamWriter(stream, new UTF8Encoding(false), leaveOpen: true))
+            {
+                await this.serializer.WriteAsync(writer, request);
+            }
+
+            stream.Position = 0;
+            var result = await this.serializer.ReadAsync(stream, CancellationToken.None);
+
+            Assert.That(ToArray(result.BodyStream), Is.EqualTo(payload));
+        }
+
+        [Test]
+        public async Task Verify_that_Stream_overload_accepts_LF_only_line_endings()
+        {
+            var wire = "POST /echo ARGUS/1.0\nContent-Length: 5\n\nhello";
+
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(wire));
+            var result = await this.serializer.ReadAsync(stream, CancellationToken.None);
+
+            Assert.That(result.Verb, Is.EqualTo(ArgusVerb.POST));
+            Assert.That(result.Body, Is.EqualTo("hello"));
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_throws_EndOfStreamException_for_truncated_body()
+        {
+            var wire = "POST /echo ARGUS/1.0\r\nContent-Length: 50\r\n\r\nonly part of the body";
+
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(wire));
+
+            Assert.That(async () => await this.serializer.ReadAsync(stream, CancellationToken.None), Throws.TypeOf<EndOfStreamException>());
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_throws_EndOfStreamException_for_truncated_chunked_body()
+        {
+            var wire = "POST /upload ARGUS/1.0\r\nTransfer-Encoding: chunked\r\n\r\n10\r\nshort";
+
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(wire));
+
+            Assert.That(async () => await this.serializer.ReadAsync(stream, CancellationToken.None), Throws.TypeOf<EndOfStreamException>());
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_throws_FormatException_for_chunk_without_terminator()
+        {
+            var wire = "POST /upload ARGUS/1.0\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabcXYZ\r\n0\r\n\r\n";
+
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(wire));
+
+            Assert.That(async () => await this.serializer.ReadAsync(stream, CancellationToken.None), Throws.TypeOf<FormatException>());
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_throws_FormatException_for_empty_stream()
+        {
+            using var stream = new MemoryStream();
+
+            Assert.That(async () => await this.serializer.ReadAsync(stream, CancellationToken.None), Throws.TypeOf<FormatException>());
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_enforces_max_body_size_for_Content_Length()
+        {
+            var wire = "POST /echo ARGUS/1.0\r\nContent-Length: 100\r\n\r\n";
+
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(wire));
+
+            Assert.That(
+                async () => await this.serializer.ReadAsync(stream, CancellationToken.None, maxBodySize: 10),
+                Throws.TypeOf<InvalidOperationException>().With.Message.Contains("maximum allowed size"));
+        }
+
+        [Test]
+        public async Task Verify_that_Stream_overload_enforces_max_body_size_for_chunked_body()
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/upload", BodyStream = new MemoryStream(new byte[100]) };
+
+            using var stream = new MemoryStream();
+            await this.serializer.WriteAsync(stream, request);
+            stream.Position = 0;
+
+            Assert.That(
+                async () => await this.serializer.ReadAsync(stream, CancellationToken.None, maxBodySize: 10),
+                Throws.TypeOf<InvalidOperationException>().With.Message.Contains("maximum allowed size"));
+        }
+
+        [Test]
+        public async Task Verify_that_StreamReader_overload_counts_Content_Length_in_bytes()
+        {
+            // "héllo" is 5 characters but 6 bytes; the trailing data must not be read into the body
+            var wire = "POST /echo ARGUS/1.0\r\nContent-Length: 6\r\n\r\nhélloEXTRA";
+
+            using var reader = new StreamReader(new MemoryStream(Encoding.UTF8.GetBytes(wire)));
+            var result = await this.serializer.ReadAsync(reader, CancellationToken.None);
+
+            Assert.That(result.Body, Is.EqualTo("héllo"));
+        }
+
+        [Test]
+        public void Verify_that_string_Read_counts_Content_Length_in_bytes()
+        {
+            var wire = "POST /echo ARGUS/1.0\r\nContent-Length: 6\r\n\r\nhélloEXTRA";
+
+            var result = this.serializer.Read(wire);
+
+            Assert.That(result.Body, Is.EqualTo("héllo"));
+        }
+
+        [Test]
+        public void Verify_that_Stream_overloads_throw_for_null_arguments()
+        {
+            Assert.That(async () => await this.serializer.WriteAsync((Stream)null, new ArgusRequest()), Throws.TypeOf<ArgumentNullException>());
+            Assert.That(async () => await this.serializer.WriteAsync(new MemoryStream(), null), Throws.TypeOf<ArgumentNullException>());
+            Assert.That(async () => await this.serializer.ReadAsync((Stream)null, CancellationToken.None), Throws.TypeOf<ArgumentNullException>());
+        }
     }
 }

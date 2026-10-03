@@ -148,5 +148,117 @@ namespace ArgusTransfer.Tests.Serialization
 
             Assert.That(text, Does.Contain("Content-Type: application/octet-stream\r\n"));
         }
+
+        private static byte[] ToArray(Stream stream)
+        {
+            using var copy = new MemoryStream();
+            stream.CopyTo(copy);
+            return copy.ToArray();
+        }
+
+        [Test]
+        public async Task Verify_that_non_ascii_string_body_round_trips_via_Stream_overloads()
+        {
+            const string body = "héllo wörld € 😀";
+            var response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = body };
+
+            using var stream = new MemoryStream();
+            await this.serializer.WriteAsync(stream, response);
+            stream.Position = 0;
+
+            var result = await this.serializer.ReadAsync(stream, CancellationToken.None);
+
+            Assert.That(result.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(result.Body, Is.EqualTo(body));
+        }
+
+        [Test]
+        public async Task Verify_that_binary_streamed_body_round_trips_via_Stream_overloads()
+        {
+            var payload = new byte[256];
+
+            for (var i = 0; i < payload.Length; i++)
+            {
+                payload[i] = (byte)i;
+            }
+
+            var response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, BodyStream = new MemoryStream(payload) };
+
+            using var stream = new MemoryStream();
+            await this.serializer.WriteAsync(stream, response);
+            stream.Position = 0;
+
+            var result = await this.serializer.ReadAsync(stream, CancellationToken.None);
+
+            Assert.That(ToArray(result.BodyStream), Is.EqualTo(payload));
+        }
+
+        [Test]
+        public async Task Verify_that_Stream_overload_with_accept_sets_content_type_and_round_trips()
+        {
+            var response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = "héllo" };
+
+            using var stream = new MemoryStream();
+            await this.serializer.WriteAsync(stream, response, "text/plain");
+            stream.Position = 0;
+
+            var result = await this.serializer.ReadAsync(stream, CancellationToken.None);
+
+            Assert.That(result.Headers[ArgusHeaderNames.ContentType], Is.EqualTo("text/plain"));
+            Assert.That(result.Body, Is.EqualTo("héllo"));
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_throws_EndOfStreamException_for_empty_stream()
+        {
+            using var stream = new MemoryStream();
+
+            Assert.That(async () => await this.serializer.ReadAsync(stream, CancellationToken.None), Throws.TypeOf<EndOfStreamException>());
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_throws_FormatException_for_blank_status_line()
+        {
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes("   \r\n\r\n"));
+
+            Assert.That(async () => await this.serializer.ReadAsync(stream, CancellationToken.None), Throws.TypeOf<FormatException>());
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_throws_EndOfStreamException_for_truncated_body()
+        {
+            var wire = "ARGUS/1.0 200 OK\r\nContent-Length: 50\r\n\r\npartial";
+
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(wire));
+
+            Assert.That(async () => await this.serializer.ReadAsync(stream, CancellationToken.None), Throws.TypeOf<EndOfStreamException>());
+        }
+
+        [Test]
+        public async Task Verify_that_StreamReader_overload_counts_Content_Length_in_bytes()
+        {
+            var wire = "ARGUS/1.0 200 OK\r\nContent-Length: 6\r\n\r\nhélloEXTRA";
+
+            using var reader = new StreamReader(new MemoryStream(Encoding.UTF8.GetBytes(wire)));
+            var result = await this.serializer.ReadAsync(reader, CancellationToken.None);
+
+            Assert.That(result.Body, Is.EqualTo("héllo"));
+        }
+
+        [Test]
+        public void Verify_that_string_Read_counts_Content_Length_in_bytes()
+        {
+            var result = this.serializer.Read("ARGUS/1.0 200 OK\r\nContent-Length: 6\r\n\r\nhélloEXTRA");
+
+            Assert.That(result.Body, Is.EqualTo("héllo"));
+        }
+
+        [Test]
+        public void Verify_that_Stream_overloads_throw_for_null_arguments()
+        {
+            Assert.That(async () => await this.serializer.WriteAsync((Stream)null, new ArgusResponse()), Throws.TypeOf<ArgumentNullException>());
+            Assert.That(async () => await this.serializer.WriteAsync(new MemoryStream(), (ArgusResponse)null), Throws.TypeOf<ArgumentNullException>());
+            Assert.That(async () => await this.serializer.ReadAsync((Stream)null, CancellationToken.None), Throws.TypeOf<ArgumentNullException>());
+        }
     }
 }
