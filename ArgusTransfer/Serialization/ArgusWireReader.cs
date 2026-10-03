@@ -32,7 +32,7 @@ namespace ArgusTransfer.Serialization
     /// Reads from the underlying stream only when more bytes are needed for the current message, so it never blocks
     /// waiting for data beyond the end of the message.
     /// </summary>
-    internal sealed class ArgusWireReader
+    internal sealed class ArgusWireReader : IArgusMessageSource
     {
         /// <summary>
         /// The size of the internal read buffer in bytes
@@ -145,6 +145,46 @@ namespace ArgusTransfer.Serialization
                 this.position += count;
                 filled += count;
             }
+        }
+
+        /// <summary>
+        /// Reads exactly <paramref name="byteCount"/> body bytes and decodes them as UTF-8
+        /// </summary>
+        /// <param name="byteCount">
+        /// The body length in bytes
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// The body text
+        /// </returns>
+        /// <exception cref="EndOfStreamException">
+        /// Thrown when the stream ends before <paramref name="byteCount"/> bytes were read
+        /// </exception>
+        public async Task<string> ReadBodyAsync(int byteCount, CancellationToken cancellationToken)
+        {
+            var bodyBytes = new byte[byteCount];
+            await this.ReadExactlyAsync(bodyBytes.AsMemory(), cancellationToken);
+
+            return Encoding.UTF8.GetString(bodyBytes);
+        }
+
+        /// <summary>
+        /// Reads a body in chunked transfer encoding as raw bytes
+        /// </summary>
+        /// <param name="maxBodySize">
+        /// The maximum allowed body size in bytes. A value of 0 disables the limit.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="MemoryStream"/> containing the de-chunked data, positioned at the beginning
+        /// </returns>
+        public Task<MemoryStream> ReadChunkedAsync(long maxBodySize, CancellationToken cancellationToken)
+        {
+            return ArgusChunkedEncoding.ReadChunkedAsync(this, maxBodySize, cancellationToken);
         }
 
         /// <summary>

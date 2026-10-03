@@ -87,10 +87,7 @@ namespace ArgusTransfer.Serialization
         /// </returns>
         public string Write(ArgusResponse response)
         {
-            var contentType = response.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
-            var resolvedSerializer = this.ResolveSerializer(contentType);
-
-            return WriteCore(response, resolvedSerializer);
+            return WriteCore(response, this.ResolveSerializer(ArgusWireFormat.GetContentType(response)));
         }
 
         /// <summary>
@@ -178,6 +175,34 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
+        /// Asynchronously writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>
+        /// using a serializer resolved from the specified accept content type. The writer is flushed and the message is
+        /// written as bytes to its <see cref="StreamWriter.BaseStream"/>, so binary streamed bodies are preserved.
+        /// </summary>
+        /// <param name="writer">
+        /// The <see cref="StreamWriter"/> to write to
+        /// </param>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> to serialize
+        /// </param>
+        /// <param name="acceptContentType">
+        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        public async Task WriteAsync(StreamWriter writer, ArgusResponse response, string acceptContentType, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(writer);
+
+            await writer.FlushAsync(cancellationToken);
+            await this.WriteAsync(writer.BaseStream, response, acceptContentType, cancellationToken);
+        }
+
+        /// <summary>
         /// Asynchronously writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="Stream"/>.
         /// The header block and a string body are encoded as UTF-8; a streamed body is copied as raw bytes using
         /// chunked transfer encoding.
@@ -202,9 +227,7 @@ namespace ArgusTransfer.Serialization
             ArgumentNullException.ThrowIfNull(stream);
             ArgumentNullException.ThrowIfNull(response);
 
-            return response.IsStreamed
-                ? WriteStreamedAsync(stream, response, cancellationToken)
-                : WriteBytesAsync(stream, this.Write(response), cancellationToken);
+            return ArgusWireFormat.WriteAsync(stream, response, () => this.Write(response), () => BuildStreamedHead(response), cancellationToken);
         }
 
         /// <summary>
@@ -235,126 +258,7 @@ namespace ArgusTransfer.Serialization
             ArgumentNullException.ThrowIfNull(stream);
             ArgumentNullException.ThrowIfNull(response);
 
-            return response.IsStreamed
-                ? WriteStreamedAsync(stream, response, cancellationToken)
-                : WriteBytesAsync(stream, this.Write(response, acceptContentType), cancellationToken);
-        }
-
-        /// <summary>
-        /// Encodes a serialized message as UTF-8, writes it to a <see cref="Stream"/> and flushes the stream
-        /// </summary>
-        /// <param name="stream">
-        /// The <see cref="Stream"/> to write to
-        /// </param>
-        /// <param name="message">
-        /// The serialized message
-        /// </param>
-        /// <param name="cancellationToken">
-        /// The <see cref="CancellationToken"/> used to signal cancellation
-        /// </param>
-        /// <returns>
-        /// A <see cref="Task"/> representing the asynchronous operation
-        /// </returns>
-        private static async Task WriteBytesAsync(Stream stream, string message, CancellationToken cancellationToken)
-        {
-            await stream.WriteAsync(Encoding.UTF8.GetBytes(message).AsMemory(), cancellationToken);
-            await stream.FlushAsync(cancellationToken);
-        }
-
-        /// <summary>
-        /// Writes the header block of a response with a streamed body, followed by the body as raw bytes in chunked transfer encoding
-        /// </summary>
-        /// <param name="stream">
-        /// The <see cref="Stream"/> to write to
-        /// </param>
-        /// <param name="response">
-        /// The <see cref="ArgusResponse"/> with a streamed body
-        /// </param>
-        /// <param name="cancellationToken">
-        /// The <see cref="CancellationToken"/> used to signal cancellation
-        /// </param>
-        /// <returns>
-        /// A <see cref="Task"/> representing the asynchronous operation
-        /// </returns>
-        private static async Task WriteStreamedAsync(Stream stream, ArgusResponse response, CancellationToken cancellationToken)
-        {
-            await stream.WriteAsync(Encoding.UTF8.GetBytes(BuildStreamedHead(response)).AsMemory(), cancellationToken);
-            await ArgusChunkedEncoding.WriteChunkedAsync(response.BodyStream, stream, cancellationToken: cancellationToken);
-        }
-
-        /// <summary>
-        /// Builds the status line and headers of a response with a streamed body, including the
-        /// <c>Transfer-Encoding: chunked</c> header and the empty line that ends the header block
-        /// </summary>
-        /// <param name="response">
-        /// The <see cref="ArgusResponse"/> with a streamed body
-        /// </param>
-        /// <returns>
-        /// The header block in ARGUS/1.0 wire format
-        /// </returns>
-        private static string BuildStreamedHead(ArgusResponse response)
-        {
-            var sb = new StringBuilder();
-
-            sb.Append("ARGUS/1.0 ");
-            sb.Append(((int)response.StatusCode).ToString(CultureInfo.InvariantCulture));
-            sb.Append(' ');
-            sb.Append(response.StatusCode.ToReasonPhrase());
-            sb.Append("\r\n");
-
-            sb.Append(ArgusHeaderNames.CorrelationToken + ": ");
-            sb.Append(response.CorrelationToken.ToString());
-            sb.Append("\r\n");
-
-            sb.Append(ArgusHeaderNames.Timestamp + ": ");
-            sb.Append(response.Timestamp.ToString("o", CultureInfo.InvariantCulture));
-            sb.Append("\r\n");
-
-            foreach (var header in response.Headers)
-            {
-                sb.Append(header.Key);
-                sb.Append(": ");
-                sb.Append(header.Value);
-                sb.Append("\r\n");
-            }
-
-            if (!response.Headers.ContainsKey(ArgusHeaderNames.ContentType))
-            {
-                sb.Append(ArgusHeaderNames.ContentType + ": application/octet-stream\r\n");
-            }
-
-            sb.Append("Transfer-Encoding: chunked\r\n");
-            sb.Append("\r\n");
-
-            return sb.ToString();
-        }
-
-        /// <summary>
-        /// Asynchronously writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>
-        /// using a serializer resolved from the specified accept content type. The writer is flushed and the message is
-        /// written as bytes to its <see cref="StreamWriter.BaseStream"/>, so binary streamed bodies are preserved.
-        /// </summary>
-        /// <param name="writer">
-        /// The <see cref="StreamWriter"/> to write to
-        /// </param>
-        /// <param name="response">
-        /// The <see cref="ArgusResponse"/> to serialize
-        /// </param>
-        /// <param name="acceptContentType">
-        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
-        /// </param>
-        /// <param name="cancellationToken">
-        /// The <see cref="CancellationToken"/> used to signal cancellation
-        /// </param>
-        /// <returns>
-        /// A <see cref="Task"/> representing the asynchronous operation
-        /// </returns>
-        public async Task WriteAsync(StreamWriter writer, ArgusResponse response, string acceptContentType, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(writer);
-
-            await writer.FlushAsync(cancellationToken);
-            await this.WriteAsync(writer.BaseStream, response, acceptContentType, cancellationToken);
+            return ArgusWireFormat.WriteAsync(stream, response, () => this.Write(response, acceptContentType), () => BuildStreamedHead(response), cancellationToken);
         }
 
         /// <summary>
@@ -370,42 +274,8 @@ namespace ArgusTransfer.Serialization
         {
             using var reader = new StringReader(text);
 
-            var statusLine = reader.ReadLine();
-
-            if (string.IsNullOrWhiteSpace(statusLine))
-            {
-                throw new FormatException("Missing status line.");
-            }
-
-            var response = ParseStatusLine(statusLine);
-            var contentLength = -1;
-
-            string line;
-
-            while ((line = reader.ReadLine()) != null)
-            {
-                if (line.Length == 0)
-                {
-                    break;
-                }
-
-                contentLength = ParseHeader(line, response, contentLength);
-            }
-
-            var isChunked = response.Headers.TryGetValue("Transfer-Encoding", out var te)
-                && string.Equals(te, "chunked", StringComparison.OrdinalIgnoreCase);
-
-            if (isChunked)
-            {
-                response.BodyStream = ArgusChunkedEncoding.ReadChunked(reader);
-            }
-            else if (contentLength > 0)
-            {
-                var contentType = response.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
-                var resolvedSerializer = this.ResolveSerializer(contentType);
-
-                response.Body = resolvedSerializer.ReadBody(ArgusTextBodyReader.Read(reader, contentLength));
-            }
+            var response = ParseStatusLine(reader.ReadLine());
+            ArgusWireFormat.ReadHeadersAndBody(reader, response, 0, this.ResolveSerializer);
 
             return response;
         }
@@ -428,51 +298,9 @@ namespace ArgusTransfer.Serialization
         /// <exception cref="FormatException">
         /// Thrown when the status line is empty or malformed
         /// </exception>
-        public async Task<ArgusResponse> ReadAsync(StreamReader reader, CancellationToken cancellationToken)
+        public Task<ArgusResponse> ReadAsync(StreamReader reader, CancellationToken cancellationToken)
         {
-            var statusLine = await reader.ReadLineAsync(cancellationToken);
-
-            if (statusLine == null)
-            {
-                throw new EndOfStreamException("The stream ended before a status line was received.");
-            }
-
-            if (string.IsNullOrWhiteSpace(statusLine))
-            {
-                throw new FormatException("Missing status line.");
-            }
-
-            var response = ParseStatusLine(statusLine);
-            var contentLength = -1;
-
-            string line;
-
-            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
-            {
-                if (line.Length == 0)
-                {
-                    break;
-                }
-
-                contentLength = ParseHeader(line, response, contentLength);
-            }
-
-            var isChunked = response.Headers.TryGetValue("Transfer-Encoding", out var teValue)
-                && string.Equals(teValue, "chunked", StringComparison.OrdinalIgnoreCase);
-
-            if (isChunked)
-            {
-                response.BodyStream = await ArgusChunkedEncoding.ReadChunkedAsync(reader, cancellationToken: cancellationToken);
-            }
-            else if (contentLength > 0)
-            {
-                var contentType = response.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
-                var resolvedSerializer = this.ResolveSerializer(contentType);
-
-                response.Body = resolvedSerializer.ReadBody(await ArgusTextBodyReader.ReadAsync(reader, contentLength, cancellationToken));
-            }
-
-            return response;
+            return this.ReadCoreAsync(new ArgusTextMessageSource(reader), cancellationToken);
         }
 
         /// <summary>
@@ -497,64 +325,92 @@ namespace ArgusTransfer.Serialization
         /// <exception cref="FormatException">
         /// Thrown when the status line is empty or malformed, or a chunk is malformed
         /// </exception>
-        public async Task<ArgusResponse> ReadAsync(Stream stream, CancellationToken cancellationToken)
+        public Task<ArgusResponse> ReadAsync(Stream stream, CancellationToken cancellationToken)
         {
-            ArgumentNullException.ThrowIfNull(stream);
+            return this.ReadCoreAsync(new ArgusWireReader(stream), cancellationToken);
+        }
 
-            var reader = new ArgusWireReader(stream);
-            var statusLine = await reader.ReadLineAsync(cancellationToken);
+        /// <summary>
+        /// Appends the status line (e.g. "ARGUS/1.0 200 OK")
+        /// </summary>
+        /// <param name="sb">
+        /// The <see cref="StringBuilder"/> to append to
+        /// </param>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> whose status code is written
+        /// </param>
+        private static void AppendStatusLine(StringBuilder sb, ArgusResponse response)
+        {
+            sb.Append("ARGUS/1.0 ");
+            sb.Append(((int)response.StatusCode).ToString(CultureInfo.InvariantCulture));
+            sb.Append(' ');
+            sb.Append(response.StatusCode.ToReasonPhrase());
+            sb.Append("\r\n");
+        }
 
-            if (statusLine == null)
-            {
-                throw new EndOfStreamException("The stream ended before a status line was received.");
-            }
+        /// <summary>
+        /// Core write logic that serializes an <see cref="ArgusResponse"/> using the specified serializer
+        /// </summary>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> to serialize
+        /// </param>
+        /// <param name="serializer">
+        /// The <see cref="IArgusBodySerializer"/> used for a string body
+        /// </param>
+        /// <returns>
+        /// The response in ARGUS/1.0 wire format
+        /// </returns>
+        private static string WriteCore(ArgusResponse response, IArgusBodySerializer serializer)
+        {
+            var sb = new StringBuilder();
 
-            if (string.IsNullOrWhiteSpace(statusLine))
-            {
-                throw new FormatException("Missing status line.");
-            }
+            AppendStatusLine(sb, response);
+            ArgusWireFormat.AppendStandardHeaders(sb, response);
+            ArgusWireFormat.AppendBody(sb, response, serializer);
 
-            var response = ParseStatusLine(statusLine);
-            var contentLength = -1;
+            return sb.ToString();
+        }
 
-            string line;
+        /// <summary>
+        /// Builds the status line and headers of a response with a streamed body, including the
+        /// <c>Transfer-Encoding: chunked</c> header and the empty line that ends the header block
+        /// </summary>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> with a streamed body
+        /// </param>
+        /// <returns>
+        /// The header block in ARGUS/1.0 wire format
+        /// </returns>
+        private static string BuildStreamedHead(ArgusResponse response)
+        {
+            var sb = new StringBuilder();
 
-            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
-            {
-                if (line.Length == 0)
-                {
-                    break;
-                }
+            AppendStatusLine(sb, response);
+            ArgusWireFormat.AppendStandardHeaders(sb, response);
+            ArgusWireFormat.AppendStreamedHeaderTail(sb, response);
 
-                contentLength = ParseHeader(line, response, contentLength);
-            }
-
-            var isChunked = response.Headers.TryGetValue("Transfer-Encoding", out var teValue)
-                && string.Equals(teValue, "chunked", StringComparison.OrdinalIgnoreCase);
-
-            if (isChunked)
-            {
-                response.BodyStream = await ArgusChunkedEncoding.ReadChunkedAsync(reader, cancellationToken: cancellationToken);
-            }
-            else if (contentLength > 0)
-            {
-                var contentType = response.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
-                var resolvedSerializer = this.ResolveSerializer(contentType);
-
-                var bodyBytes = new byte[contentLength];
-                await reader.ReadExactlyAsync(bodyBytes.AsMemory(), cancellationToken);
-
-                response.Body = resolvedSerializer.ReadBody(Encoding.UTF8.GetString(bodyBytes));
-            }
-
-            return response;
+            return sb.ToString();
         }
 
         /// <summary>
         /// Parses the status line (e.g. "ARGUS/1.0 200 OK") into an <see cref="ArgusResponse"/>
         /// </summary>
+        /// <param name="statusLine">
+        /// The status line, or <c>null</c> when the input ended before it
+        /// </param>
+        /// <returns>
+        /// A new <see cref="ArgusResponse"/> with the status code set
+        /// </returns>
+        /// <exception cref="FormatException">
+        /// Thrown when the status line is missing or malformed, or the status code is unknown
+        /// </exception>
         private static ArgusResponse ParseStatusLine(string statusLine)
         {
+            if (string.IsNullOrWhiteSpace(statusLine))
+            {
+                throw new FormatException("Missing status line.");
+            }
+
             var firstSpace = statusLine.IndexOf(' ');
 
             if (firstSpace < 0)
@@ -589,134 +445,43 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
-        /// Parses a single header line and applies it to the response
+        /// Reads a complete response from an <see cref="IArgusMessageSource"/>
         /// </summary>
-        private static int ParseHeader(string line, ArgusResponse response, int contentLength)
+        /// <param name="source">
+        /// The <see cref="IArgusMessageSource"/> to read from
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// The deserialized <see cref="ArgusResponse"/>
+        /// </returns>
+        /// <exception cref="EndOfStreamException">
+        /// Thrown when the input ends before a status line is received
+        /// </exception>
+        private async Task<ArgusResponse> ReadCoreAsync(IArgusMessageSource source, CancellationToken cancellationToken)
         {
-            var colonIndex = line.IndexOf(':');
+            var statusLine = await source.ReadLineAsync(cancellationToken)
+                ?? throw new EndOfStreamException("The stream ended before a status line was received.");
 
-            if (colonIndex < 0)
-            {
-                return contentLength;
-            }
+            var response = ParseStatusLine(statusLine);
+            await ArgusWireFormat.ReadHeadersAndBodyAsync(source, response, 0, this.ResolveSerializer, cancellationToken);
 
-            var name = line.AsSpan(0, colonIndex).Trim().ToString();
-            var value = line.AsSpan(colonIndex + 1).Trim().ToString();
-
-            if (string.Equals(name, ArgusHeaderNames.CorrelationToken, StringComparison.OrdinalIgnoreCase))
-            {
-                if (Guid.TryParse(value, out var guid))
-                {
-                    response.CorrelationToken = guid;
-                }
-            }
-            else if (string.Equals(name, ArgusHeaderNames.Timestamp, StringComparison.OrdinalIgnoreCase))
-            {
-                if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var timestamp))
-                {
-                    response.Timestamp = timestamp;
-                }
-            }
-            else if (string.Equals(name, ArgusHeaderNames.ContentLength, StringComparison.OrdinalIgnoreCase))
-            {
-                if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var length) && length >= 0)
-                {
-                    contentLength = length;
-                }
-            }
-            else
-            {
-                response.Headers[name] = value;
-            }
-
-            return contentLength;
-        }
-
-        /// <summary>
-        /// Core write logic that serializes an <see cref="ArgusResponse"/> using the specified serializer
-        /// </summary>
-        private static string WriteCore(ArgusResponse response, IArgusBodySerializer serializer)
-        {
-            var sb = new StringBuilder();
-
-            sb.Append("ARGUS/1.0 ");
-            sb.Append(((int)response.StatusCode).ToString(CultureInfo.InvariantCulture));
-            sb.Append(' ');
-            sb.Append(response.StatusCode.ToReasonPhrase());
-            sb.Append("\r\n");
-
-            sb.Append(ArgusHeaderNames.CorrelationToken + ": ");
-            sb.Append(response.CorrelationToken.ToString());
-            sb.Append("\r\n");
-
-            sb.Append(ArgusHeaderNames.Timestamp + ": ");
-            sb.Append(response.Timestamp.ToString("o", CultureInfo.InvariantCulture));
-            sb.Append("\r\n");
-
-            foreach (var header in response.Headers)
-            {
-                sb.Append(header.Key);
-                sb.Append(": ");
-                sb.Append(header.Value);
-                sb.Append("\r\n");
-            }
-
-            string serializedBody = null;
-
-            if (response.IsStreamed)
-            {
-                if (!response.Headers.ContainsKey(ArgusHeaderNames.ContentType))
-                {
-                    sb.Append(ArgusHeaderNames.ContentType + ": application/octet-stream\r\n");
-                }
-
-                sb.Append("Transfer-Encoding: chunked\r\n");
-                sb.Append("\r\n");
-
-                ArgusChunkedEncoding.WriteChunked(response.BodyStream, sb);
-            }
-            else
-            {
-                if (!string.IsNullOrEmpty(response.Body))
-                {
-                    serializedBody = serializer.WriteBody(response.Body);
-                    var bodyBytes = Encoding.UTF8.GetByteCount(serializedBody);
-
-                    if (!response.Headers.ContainsKey(ArgusHeaderNames.ContentType))
-                    {
-                        sb.Append(ArgusHeaderNames.ContentType + ": ");
-                        sb.Append(serializer.ContentType);
-                        sb.Append("\r\n");
-                    }
-
-                    sb.Append(ArgusHeaderNames.ContentLength + ": ");
-                    sb.Append(bodyBytes.ToString(CultureInfo.InvariantCulture));
-                    sb.Append("\r\n");
-                }
-
-                sb.Append("\r\n");
-
-                if (serializedBody != null)
-                {
-                    sb.Append(serializedBody);
-                }
-            }
-
-            return sb.ToString();
+            return response;
         }
 
         /// <summary>
         /// Resolves the appropriate <see cref="IArgusBodySerializer"/> for the specified content type
         /// </summary>
+        /// <param name="contentType">
+        /// The content type to resolve, or <c>null</c>
+        /// </param>
+        /// <returns>
+        /// The serializer registered for <paramref name="contentType"/>, or the default serializer
+        /// </returns>
         private IArgusBodySerializer ResolveSerializer(string contentType)
         {
-            if (this.bodySerializerRegistry != null && contentType != null
-                && this.bodySerializerRegistry.TryGetSerializer(contentType, out var resolved))
-            {
-                return resolved;
-            }
-
-            return this.bodySerializer;
+            return ArgusWireFormat.ResolveSerializer(this.bodySerializerRegistry, this.bodySerializer, contentType);
         }
     }
 }

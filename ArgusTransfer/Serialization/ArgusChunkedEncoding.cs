@@ -132,10 +132,7 @@ namespace ArgusTransfer.Serialization
                     break;
                 }
 
-                if (!int.TryParse(sizeLine.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var chunkSize) || chunkSize < 0)
-                {
-                    throw new FormatException($"Invalid chunk size: {sizeLine.Trim()}");
-                }
+                var chunkSize = ParseChunkSize(sizeLine);
 
                 if (chunkSize == 0)
                 {
@@ -144,13 +141,7 @@ namespace ArgusTransfer.Serialization
                     break;
                 }
 
-                totalBytesRead += chunkSize;
-
-                if (maxBodySize > 0 && totalBytesRead > maxBodySize)
-                {
-                    throw new InvalidOperationException(
-                        $"Chunked body size exceeds the maximum allowed size of {maxBodySize} bytes.");
-                }
+                totalBytesRead = AddChunkToTotal(totalBytesRead, chunkSize, maxBodySize);
 
                 // Copy in bounded pieces so a hostile chunk size cannot force a single huge allocation
                 var remaining = chunkSize;
@@ -245,10 +236,7 @@ namespace ArgusTransfer.Serialization
                     break;
                 }
 
-                if (!int.TryParse(sizeLine.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var chunkSize) || chunkSize < 0)
-                {
-                    throw new FormatException($"Invalid chunk size: {sizeLine.Trim()}");
-                }
+                var chunkSize = ParseChunkSize(sizeLine);
 
                 if (chunkSize == 0)
                 {
@@ -257,13 +245,7 @@ namespace ArgusTransfer.Serialization
                     break;
                 }
 
-                totalBytesRead += chunkSize;
-
-                if (maxBodySize > 0 && totalBytesRead > maxBodySize)
-                {
-                    throw new InvalidOperationException(
-                        $"Chunked body size exceeds the maximum allowed size of {maxBodySize} bytes.");
-                }
+                totalBytesRead = AddChunkToTotal(totalBytesRead, chunkSize, maxBodySize);
 
                 var charBuffer = new char[chunkSize];
                 var totalRead = 0;
@@ -345,10 +327,7 @@ namespace ArgusTransfer.Serialization
                     break;
                 }
 
-                if (!int.TryParse(sizeLine.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var chunkSize) || chunkSize < 0)
-                {
-                    throw new FormatException($"Invalid chunk size: {sizeLine.Trim()}");
-                }
+                var chunkSize = ParseChunkSize(sizeLine);
 
                 if (chunkSize == 0)
                 {
@@ -357,13 +336,7 @@ namespace ArgusTransfer.Serialization
                     break;
                 }
 
-                totalBytesRead += chunkSize;
-
-                if (maxBodySize > 0 && totalBytesRead > maxBodySize)
-                {
-                    throw new InvalidOperationException(
-                        $"Chunked body size exceeds the maximum allowed size of {maxBodySize} bytes.");
-                }
+                totalBytesRead = AddChunkToTotal(totalBytesRead, chunkSize, maxBodySize);
 
                 var charBuffer = new char[chunkSize];
                 var totalRead = 0;
@@ -389,6 +362,59 @@ namespace ArgusTransfer.Serialization
 
             result.Position = 0;
             return result;
+        }
+
+        /// <summary>
+        /// Parses a hexadecimal chunk-size line
+        /// </summary>
+        /// <param name="sizeLine">
+        /// The chunk-size line
+        /// </param>
+        /// <returns>
+        /// The chunk size in bytes
+        /// </returns>
+        /// <exception cref="FormatException">
+        /// Thrown when the line is not a non-negative hexadecimal number
+        /// </exception>
+        private static int ParseChunkSize(string sizeLine)
+        {
+            if (!int.TryParse(sizeLine.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var chunkSize) || chunkSize < 0)
+            {
+                throw new FormatException($"Invalid chunk size: {sizeLine.Trim()}");
+            }
+
+            return chunkSize;
+        }
+
+        /// <summary>
+        /// Adds a chunk to the running body size and enforces the maximum body size
+        /// </summary>
+        /// <param name="totalBytesRead">
+        /// The body size read so far in bytes
+        /// </param>
+        /// <param name="chunkSize">
+        /// The size of the next chunk in bytes
+        /// </param>
+        /// <param name="maxBodySize">
+        /// The maximum allowed body size in bytes. A value of 0 disables the limit.
+        /// </param>
+        /// <returns>
+        /// The body size including the next chunk
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the body size exceeds <paramref name="maxBodySize"/>
+        /// </exception>
+        private static long AddChunkToTotal(long totalBytesRead, int chunkSize, long maxBodySize)
+        {
+            totalBytesRead += chunkSize;
+
+            if (maxBodySize > 0 && totalBytesRead > maxBodySize)
+            {
+                throw new InvalidOperationException(
+                    $"Chunked body size exceeds the maximum allowed size of {maxBodySize} bytes.");
+            }
+
+            return totalBytesRead;
         }
     }
 }
