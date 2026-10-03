@@ -33,6 +33,11 @@ namespace ArgusTransfer.Tests.Client
     using ArgusTransfer.Serialization;
     using ArgusTransfer.Client;
 
+    using Microsoft.Extensions.Logging;
+    using Microsoft.Extensions.Logging.Abstractions;
+
+    using Moq;
+
     using NUnit.Framework;
 
     /// <summary>
@@ -1177,6 +1182,332 @@ namespace ArgusTransfer.Tests.Client
             await serverTask;
 
             Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        /// <summary>
+        /// Runs a fake pipe server that accepts <paramref name="connectionCount"/> sequential connections.
+        /// Each connection reads one request and records its body; the first <paramref name="dropCount"/>
+        /// connections then close without responding, the remaining ones respond with 200 OK
+        /// </summary>
+        /// <param name="pipeName">The name of the pipe to listen on</param>
+        /// <param name="dropCount">The number of connections to close without responding</param>
+        /// <param name="connectionCount">The total number of connections to accept</param>
+        /// <param name="receivedBodies">Collects the body of every request received, in order</param>
+        /// <returns>A task that completes once all connections have been served</returns>
+        private Task RunFlakyServerAsync(string pipeName, int dropCount, int connectionCount, List<string> receivedBodies)
+        {
+            return Task.Run(async () =>
+            {
+                for (var connection = 0; connection < connectionCount; connection++)
+                {
+                    using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                    await server.WaitForConnectionAsync();
+
+                    var reader = new StreamReader(server, new UTF8Encoding(false));
+                    var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                    var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+
+                    var body = request.IsStreamed
+                        ? await new StreamReader(request.BodyStream, Encoding.UTF8).ReadToEndAsync()
+                        : request.Body;
+
+                    lock (receivedBodies)
+                    {
+                        receivedBodies.Add(body);
+                    }
+
+                    if (connection < dropCount)
+                    {
+                        continue;
+                    }
+
+                    this.responseSerializer.Write(writer, new ArgusResponse
+                    {
+                        CorrelationToken = request.CorrelationToken,
+                        StatusCode = ArgusStatusCode.Ok,
+                        Body = "ok"
+                    });
+                }
+            });
+        }
+
+        [Test]
+        public void Verify_that_RetryPolicy_is_null_by_default()
+        {
+            using var client = new ArgusClient("argus-test");
+
+            Assert.That(client.RetryPolicy, Is.Null);
+        }
+
+        [Test]
+        public void Verify_that_Logger_defaults_to_NullLogger_and_null_restores_default()
+        {
+            using var client = new ArgusClient("argus-test");
+
+            Assert.That(client.Logger, Is.SameAs(NullLogger.Instance));
+
+            client.Logger = new Mock<ILogger>().Object;
+            client.Logger = null;
+
+            Assert.That(client.Logger, Is.SameAs(NullLogger.Instance));
+        }
+
+        [Test]
+        public async Task Verify_that_SendAsync_retries_idempotent_request_after_connection_is_dropped()
+        {
+            var pipeName = $"argus-retry-{Guid.NewGuid():N}";
+            var receivedBodies = new List<string>();
+            var serverTask = this.RunFlakyServerAsync(pipeName, dropCount: 2, connectionCount: 3, receivedBodies);
+
+            using var client = new ArgusClient(pipeName);
+            client.RetryPolicy = new ArgusRetryPolicy { InitialDelay = TimeSpan.FromMilliseconds(10) };
+
+            var response = await client.GetAsync("/items", timeout: TimeSpan.FromSeconds(10));
+
+            await serverTask;
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Is.EqualTo("ok"));
+            Assert.That(receivedBodies, Has.Count.EqualTo(3));
+        }
+
+        [Test]
+        public async Task Verify_that_SendAsync_without_retry_policy_does_not_retry()
+        {
+            var pipeName = $"argus-retry-{Guid.NewGuid():N}";
+            var receivedBodies = new List<string>();
+            var serverTask = this.RunFlakyServerAsync(pipeName, dropCount: 1, connectionCount: 1, receivedBodies);
+
+            using var client = new ArgusClient(pipeName);
+
+            await Assert.ThatAsync(async () => await client.GetAsync("/items", timeout: TimeSpan.FromSeconds(10)),
+                Throws.InstanceOf<IOException>());
+
+            await serverTask;
+
+            Assert.That(receivedBodies, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Verify_that_SendAsync_does_not_retry_non_idempotent_request_after_it_was_sent()
+        {
+            var pipeName = $"argus-retry-{Guid.NewGuid():N}";
+            var receivedBodies = new List<string>();
+            var serverTask = this.RunFlakyServerAsync(pipeName, dropCount: 1, connectionCount: 1, receivedBodies);
+
+            using var client = new ArgusClient(pipeName);
+            client.RetryPolicy = new ArgusRetryPolicy { InitialDelay = TimeSpan.FromMilliseconds(10) };
+
+            await Assert.ThatAsync(async () => await client.PostAsync("/items", "new item", timeout: TimeSpan.FromSeconds(10)),
+                Throws.InstanceOf<IOException>());
+
+            await serverTask;
+
+            Assert.That(receivedBodies, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Verify_that_SendAsync_retries_non_idempotent_request_when_enabled()
+        {
+            var pipeName = $"argus-retry-{Guid.NewGuid():N}";
+            var receivedBodies = new List<string>();
+            var serverTask = this.RunFlakyServerAsync(pipeName, dropCount: 1, connectionCount: 2, receivedBodies);
+
+            using var client = new ArgusClient(pipeName);
+            client.RetryPolicy = new ArgusRetryPolicy
+            {
+                InitialDelay = TimeSpan.FromMilliseconds(10),
+                RetryNonIdempotentRequests = true
+            };
+
+            var response = await client.PostAsync("/items", "new item", timeout: TimeSpan.FromSeconds(10));
+
+            await serverTask;
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(receivedBodies, Is.EqualTo(new[] { "new item", "new item" }));
+        }
+
+        [Test]
+        public async Task Verify_that_SendAsync_stops_retrying_after_MaxRetries()
+        {
+            var pipeName = $"argus-retry-{Guid.NewGuid():N}";
+            var receivedBodies = new List<string>();
+            var serverTask = this.RunFlakyServerAsync(pipeName, dropCount: 3, connectionCount: 3, receivedBodies);
+
+            using var client = new ArgusClient(pipeName);
+            client.RetryPolicy = new ArgusRetryPolicy { MaxRetries = 2, InitialDelay = TimeSpan.FromMilliseconds(10) };
+
+            await Assert.ThatAsync(async () => await client.GetAsync("/items", timeout: TimeSpan.FromSeconds(10)),
+                Throws.InstanceOf<IOException>());
+
+            await serverTask;
+
+            Assert.That(receivedBodies, Has.Count.EqualTo(3));
+        }
+
+        [Test]
+        public async Task Verify_that_SendAsync_rewinds_seekable_body_stream_on_retry()
+        {
+            var pipeName = $"argus-retry-{Guid.NewGuid():N}";
+            var receivedBodies = new List<string>();
+            var serverTask = this.RunFlakyServerAsync(pipeName, dropCount: 1, connectionCount: 2, receivedBodies);
+
+            using var client = new ArgusClient(pipeName);
+            client.RetryPolicy = new ArgusRetryPolicy { InitialDelay = TimeSpan.FromMilliseconds(10) };
+
+            using var bodyStream = new MemoryStream(Encoding.UTF8.GetBytes("streamed payload"));
+
+            var response = await client.PutAsync("/upload", bodyStream, "text/plain", timeout: TimeSpan.FromSeconds(10));
+
+            await serverTask;
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(receivedBodies, Is.EqualTo(new[] { "streamed payload", "streamed payload" }));
+        }
+
+        [Test]
+        public async Task Verify_that_SendAsync_honours_cancellation_between_retries()
+        {
+            var pipeName = $"argus-retry-{Guid.NewGuid():N}";
+            var receivedBodies = new List<string>();
+            var serverTask = this.RunFlakyServerAsync(pipeName, dropCount: 1, connectionCount: 1, receivedBodies);
+
+            using var client = new ArgusClient(pipeName);
+            client.RetryPolicy = new ArgusRetryPolicy { InitialDelay = TimeSpan.FromMinutes(1), MaxDelay = TimeSpan.FromMinutes(1) };
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            await Assert.ThatAsync(async () => await client.GetAsync("/items", timeout: TimeSpan.FromMinutes(5), cancellationToken: cts.Token),
+                Throws.InstanceOf<OperationCanceledException>());
+
+            await serverTask;
+
+            Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(10)));
+            Assert.That(receivedBodies, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Verify_that_SendAsync_throws_TimeoutException_when_retry_delay_exceeds_timeout()
+        {
+            var pipeName = $"argus-retry-{Guid.NewGuid():N}";
+            var receivedBodies = new List<string>();
+            var serverTask = this.RunFlakyServerAsync(pipeName, dropCount: 1, connectionCount: 1, receivedBodies);
+
+            using var client = new ArgusClient(pipeName);
+            client.RetryPolicy = new ArgusRetryPolicy { InitialDelay = TimeSpan.FromMinutes(1), MaxDelay = TimeSpan.FromMinutes(1) };
+
+            await Assert.ThatAsync(async () => await client.GetAsync("/items", timeout: TimeSpan.FromMilliseconds(500)),
+                Throws.TypeOf<TimeoutException>());
+
+            await serverTask;
+
+            Assert.That(receivedBodies, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Verify_that_SendAsync_logs_a_warning_for_each_retry()
+        {
+            var pipeName = $"argus-retry-{Guid.NewGuid():N}";
+            var receivedBodies = new List<string>();
+            var serverTask = this.RunFlakyServerAsync(pipeName, dropCount: 2, connectionCount: 3, receivedBodies);
+
+            var logger = new Mock<ILogger>();
+
+            using var client = new ArgusClient(pipeName);
+            client.RetryPolicy = new ArgusRetryPolicy { InitialDelay = TimeSpan.FromMilliseconds(10) };
+            client.Logger = logger.Object;
+
+            await client.GetAsync("/items", timeout: TimeSpan.FromSeconds(10));
+
+            await serverTask;
+
+            logger.Verify(
+                l => l.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.IsAny<It.IsAnyType>(),
+                    It.IsAny<IOException>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Exactly(2));
+        }
+
+        [Test]
+        public void Verify_that_CanRetry_returns_false_without_policy()
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items" };
+
+            Assert.That(ArgusClient.CanRetry(null, new IOException(), request, false, -1, 0, CancellationToken.None), Is.False);
+        }
+
+        [TestCase(ArgusVerb.POST, false, true)]
+        [TestCase(ArgusVerb.PATCH, false, true)]
+        [TestCase(ArgusVerb.POST, true, false)]
+        [TestCase(ArgusVerb.PATCH, true, false)]
+        [TestCase(ArgusVerb.GET, true, true)]
+        [TestCase(ArgusVerb.HEAD, true, true)]
+        [TestCase(ArgusVerb.PUT, true, true)]
+        [TestCase(ArgusVerb.DELETE, true, true)]
+        public void Verify_that_CanRetry_only_retries_non_idempotent_requests_before_they_are_sent(ArgusVerb verb, bool requestSent, bool expected)
+        {
+            var policy = new ArgusRetryPolicy();
+            var request = new ArgusRequest { Verb = verb, Route = "/items" };
+
+            Assert.That(ArgusClient.CanRetry(policy, new IOException(), request, requestSent, -1, 0, CancellationToken.None), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void Verify_that_CanRetry_retries_sent_non_idempotent_request_when_enabled()
+        {
+            var policy = new ArgusRetryPolicy { RetryNonIdempotentRequests = true };
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/items" };
+
+            Assert.That(ArgusClient.CanRetry(policy, new IOException(), request, true, -1, 0, CancellationToken.None), Is.True);
+        }
+
+        [Test]
+        public void Verify_that_CanRetry_does_not_retry_sent_request_with_non_seekable_body_stream()
+        {
+            var policy = new ArgusRetryPolicy();
+            using var bodyStream = new MemoryStream();
+            var request = new ArgusRequest { Verb = ArgusVerb.PUT, Route = "/upload", BodyStream = bodyStream };
+
+            Assert.That(ArgusClient.CanRetry(policy, new IOException(), request, true, -1, 0, CancellationToken.None), Is.False);
+            Assert.That(ArgusClient.CanRetry(policy, new IOException(), request, true, 0, 0, CancellationToken.None), Is.True);
+            Assert.That(ArgusClient.CanRetry(policy, new IOException(), request, false, -1, 0, CancellationToken.None), Is.True);
+        }
+
+        [Test]
+        public void Verify_that_CanRetry_never_retries_timeout_or_cancellation()
+        {
+            var policy = new ArgusRetryPolicy { ShouldRetry = _ => true };
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items" };
+
+            Assert.That(ArgusClient.CanRetry(policy, new TimeoutException(), request, false, -1, 0, CancellationToken.None), Is.False);
+            Assert.That(ArgusClient.CanRetry(policy, new OperationCanceledException(), request, false, -1, 0, CancellationToken.None), Is.False);
+            Assert.That(ArgusClient.CanRetry(policy, new IOException(), request, false, -1, 0, new CancellationToken(true)), Is.False);
+        }
+
+        [Test]
+        public void Verify_that_CanRetry_returns_false_when_retries_are_exhausted()
+        {
+            var policy = new ArgusRetryPolicy { MaxRetries = 2 };
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items" };
+
+            Assert.That(ArgusClient.CanRetry(policy, new IOException(), request, false, -1, 1, CancellationToken.None), Is.True);
+            Assert.That(ArgusClient.CanRetry(policy, new IOException(), request, false, -1, 2, CancellationToken.None), Is.False);
+        }
+
+        [Test]
+        public void Verify_that_CanRetry_uses_the_ShouldRetry_predicate()
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items" };
+
+            Assert.That(ArgusClient.CanRetry(new ArgusRetryPolicy(), new FormatException(), request, false, -1, 0, CancellationToken.None), Is.False);
+            Assert.That(ArgusClient.CanRetry(new ArgusRetryPolicy { ShouldRetry = e => e is FormatException }, new FormatException(), request, false, -1, 0, CancellationToken.None), Is.True);
+            Assert.That(ArgusClient.CanRetry(new ArgusRetryPolicy { ShouldRetry = null }, new IOException(), request, false, -1, 0, CancellationToken.None), Is.False);
         }
     }
 }

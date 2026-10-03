@@ -41,6 +41,28 @@ if (ArgusProblemDetails.TryRead(response, out var problem))
 }
 ```
 
+## Retrying Transient Pipe Failures
+
+`ArgusClient` can automatically retry requests that fail because of transient named pipe errors, for example when the pipe breaks while the server restarts. Retries are disabled by default. Enable them by registering the client with a retry policy:
+
+```csharp
+services.AddArgusClient("my-pipe", TimeSpan.FromSeconds(30), retry =>
+{
+    retry.MaxRetries = 3;                                // default: 3
+    retry.InitialDelay = TimeSpan.FromMilliseconds(100); // default: 100 ms
+    retry.Strategy = RetryBackoffStrategy.Exponential;   // Fixed, Linear or Exponential (default)
+});
+```
+
+or by setting `client.RetryPolicy = new ArgusRetryPolicy()` on an `ArgusClient` directly.
+
+- A failure while connecting, before anything was sent, is always retried.
+- A failure after the request was sent is only retried for idempotent verbs (`GET`, `HEAD`, `PUT`, `DELETE`), because the server may already have processed it. Set `RetryNonIdempotentRequests = true` to also retry `POST` and `PATCH`.
+- A streamed request body is only retried after it was sent when the stream is seekable; it is rewound before the retry.
+- By default only `IOException`s are retried; supply `ShouldRetry` to change that. Timeouts and cancellation are never retried.
+- The timeout covers the whole call, including retries and the delays between them.
+- Each retry is logged as a warning through `ILogger<ArgusClient>`.
+
 ## Code Quality
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)

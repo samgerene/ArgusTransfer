@@ -31,6 +31,9 @@ namespace ArgusTransfer.Client
     using ArgusTransfer.Protocol;
     using ArgusTransfer.Serialization;
 
+    using Microsoft.Extensions.Logging;
+    using Microsoft.Extensions.Logging.Abstractions;
+
     /// <summary>
     /// A low-level client that sends an <see cref="ArgusRequest"/> and receives an <see cref="ArgusResponse"/>
     /// over a named pipe using the ARGUS/1.0 wire protocol
@@ -58,9 +61,31 @@ namespace ArgusTransfer.Client
         private bool disposed;
 
         /// <summary>
+        /// Backing field for <see cref="Logger"/>
+        /// </summary>
+        private ILogger logger = NullLogger.Instance;
+
+        /// <summary>
         /// Gets or sets the default timeout for requests. Defaults to 30 seconds.
+        /// The timeout applies to the whole call, including retries and the delays between them.
         /// </summary>
         public TimeSpan DefaultTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// Gets or sets the <see cref="ArgusRetryPolicy"/> used to retry requests that fail because of
+        /// transient named pipe errors. Defaults to <c>null</c>, which disables retries.
+        /// </summary>
+        public ArgusRetryPolicy RetryPolicy { get; set; }
+
+        /// <summary>
+        /// Gets or sets the <see cref="ILogger"/> used to log retry attempts. Defaults to <see cref="NullLogger.Instance"/>;
+        /// assigning <c>null</c> restores the default.
+        /// </summary>
+        public ILogger Logger
+        {
+            get => this.logger;
+            set => this.logger = value ?? NullLogger.Instance;
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ArgusClient"/> class
@@ -110,6 +135,13 @@ namespace ArgusTransfer.Client
         /// <returns>
         /// The <see cref="ArgusResponse"/> received from the server
         /// </returns>
+        /// <remarks>
+        /// When <see cref="RetryPolicy"/> is set, attempts that fail with a transient error are retried
+        /// as described on <see cref="ArgusRetryPolicy"/>, within the same timeout
+        /// </remarks>
+        /// <exception cref="TimeoutException">
+        /// Thrown when the request, including any retries, does not complete within the timeout
+        /// </exception>
         public async Task<ArgusResponse> SendAsync(ArgusRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(this.disposed, this);
@@ -118,20 +150,60 @@ namespace ArgusTransfer.Client
             using var timeoutCts = new CancellationTokenSource(effectiveTimeout);
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
-            var pipeClient = new NamedPipeClientStream(".", this.pipeName, PipeDirection.InOut);
+            var retryPolicy = this.RetryPolicy;
+            var bodyStreamStart = request.IsStreamed && request.BodyStream.CanSeek ? request.BodyStream.Position : -1;
+            var retryAttempt = 0;
 
             try
             {
-                await pipeClient.ConnectAsync(linkedCts.Token);
+                while (true)
+                {
+                    var requestSent = false;
+                    TimeSpan delay;
 
-                await using var writer = new StreamWriter(pipeClient, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = false };
-                using var reader = new StreamReader(pipeClient, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+                    var pipeClient = new NamedPipeClientStream(".", this.pipeName, PipeDirection.InOut);
 
-                await this.requestSerializer.WriteAsync(writer, request, linkedCts.Token);
+                    try
+                    {
+                        await pipeClient.ConnectAsync(linkedCts.Token);
 
-                var response = await this.responseSerializer.ReadAsync(reader, linkedCts.Token);
+                        await using var writer = new StreamWriter(pipeClient, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = false };
+                        using var reader = new StreamReader(pipeClient, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: true, leaveOpen: true);
 
-                return response;
+                        requestSent = true;
+                        await this.requestSerializer.WriteAsync(writer, request, linkedCts.Token);
+
+                        var response = await this.responseSerializer.ReadAsync(reader, linkedCts.Token);
+
+                        return response;
+                    }
+                    catch (Exception ex) when (CanRetry(retryPolicy, ex, request, requestSent, bodyStreamStart, retryAttempt, linkedCts.Token))
+                    {
+                        retryAttempt++;
+                        delay = retryPolicy.GetDelay(retryAttempt);
+
+                        this.logger.LogWarning(
+                            ex,
+                            "Request {Verb} {Route} to pipe '{PipeName}' failed; retry {RetryAttempt} of {MaxRetries} in {DelayMs} ms",
+                            request.Verb,
+                            request.Route,
+                            this.pipeName,
+                            retryAttempt,
+                            retryPolicy.MaxRetries,
+                            delay.TotalMilliseconds);
+                    }
+                    finally
+                    {
+                        await pipeClient.DisposeAsync();
+                    }
+
+                    if (bodyStreamStart >= 0)
+                    {
+                        request.BodyStream.Position = bodyStreamStart;
+                    }
+
+                    await Task.Delay(delay, linkedCts.Token);
+                }
             }
             catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
@@ -140,10 +212,6 @@ namespace ArgusTransfer.Client
             catch (IOException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
                 throw new TimeoutException($"The request to pipe '{this.pipeName}' timed out after {effectiveTimeout.TotalSeconds:F1} seconds.");
-            }
-            finally
-            {
-                await pipeClient.DisposeAsync();
             }
         }
 
@@ -598,6 +666,43 @@ namespace ArgusTransfer.Client
         {
             var response = await this.HeadAsync(route, queryParameters, timeout, cancellationToken);
             return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Determines whether a failed attempt may be retried under the specified <see cref="ArgusRetryPolicy"/>
+        /// </summary>
+        /// <param name="retryPolicy">The retry policy, or <c>null</c> when retries are disabled</param>
+        /// <param name="exception">The exception raised by the failed attempt</param>
+        /// <param name="request">The request being sent</param>
+        /// <param name="requestSent">Whether writing the request had started when the attempt failed</param>
+        /// <param name="bodyStreamStart">The original position of a seekable request body stream, or -1</param>
+        /// <param name="retryAttempt">The number of retries performed so far</param>
+        /// <param name="cancellationToken">The token covering caller cancellation and the request timeout</param>
+        /// <returns><c>true</c> if the request may be retried; otherwise <c>false</c></returns>
+        internal static bool CanRetry(ArgusRetryPolicy retryPolicy, Exception exception, ArgusRequest request, bool requestSent, long bodyStreamStart, int retryAttempt, CancellationToken cancellationToken)
+        {
+            if (retryPolicy == null
+                || retryAttempt >= retryPolicy.MaxRetries
+                || cancellationToken.IsCancellationRequested
+                || exception is OperationCanceledException or TimeoutException)
+            {
+                return false;
+            }
+
+            if (requestSent)
+            {
+                if (!retryPolicy.RetryNonIdempotentRequests && !ArgusRetryPolicy.IsIdempotent(request.Verb))
+                {
+                    return false;
+                }
+
+                if (request.IsStreamed && bodyStreamStart < 0)
+                {
+                    return false;
+                }
+            }
+
+            return retryPolicy.ShouldRetry?.Invoke(exception) ?? false;
         }
 
         /// <summary>

@@ -326,9 +326,20 @@ namespace ArgusTransfer.Serialization
         /// <returns>
         /// The deserialized <see cref="ArgusResponse"/>
         /// </returns>
+        /// <exception cref="EndOfStreamException">
+        /// Thrown when the stream ends before a status line is received, for example because the connection was closed
+        /// </exception>
+        /// <exception cref="FormatException">
+        /// Thrown when the status line is empty or malformed
+        /// </exception>
         public async Task<ArgusResponse> ReadAsync(StreamReader reader, CancellationToken cancellationToken)
         {
             var statusLine = await reader.ReadLineAsync(cancellationToken);
+
+            if (statusLine == null)
+            {
+                throw new EndOfStreamException("The stream ended before a status line was received.");
+            }
 
             if (string.IsNullOrWhiteSpace(statusLine))
             {
