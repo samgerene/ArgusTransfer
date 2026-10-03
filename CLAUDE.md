@@ -72,7 +72,9 @@ Text-based request/response wire format transmitted over named pipes.
 
 ### Serialization
 
-`ArgusRequestSerializer` and `ArgusResponseSerializer` in `/Serialization/`. Each provides a synchronous string API and a `StreamWriter`/`StreamReader` overload for pipe I/O. `IArgusBodySerializer` and `IArgusBodySerializerRegistry` support content-type-based serializer resolution. `ArgusChunkedEncoding` handles chunked transfer encoding for streaming bodies.
+`ArgusRequestSerializer` and `ArgusResponseSerializer` in `/Serialization/`. Each provides a synchronous string API, `StreamWriter`/`StreamReader` overloads, and byte-safe `Stream` overloads (`WriteAsync(Stream, …)`, `ReadAsync(Stream, …)`) that `ArgusClient` and the pipe host use for pipe I/O.
+
+`Content-Length` and chunk sizes are **byte** counts. The `Stream` overloads read header lines and exact-length bodies at the byte level via the internal `ArgusWireReader`, and copy streamed bodies as raw bytes (internal byte-level `ArgusChunkedEncoding.WriteChunkedAsync(Stream, Stream)` / `ReadChunkedAsync(ArgusWireReader)`), so binary bodies survive; a truncated body throws `EndOfStreamException`. The `StreamWriter` overloads flush and write bytes to `BaseStream`. The `StreamReader`/string readers count `Content-Length` in UTF-8 bytes (internal `ArgusTextBodyReader`), but their chunked path and the public text `ArgusChunkedEncoding` methods decode chunk data as UTF-8 and only round-trip valid UTF-8 text. Always use the `Stream` overloads for transport code. `IArgusBodySerializer` and `IArgusBodySerializerRegistry` support content-type-based serializer resolution. `ArgusChunkedEncoding` handles chunked transfer encoding for streaming bodies.
 
 ### Client
 

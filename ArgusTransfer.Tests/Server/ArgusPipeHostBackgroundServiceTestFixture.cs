@@ -845,5 +845,101 @@ namespace ArgusTransfer.Transport.Tests.Server
             await cts.CancelAsync();
             await hostService.StopAsync(CancellationToken.None);
         }
+
+        private async Task<(ArgusPipeHostBackgroundService Host, CancellationTokenSource Cts)> StartHostAsync(ArgusRouter router, ArgusPipeHostOptions options)
+        {
+            var hostService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                Options.Create(options),
+                new PlainTextArgusBodySerializer());
+
+            var cts = new CancellationTokenSource();
+            await hostService.StartAsync(cts.Token);
+
+            return (hostService, cts);
+        }
+
+        [Test]
+        public async Task Verify_that_non_ascii_string_body_round_trips_over_the_pipe()
+        {
+            var pipeName = $"argus-non-ascii-test-{Guid.NewGuid():N}";
+            var router = new ArgusRouter();
+            router.MapPost("/echo", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = context.Request.Body };
+                return Task.CompletedTask;
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(router, new ArgusPipeHostOptions { PipeName = pipeName });
+
+            using var client = new ArgusClient(pipeName);
+            var response = await client.PostAsync("/echo", "héllo wörld € 😀", timeout: TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Is.EqualTo("héllo wörld € 😀"));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_binary_streamed_bodies_round_trip_over_the_pipe()
+        {
+            var pipeName = $"argus-binary-test-{Guid.NewGuid():N}";
+            var payload = new byte[100_000];
+            new Random(11).NextBytes(payload);
+            byte[] receivedByServer = null;
+
+            var router = new ArgusRouter();
+            router.MapPost("/echo", async context =>
+            {
+                var copy = new System.IO.MemoryStream();
+                await context.Request.BodyStream.CopyToAsync(copy);
+                receivedByServer = copy.ToArray();
+
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, BodyStream = new System.IO.MemoryStream(receivedByServer) };
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(router, new ArgusPipeHostOptions { PipeName = pipeName });
+
+            using var client = new ArgusClient(pipeName);
+            var response = await client.PostAsync("/echo", new System.IO.MemoryStream(payload), "application/octet-stream", timeout: TimeSpan.FromSeconds(5));
+
+            var receivedByClient = new System.IO.MemoryStream();
+            await response.BodyStream.CopyToAsync(receivedByClient);
+
+            Assert.That(receivedByServer, Is.EqualTo(payload));
+            Assert.That(receivedByClient.ToArray(), Is.EqualTo(payload));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_oversized_request_body_returns_BadRequest_over_the_pipe()
+        {
+            var pipeName = $"argus-oversized-test-{Guid.NewGuid():N}";
+            var router = new ArgusRouter();
+            router.MapPost("/echo", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok };
+                return Task.CompletedTask;
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(router, new ArgusPipeHostOptions { PipeName = pipeName, MaxRequestBodySize = 10 });
+
+            using var client = new ArgusClient(pipeName);
+            var response = await client.PostAsync("/echo", new string('x', 100), timeout: TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
+            Assert.That(response.Body, Does.Contain("maximum allowed size"));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
     }
 }

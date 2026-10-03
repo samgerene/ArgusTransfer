@@ -167,13 +167,10 @@ namespace ArgusTransfer.Client
                     {
                         await pipeClient.ConnectAsync(linkedCts.Token);
 
-                        await using var writer = new StreamWriter(pipeClient, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = false };
-                        using var reader = new StreamReader(pipeClient, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-
                         requestSent = true;
-                        await this.requestSerializer.WriteAsync(writer, request, linkedCts.Token);
+                        await this.requestSerializer.WriteAsync(pipeClient, request, linkedCts.Token);
 
-                        var response = await this.responseSerializer.ReadAsync(reader, linkedCts.Token);
+                        var response = await this.responseSerializer.ReadAsync(pipeClient, linkedCts.Token);
 
                         return response;
                     }

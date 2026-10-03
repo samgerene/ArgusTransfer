@@ -154,7 +154,8 @@ namespace ArgusTransfer.Serialization
 
         /// <summary>
         /// Asynchronously writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>.
-        /// This method supports streaming bodies via chunked transfer encoding.
+        /// This method supports streaming bodies via chunked transfer encoding. The writer is flushed and the message is
+        /// written as bytes to its <see cref="StreamWriter.BaseStream"/>, so binary streamed bodies are preserved.
         /// </summary>
         /// <param name="writer">
         /// The <see cref="StreamWriter"/> to write to
@@ -170,13 +171,129 @@ namespace ArgusTransfer.Serialization
         /// </returns>
         public async Task WriteAsync(StreamWriter writer, ArgusResponse response, CancellationToken cancellationToken = default)
         {
-            if (!response.IsStreamed)
-            {
-                await writer.WriteAsync(this.Write(response));
-                await writer.FlushAsync(cancellationToken);
-                return;
-            }
+            ArgumentNullException.ThrowIfNull(writer);
 
+            await writer.FlushAsync(cancellationToken);
+            await this.WriteAsync(writer.BaseStream, response, cancellationToken);
+        }
+
+        /// <summary>
+        /// Asynchronously writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="Stream"/>.
+        /// The header block and a string body are encoded as UTF-8; a streamed body is copied as raw bytes using
+        /// chunked transfer encoding.
+        /// </summary>
+        /// <param name="stream">
+        /// The <see cref="Stream"/> to write to
+        /// </param>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> to serialize
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="stream"/> or <paramref name="response"/> is <c>null</c>
+        /// </exception>
+        public Task WriteAsync(Stream stream, ArgusResponse response, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            ArgumentNullException.ThrowIfNull(response);
+
+            return response.IsStreamed
+                ? WriteStreamedAsync(stream, response, cancellationToken)
+                : WriteBytesAsync(stream, this.Write(response), cancellationToken);
+        }
+
+        /// <summary>
+        /// Asynchronously writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="Stream"/>
+        /// using a serializer resolved from the specified accept content type. The header block and a string body are
+        /// encoded as UTF-8; a streamed body is copied as raw bytes using chunked transfer encoding.
+        /// </summary>
+        /// <param name="stream">
+        /// The <see cref="Stream"/> to write to
+        /// </param>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> to serialize
+        /// </param>
+        /// <param name="acceptContentType">
+        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="stream"/> or <paramref name="response"/> is <c>null</c>
+        /// </exception>
+        public Task WriteAsync(Stream stream, ArgusResponse response, string acceptContentType, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            ArgumentNullException.ThrowIfNull(response);
+
+            return response.IsStreamed
+                ? WriteStreamedAsync(stream, response, cancellationToken)
+                : WriteBytesAsync(stream, this.Write(response, acceptContentType), cancellationToken);
+        }
+
+        /// <summary>
+        /// Encodes a serialized message as UTF-8, writes it to a <see cref="Stream"/> and flushes the stream
+        /// </summary>
+        /// <param name="stream">
+        /// The <see cref="Stream"/> to write to
+        /// </param>
+        /// <param name="message">
+        /// The serialized message
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        private static async Task WriteBytesAsync(Stream stream, string message, CancellationToken cancellationToken)
+        {
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(message).AsMemory(), cancellationToken);
+            await stream.FlushAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// Writes the header block of a response with a streamed body, followed by the body as raw bytes in chunked transfer encoding
+        /// </summary>
+        /// <param name="stream">
+        /// The <see cref="Stream"/> to write to
+        /// </param>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> with a streamed body
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        private static async Task WriteStreamedAsync(Stream stream, ArgusResponse response, CancellationToken cancellationToken)
+        {
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(BuildStreamedHead(response)).AsMemory(), cancellationToken);
+            await ArgusChunkedEncoding.WriteChunkedAsync(response.BodyStream, stream, cancellationToken: cancellationToken);
+        }
+
+        /// <summary>
+        /// Builds the status line and headers of a response with a streamed body, including the
+        /// <c>Transfer-Encoding: chunked</c> header and the empty line that ends the header block
+        /// </summary>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> with a streamed body
+        /// </param>
+        /// <returns>
+        /// The header block in ARGUS/1.0 wire format
+        /// </returns>
+        private static string BuildStreamedHead(ArgusResponse response)
+        {
             var sb = new StringBuilder();
 
             sb.Append("ARGUS/1.0 ");
@@ -209,15 +326,13 @@ namespace ArgusTransfer.Serialization
             sb.Append("Transfer-Encoding: chunked\r\n");
             sb.Append("\r\n");
 
-            await writer.WriteAsync(sb.ToString());
-            await writer.FlushAsync(cancellationToken);
-
-            await ArgusChunkedEncoding.WriteChunkedAsync(response.BodyStream, writer, cancellationToken: cancellationToken);
+            return sb.ToString();
         }
 
         /// <summary>
         /// Asynchronously writes an <see cref="ArgusResponse"/> in ARGUS/1.0 wire format to a <see cref="StreamWriter"/>
-        /// using a serializer resolved from the specified accept content type
+        /// using a serializer resolved from the specified accept content type. The writer is flushed and the message is
+        /// written as bytes to its <see cref="StreamWriter.BaseStream"/>, so binary streamed bodies are preserved.
         /// </summary>
         /// <param name="writer">
         /// The <see cref="StreamWriter"/> to write to
@@ -236,14 +351,10 @@ namespace ArgusTransfer.Serialization
         /// </returns>
         public async Task WriteAsync(StreamWriter writer, ArgusResponse response, string acceptContentType, CancellationToken cancellationToken = default)
         {
-            if (!response.IsStreamed)
-            {
-                await writer.WriteAsync(this.Write(response, acceptContentType));
-                await writer.FlushAsync(cancellationToken);
-                return;
-            }
+            ArgumentNullException.ThrowIfNull(writer);
 
-            await this.WriteAsync(writer, response, cancellationToken);
+            await writer.FlushAsync(cancellationToken);
+            await this.WriteAsync(writer.BaseStream, response, acceptContentType, cancellationToken);
         }
 
         /// <summary>
@@ -293,22 +404,7 @@ namespace ArgusTransfer.Serialization
                 var contentType = response.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
                 var resolvedSerializer = this.ResolveSerializer(contentType);
 
-                var bodyChars = new char[contentLength];
-                var totalRead = 0;
-
-                while (totalRead < contentLength)
-                {
-                    var read = reader.Read(bodyChars, totalRead, contentLength - totalRead);
-
-                    if (read == 0)
-                    {
-                        break;
-                    }
-
-                    totalRead += read;
-                }
-
-                response.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
+                response.Body = resolvedSerializer.ReadBody(ArgusTextBodyReader.Read(reader, contentLength));
             }
 
             return response;
@@ -373,22 +469,82 @@ namespace ArgusTransfer.Serialization
                 var contentType = response.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
                 var resolvedSerializer = this.ResolveSerializer(contentType);
 
-                var bodyChars = new char[contentLength];
-                var totalRead = 0;
+                response.Body = resolvedSerializer.ReadBody(await ArgusTextBodyReader.ReadAsync(reader, contentLength, cancellationToken));
+            }
 
-                while (totalRead < contentLength)
+            return response;
+        }
+
+        /// <summary>
+        /// Asynchronously deserializes an <see cref="ArgusResponse"/> from a <see cref="Stream"/>. <c>Content-Length</c>
+        /// and chunk sizes are honored as byte counts and a streamed body is read as raw bytes, so binary bodies are preserved.
+        /// </summary>
+        /// <param name="stream">
+        /// The <see cref="Stream"/> to read from. The method reads one message and may buffer bytes that belong to it only
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// The deserialized <see cref="ArgusResponse"/>
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="stream"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="EndOfStreamException">
+        /// Thrown when the stream ends before a status line or the complete body was received, for example because the connection was closed
+        /// </exception>
+        /// <exception cref="FormatException">
+        /// Thrown when the status line is empty or malformed, or a chunk is malformed
+        /// </exception>
+        public async Task<ArgusResponse> ReadAsync(Stream stream, CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+
+            var reader = new ArgusWireReader(stream);
+            var statusLine = await reader.ReadLineAsync(cancellationToken);
+
+            if (statusLine == null)
+            {
+                throw new EndOfStreamException("The stream ended before a status line was received.");
+            }
+
+            if (string.IsNullOrWhiteSpace(statusLine))
+            {
+                throw new FormatException("Missing status line.");
+            }
+
+            var response = ParseStatusLine(statusLine);
+            var contentLength = -1;
+
+            string line;
+
+            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+            {
+                if (line.Length == 0)
                 {
-                    var read = await reader.ReadAsync(bodyChars, totalRead, contentLength - totalRead);
-
-                    if (read == 0)
-                    {
-                        break;
-                    }
-
-                    totalRead += read;
+                    break;
                 }
 
-                response.Body = resolvedSerializer.ReadBody(new string(bodyChars, 0, totalRead));
+                contentLength = ParseHeader(line, response, contentLength);
+            }
+
+            var isChunked = response.Headers.TryGetValue("Transfer-Encoding", out var teValue)
+                && string.Equals(teValue, "chunked", StringComparison.OrdinalIgnoreCase);
+
+            if (isChunked)
+            {
+                response.BodyStream = await ArgusChunkedEncoding.ReadChunkedAsync(reader, cancellationToken: cancellationToken);
+            }
+            else if (contentLength > 0)
+            {
+                var contentType = response.Headers.TryGetValue(ArgusHeaderNames.ContentType, out var ct) ? ct : null;
+                var resolvedSerializer = this.ResolveSerializer(contentType);
+
+                var bodyBytes = new byte[contentLength];
+                await reader.ReadExactlyAsync(bodyBytes.AsMemory(), cancellationToken);
+
+                response.Body = resolvedSerializer.ReadBody(Encoding.UTF8.GetString(bodyBytes));
             }
 
             return response;

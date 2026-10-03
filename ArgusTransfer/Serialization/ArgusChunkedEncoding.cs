@@ -31,12 +31,154 @@ namespace ArgusTransfer.Serialization
     /// Provides methods for reading and writing HTTP/1.1-style chunked transfer encoding
     /// used by the ARGUS/1.0 protocol for streaming message bodies
     /// </summary>
+    /// <remarks>
+    /// The public methods operate on text (<see cref="StreamWriter"/>, <see cref="StreamReader"/>,
+    /// <see cref="StringBuilder"/>, <see cref="StringReader"/>) and convert chunk data with UTF-8, so they only
+    /// round-trip bodies that are valid UTF-8 text. <see cref="ArgusRequestSerializer"/> and
+    /// <see cref="ArgusResponseSerializer"/> use byte-safe chunked encoding in their <see cref="Stream"/> overloads.
+    /// </remarks>
     public static class ArgusChunkedEncoding
     {
         /// <summary>
         /// The default chunk size in bytes
         /// </summary>
         private const int DefaultChunkSize = 8192;
+
+        /// <summary>
+        /// The bytes of the line terminator
+        /// </summary>
+        private static readonly byte[] CrLf = { (byte)'\r', (byte)'\n' };
+
+        /// <summary>
+        /// The bytes of the terminating zero-length chunk followed by the empty trailer line
+        /// </summary>
+        private static readonly byte[] LastChunk = Encoding.ASCII.GetBytes("0\r\n\r\n");
+
+        /// <summary>
+        /// Writes the contents of a <see cref="Stream"/> in chunked transfer encoding to another <see cref="Stream"/>,
+        /// copying the chunk data as raw bytes
+        /// </summary>
+        /// <param name="source">
+        /// The <see cref="Stream"/> to read data from
+        /// </param>
+        /// <param name="destination">
+        /// The <see cref="Stream"/> to write chunked data to
+        /// </param>
+        /// <param name="chunkSize">
+        /// The maximum number of bytes per chunk
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> representing the asynchronous operation
+        /// </returns>
+        internal static async Task WriteChunkedAsync(Stream source, Stream destination, int chunkSize = DefaultChunkSize, CancellationToken cancellationToken = default)
+        {
+            var buffer = new byte[chunkSize];
+            int bytesRead;
+
+            while ((bytesRead = await source.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
+            {
+                var sizeLine = Encoding.ASCII.GetBytes(bytesRead.ToString("x", CultureInfo.InvariantCulture) + "\r\n");
+
+                await destination.WriteAsync(sizeLine.AsMemory(), cancellationToken);
+                await destination.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                await destination.WriteAsync(CrLf.AsMemory(), cancellationToken);
+                await destination.FlushAsync(cancellationToken);
+            }
+
+            await destination.WriteAsync(LastChunk.AsMemory(), cancellationToken);
+            await destination.FlushAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// Reads chunked transfer encoded data as raw bytes from an <see cref="ArgusWireReader"/> into a <see cref="MemoryStream"/>
+        /// </summary>
+        /// <param name="reader">
+        /// The <see cref="ArgusWireReader"/> to read chunked data from
+        /// </param>
+        /// <param name="maxBodySize">
+        /// The maximum allowed body size in bytes. A value of 0 disables the limit.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="MemoryStream"/> containing the de-chunked data, positioned at the beginning
+        /// </returns>
+        /// <exception cref="FormatException">
+        /// Thrown when a chunk-size line is invalid or chunk data is not followed by a line terminator
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the body exceeds <paramref name="maxBodySize"/>
+        /// </exception>
+        /// <exception cref="EndOfStreamException">
+        /// Thrown when the stream ends before the terminating chunk
+        /// </exception>
+        internal static async Task<MemoryStream> ReadChunkedAsync(ArgusWireReader reader, long maxBodySize = 0, CancellationToken cancellationToken = default)
+        {
+            var result = new MemoryStream();
+            var buffer = new byte[DefaultChunkSize];
+            long totalBytesRead = 0;
+
+            while (true)
+            {
+                var sizeLine = await reader.ReadLineAsync(cancellationToken)
+                    ?? throw new EndOfStreamException("The stream ended before the terminating chunk was received.");
+
+                if (sizeLine.Length == 0)
+                {
+                    break;
+                }
+
+                if (!int.TryParse(sizeLine.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var chunkSize) || chunkSize < 0)
+                {
+                    throw new FormatException($"Invalid chunk size: {sizeLine.Trim()}");
+                }
+
+                if (chunkSize == 0)
+                {
+                    // Read the trailing empty line after the terminating chunk
+                    await reader.ReadLineAsync(cancellationToken);
+                    break;
+                }
+
+                totalBytesRead += chunkSize;
+
+                if (maxBodySize > 0 && totalBytesRead > maxBodySize)
+                {
+                    throw new InvalidOperationException(
+                        $"Chunked body size exceeds the maximum allowed size of {maxBodySize} bytes.");
+                }
+
+                // Copy in bounded pieces so a hostile chunk size cannot force a single huge allocation
+                var remaining = chunkSize;
+
+                while (remaining > 0)
+                {
+                    var count = Math.Min(remaining, buffer.Length);
+                    await reader.ReadExactlyAsync(buffer.AsMemory(0, count), cancellationToken);
+                    await result.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
+                    remaining -= count;
+                }
+
+                var terminator = await reader.ReadLineAsync(cancellationToken);
+
+                if (terminator == null)
+                {
+                    throw new EndOfStreamException("The stream ended before the terminating chunk was received.");
+                }
+
+                if (terminator.Length != 0)
+                {
+                    throw new FormatException("Chunk data is not followed by a line terminator.");
+                }
+            }
+
+            result.Position = 0;
+            return result;
+        }
 
         /// <summary>
         /// Writes the contents of a <see cref="Stream"/> in chunked transfer encoding to a <see cref="StreamWriter"/>
