@@ -58,6 +58,35 @@ services.AddArgusExceptionHandler(options =>
 
 The router created by `AddArgusModules()` registers the middleware as the outermost global middleware, so it also catches exceptions thrown by middleware that modules add. The problem details `instance` is the request correlation token, which also appears in the error log entry. Cancellation caused by the request timeout or server shutdown is not handled by the middleware, so the host still responds with `503 Service Unavailable` in that case.
 
+## Authorization Header
+
+Clients can identify themselves with the standard `Authorization` header in the form `{scheme} {parameter}`:
+
+```csharp
+var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items" };
+request.SetAuthorization("Bearer", token);   // Authorization: Bearer <token>
+
+var response = await client.SendAsync(request);
+```
+
+On the server, read the parsed values from the request:
+
+```csharp
+app.MapGet("/items", context =>
+{
+    if (!string.Equals(context.Request.AuthorizationScheme, "Bearer", StringComparison.OrdinalIgnoreCase)
+        || !tokenValidator.IsValid(context.Request.AuthorizationParameter))
+    {
+        context.Response = ArgusProblemDetails.Unauthorized("A valid bearer token is required");
+        return Task.CompletedTask;
+    }
+
+    // ...
+});
+```
+
+The raw header value is available as `request.Authorization`. Values containing line breaks are rejected, so a value cannot inject additional headers. The header carries credentials, so do not log it.
+
 ## Compression
 
 Request and response bodies can be compressed with gzip using the `Content-Encoding` header. Compression is opt-in on both sides:

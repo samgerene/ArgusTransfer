@@ -31,6 +31,11 @@ namespace ArgusTransfer.Protocol
         public const string Accept = "Accept";
 
         /// <summary>
+        /// The Authorization header name, carrying the client's credentials as <c>{scheme} {parameter}</c>
+        /// </summary>
+        public const string Authorization = "Authorization";
+
+        /// <summary>
         /// The Accept-Encoding header name
         /// </summary>
         public const string AcceptEncoding = "Accept-Encoding";

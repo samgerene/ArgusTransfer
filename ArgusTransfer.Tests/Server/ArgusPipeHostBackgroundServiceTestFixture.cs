@@ -958,6 +958,29 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public async Task Verify_that_handler_receives_parsed_Authorization_over_the_pipe()
+        {
+            var pipeName = $"argus-authorization-test-{Guid.NewGuid():N}";
+            ArgusRequest receivedRequest = null;
+
+            var (hostService, cts) = await this.StartHostAsync(CreateEchoRouter(r => receivedRequest = r), new ArgusPipeHostOptions { PipeName = pipeName });
+
+            using var client = new ArgusClient(pipeName);
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/echo", Body = "hello" };
+            request.SetAuthorization("Bearer", "token123");
+
+            var response = await client.SendAsync(request, TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(receivedRequest.AuthorizationScheme, Is.EqualTo("Bearer"));
+            Assert.That(receivedRequest.AuthorizationParameter, Is.EqualTo("token123"));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
         public async Task Verify_that_compressed_request_and_response_round_trip_over_the_pipe()
         {
             var pipeName = $"argus-gzip-test-{Guid.NewGuid():N}";
