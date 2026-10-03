@@ -1,230 +1,105 @@
-![ArgusTransfer](argus-transfer.png)
+![ArgusTransfer](https://raw.githubusercontent.com/samgerene/ArgusTransfer/development/argus-transfer.png)
 
-## Introduction
+# ArgusTransfer
 
-ArgusTransfer is framework that provides routing over named pipes inspired by the HTTP 1.1 request/response protocol. It is typically used to host services running in the background for which you would like to expose a REST like API but running a fully fledged HTTP server is too heavy or not allowed.
+**HTTP-style request/response routing over named pipes for .NET.**
 
-## Error Responses (Problem Details)
-
-ArgusTransfer provides `ArgusProblemDetails`, a structured error body modeled on [RFC 7807 Problem Details](https://www.rfc-editor.org/rfc/rfc7807), so that clients can parse errors consistently across services. Problem details are serialized as JSON with the content type `application/problem+json`.
-
-In a handler, use `ArgusContext.Problem`, which sets the response and uses the request correlation token as the `instance`:
-
-```csharp
-app.MapGet("/items/{id:Guid}", context =>
-{
-    context.Problem(ArgusStatusCode.NotFound, "Item not found", new Dictionary<string, object> { ["id"] = context.RouteValues["id"] });
-    return Task.CompletedTask;
-});
-```
-
-Or use one of the static factory methods (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `InternalServerError`, `ServiceUnavailable`):
-
-```csharp
-context.Response = ArgusProblemDetails.BadRequest("Validation failed", new Dictionary<string, object> { ["field"] = "name" });
-```
-
-This produces a body such as:
-
-```json
-{"type":"about:blank","title":"Bad Request","status":400,"detail":"Validation failed","field":"name"}
-```
-
-Entries in `Extensions` are written as top-level members, as specified by RFC 7807. On the client, read the problem details from a response:
-
-```csharp
-var response = await client.GetAsync("/items/42");
-
-if (ArgusProblemDetails.TryRead(response, out var problem))
-{
-    Console.WriteLine($"{problem.Title}: {problem.Detail}");
-}
-```
-
-## Handling Unhandled Exceptions
-
-When a handler or middleware throws, the pipe host logs the exception and returns a generic `500 Internal Server Error` problem details response. The client always gets a response instead of a closed connection, and no exception details are sent to it.
-
-To control this behavior, register `ArgusExceptionHandlerMiddleware`:
-
-```csharp
-services.AddArgusModules();
-services.AddArgusExceptionHandler(options =>
-{
-    // Include the exception message, type and stack trace in the response. Development only!
-    options.IncludeExceptionDetails = builder.Environment.IsDevelopment();
-});
-```
-
-The router created by `AddArgusModules()` registers the middleware as the outermost global middleware, so it also catches exceptions thrown by middleware that modules add. The problem details `instance` is the request correlation token, which also appears in the error log entry. Cancellation caused by the request timeout or server shutdown is not handled by the middleware, so the host still responds with `503 Service Unavailable` in that case.
-
-## Authorization Header
-
-Clients can identify themselves with the standard `Authorization` header in the form `{scheme} {parameter}`:
-
-```csharp
-var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items" };
-request.SetAuthorization("Bearer", token);   // Authorization: Bearer <token>
-
-var response = await client.SendAsync(request);
-```
-
-On the server, read the parsed values from the request:
-
-```csharp
-app.MapGet("/items", context =>
-{
-    if (!string.Equals(context.Request.AuthorizationScheme, "Bearer", StringComparison.OrdinalIgnoreCase)
-        || !tokenValidator.IsValid(context.Request.AuthorizationParameter))
-    {
-        context.Response = ArgusProblemDetails.Unauthorized("A valid bearer token is required");
-        return Task.CompletedTask;
-    }
-
-    // ...
-});
-```
-
-The raw header value is available as `request.Authorization`. Values containing line breaks are rejected, so a value cannot inject additional headers. The header carries credentials, so do not log it.
-
-## Authentication
-
-`ArgusAuthenticationMiddleware` authenticates every request with a pluggable `IArgusAuthenticationHandler` and rejects requests to protected endpoints with `401 Unauthorized` or `403 Forbidden` problem details. Implement a handler, typically from the `Authorization` header:
-
-```csharp
-public class ApiKeyHandler : IArgusAuthenticationHandler
-{
-    public Task<ArgusAuthenticationResult> AuthenticateAsync(ArgusContext context)
-    {
-        var request = context.Request;
-
-        if (request.AuthorizationScheme == null)
-        {
-            return Task.FromResult(ArgusAuthenticationResult.NoResult());           // 401
-        }
-
-        if (!string.Equals(request.AuthorizationScheme, "ApiKey", StringComparison.OrdinalIgnoreCase)
-            || !IsValidKey(request.AuthorizationParameter))
-        {
-            return Task.FromResult(ArgusAuthenticationResult.Fail("Invalid API key")); // 401
-        }
-
-        var identity = new ClaimsIdentity(new[] { new Claim(ClaimTypes.Name, "reporting-service") }, "ApiKey");
-        return Task.FromResult(ArgusAuthenticationResult.Success(new ClaimsPrincipal(identity)));
-    }
-}
-```
-
-Register it; the router runs authentication right after the exception handler and before any module middleware:
-
-```csharp
-services.AddArgusModules();
-services.AddArgusAuthentication<ApiKeyHandler>();
-```
-
-All endpoints require an authenticated caller by default. Use `.AllowAnonymous()` to open an endpoint, or set `RequireAuthentication = false` and protect individual endpoints with `.RequireAuthentication()`:
-
-```csharp
-app.MapGet("/health", HealthHandler).AllowAnonymous();
-app.MapGet("/items", context =>
-{
-    var caller = context.User.Identity.Name;   // the authenticated ClaimsPrincipal
-    // ...
-});
-```
-
-Return `ArgusAuthenticationResult.Forbidden(...)` for callers whose credentials are valid but who may not access the endpoint (403). Handlers are singletons and must be thread-safe. The `Authorization` header is supplied by the client, so its value is only as trustworthy as the credential it carries (e.g. a secret token).
-
-## Compression
-
-Request and response bodies can be compressed with gzip using the `Content-Encoding` header. Compression is opt-in on both sides:
-
-```csharp
-// Server: compress responses of at least 1 KB for clients that accept gzip
-services.AddArgusPipeHost(options =>
-{
-    options.PipeName = "my-pipe";
-    options.Compression.Enabled = true;
-    options.Compression.MinimumBodySize = 1024; // default
-});
-
-// Client: send Accept-Encoding: gzip and compress request bodies of at least 1 KB
-services.AddArgusClient("my-pipe", client => client.Compression.Enabled = true);
-```
-
-- The host always decodes compressed requests, even when its own compression is disabled. `MaxRequestBodySize` limits both the compressed and the decompressed size, which protects against "zip bombs".
-- The host compresses a response only when the request's `Accept-Encoding` header accepts the encoding.
-- The client compresses request bodies whenever its compression is enabled, so only enable it against a server that supports compression (this version or later).
-- Received bodies are decompressed transparently, and the `Content-Encoding` header is removed.
-- Streamed bodies are compressed on the fly in chunked transfer encoding.
-- Other encodings can be added by implementing `IArgusContentEncoding` and adding them to `Compression.Encodings`.
-
-## Retrying Transient Pipe Failures
-
-`ArgusClient` can automatically retry requests that fail because of transient named pipe errors, for example when the pipe breaks while the server restarts. Retries are disabled by default. Enable them by registering the client with a retry policy:
-
-```csharp
-services.AddArgusClient("my-pipe", TimeSpan.FromSeconds(30), retry =>
-{
-    retry.MaxRetries = 3;                                // default: 3
-    retry.InitialDelay = TimeSpan.FromMilliseconds(100); // default: 100 ms
-    retry.Strategy = RetryBackoffStrategy.Exponential;   // Fixed, Linear or Exponential (default)
-});
-```
-
-or by setting `client.RetryPolicy = new ArgusRetryPolicy()` on an `ArgusClient` directly.
-
-- A failure while connecting, before anything was sent, is always retried.
-- A failure after the request was sent is only retried for idempotent verbs (`GET`, `HEAD`, `PUT`, `DELETE`), because the server may already have processed it. Set `RetryNonIdempotentRequests = true` to also retry `POST` and `PATCH`.
-- A streamed request body is only retried after it was sent when the stream is seekable; it is rewound before the retry.
-- By default only `IOException`s are retried; supply `ShouldRetry` to change that. Timeouts and cancellation are never retried.
-- The timeout covers the whole call, including retries and the delays between them.
-- Each retry is logged as a warning through `ILogger<ArgusClient>`.
-
-## Code Quality
-
+[![NuGet](https://img.shields.io/nuget/v/ArgusTransfer.svg)](https://www.nuget.org/packages/ArgusTransfer)
+[![Build Status](https://github.com/samgerene/ArgusTransfer/actions/workflows/CodeQuality.yml/badge.svg?branch=development)](https://github.com/samgerene/ArgusTransfer/actions/workflows/CodeQuality.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)
-[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=coverage)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)
-[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)
-[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)
-[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)
-[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)
-[![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)
-[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=samgerene_ArgusTransfer&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer)
 
-## Build Status
+## Why ArgusTransfer?
 
-GitHub actions are used to build and test the Argus Health application
+ArgusTransfer lets a background process -- typically a Windows service or a hosted worker -- expose a REST-like API to other processes on the same machine, without running an HTTP server. You map verbs and routes to handlers, like a minimal web API, and clients call them over a named pipe using a small text protocol (ARGUS/1.0) modeled on HTTP/1.1.
 
-Branch | Build Status
-------- | :------------
-Main | ![Build Status](https://github.com/samgerene/ArgusTransfer/actions/workflows/CodeQuality.yml/badge.svg?branch=main)
-Development | ![Build Status](https://github.com/samgerene/ArgusTransfer/actions/workflows/CodeQuality.yml/badge.svg?branch=development)
+Use it when an HTTP server is too heavy, not allowed, or would open a network port you don't want. It is not meant for communication across machines or with browsers -- use HTTP for that.
 
-# Software Bill of Materials (SBOM) and Provenance
+## Features
 
-As part of our commitment to security, transparency, and traceability the docker images and nuget packaves Software Bill of Materials (SBOM), the docker containers also contain Provenance information. These are automatically generated during the build process, providing detailed insights into the components, their licenses, versions, and the integrity of the nugets and docker images. What is Included:
+- **Routing and modules** -- `MapGet`/`MapPost`/... with route parameters and `Guid` / `ShortGuid` constraints, organized in modules discovered automatically. [Routing and Modules](https://github.com/samgerene/ArgusTransfer/wiki/Routing-And-Modules)
+- **Middleware** -- global and per-endpoint, with built-in logging and exception handling. [Middleware](https://github.com/samgerene/ArgusTransfer/wiki/Middleware)
+- **Client** -- typed verb methods, query parameters, timeouts, streaming bodies and automatic retries for transient pipe failures. [Client Usage](https://github.com/samgerene/ArgusTransfer/wiki/Client-Usage)
+- **Structured errors** -- RFC 7807 problem details for error responses. [Error Handling](https://github.com/samgerene/ArgusTransfer/wiki/Error-Handling)
+- **Authentication** -- `Authorization` header convention and pluggable authentication middleware. [Authentication](https://github.com/samgerene/ArgusTransfer/wiki/Authentication)
+- **Compression** -- gzip `Content-Encoding` for request and response bodies. [Compression](https://github.com/samgerene/ArgusTransfer/wiki/Compression)
+- **Content negotiation** -- pluggable body serializers selected by `Content-Type` and `Accept`. [Serialization](https://github.com/samgerene/ArgusTransfer/wiki/Serialization)
+- **Hosting** -- integrates with `Microsoft.Extensions.Hosting` and dependency injection, with concurrency limits, request timeouts, graceful shutdown and Windows pipe security for services. [Server Configuration](https://github.com/samgerene/ArgusTransfer/wiki/Server-Configuration)
 
-## SBOM (Software Bill of Materials):
+Requires .NET 10. Developed on Windows and tested on Linux in CI; on Linux and macOS, .NET named pipes are Unix domain sockets, and pipe ACLs (`PipeSecurity`) apply to Windows only.
 
-- A comprehensive list of all open-source and third-party components included in the Docker images and nugets.
-- Tracks software dependencies, licenses, and versions.
-- Helps with vulnerability management by allowing users to quickly identify potential risks tied to specific components.
+## Install
 
-## Provenance:
+```bash
+dotnet add package ArgusTransfer
+dotnet add package Microsoft.Extensions.Hosting
+```
 
-- A record of the image's origin and build process, providing traceability and assurance regarding the integrity of the image.
-- This ensures that the image was built using the declared sources and under the specified conditions, helping verify its authenticity and consistency.
+## Quick start
 
-## Why SBOM and Provenance?
+A console app that hosts one endpoint and calls it -- in a real system the host and the client are separate processes:
 
-- Improved Transparency: Provides full visibility into the open-source and third-party components included in the image.
-- Security Assurance: Enables easier tracking of vulnerabilities associated with specific components, promoting proactive security measures.
-- Compliance: Ensures adherence to licensing requirements and simplifies audits of dependencies and build processes.
-- Image Integrity: Provenance guarantees that the image is built as expected, without unauthorized modifications.
+```csharp
+using ArgusTransfer.Client;
+using ArgusTransfer.Extensions;
+using ArgusTransfer.Protocol;
+using ArgusTransfer.Routing;
 
-# License
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
-The ArgusTransfer software are provided to the community under the Apache License 2.0.
+var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddArgusModules();                                  // discovers HelloModule
+builder.Services.AddArgusPipeHost(options => options.PipeName = "hello");
+builder.Services.AddArgusClient("hello");
+
+using var host = builder.Build();
+await host.StartAsync();
+
+var client = host.Services.GetRequiredService<IArgusClient>();
+var response = await client.GetAsync("/hello/world");
+
+Console.WriteLine($"{(int)response.StatusCode} {response.Body}");   // 200 Hello, world!
+
+await host.StopAsync();
+
+public class HelloModule : IArgusModule
+{
+    public void AddRoutes(IArgusRouteBuilder app)
+    {
+        app.MapGet("/hello/{name}", context =>
+        {
+            context.Response = new ArgusResponse
+            {
+                StatusCode = ArgusStatusCode.Ok,
+                Body = $"Hello, {context.RouteValues["name"]}!"
+            };
+
+            return Task.CompletedTask;
+        });
+    }
+}
+```
+
+The [Quick Start guide](https://github.com/samgerene/ArgusTransfer/wiki/Quick-Start) walks through a separate server and client, and the [sample project](https://github.com/samgerene/ArgusTransfer/tree/development/ArgusTransfer.Sample) shows a complete CRUD module.
+
+## Documentation
+
+The [wiki](https://github.com/samgerene/ArgusTransfer/wiki) is the reference documentation:
+
+- [Architecture and Protocol](https://github.com/samgerene/ArgusTransfer/wiki/Architecture-And-Protocol) and the [Wire Format Reference](https://github.com/samgerene/ArgusTransfer/wiki/Wire-Format-Reference)
+- [Dependency Injection](https://github.com/samgerene/ArgusTransfer/wiki/Dependency-Injection) -- all registration methods
+- [Troubleshooting](https://github.com/samgerene/ArgusTransfer/wiki/Troubleshooting)
+
+## Contributing
+
+Bug reports and feature requests are welcome as [GitHub issues](https://github.com/samgerene/ArgusTransfer/issues). See [CONTRIBUTING](https://github.com/samgerene/ArgusTransfer/blob/development/.github/CONTRIBUTING.md) for how to make changes and submit pull requests, and the [Development Environment](https://github.com/samgerene/ArgusTransfer/wiki/Development-Environment) page for building and testing. Builds and tests run on GitHub Actions, and code quality is tracked on [SonarCloud](https://sonarcloud.io/summary/new_code?id=samgerene_ArgusTransfer).
+
+## Software Bill of Materials
+
+Every NuGet package ships with a Software Bill of Materials (SBOM) generated during the build. It lists the third-party components, versions and licenses the package depends on, so you can track vulnerabilities and audit licensing.
+
+## License
+
+ArgusTransfer is licensed under the [Apache License 2.0](https://github.com/samgerene/ArgusTransfer/blob/development/LICENSE).

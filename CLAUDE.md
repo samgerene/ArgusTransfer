@@ -108,6 +108,13 @@ Authentication: `ArgusAuthenticationMiddleware` calls the singleton `IArgusAuthe
 - `services.AddArgusAuthentication<THandler>(Action<ArgusAuthenticationOptions>?)` — registers the handler (singleton, first registration wins) and `ArgusAuthenticationMiddleware`; the router adds it right after the exception handler.
 - `services.AddArgusExceptionHandler(Action<ArgusExceptionHandlerOptions>?)` — registers `ArgusExceptionHandlerMiddleware` as a singleton; the `ArgusRouter` factory in `AddArgusModules()` adds it as the outermost global middleware before modules run `AddRoutes`, independent of registration order.
 
+## Documentation Conventions
+
+- **README.md is a landing page**, and also the NuGet package readme (`PackageReadmeFile`): pitch, why/when to use, feature list, install, a quick start, documentation links, contributing, SBOM, license. Do **not** add detailed feature sections to it.
+- **Document features in the wiki** (`ArgusTransfer.wiki` repository, pushed to `samgerene/ArgusTransfer.wiki`): add or update the relevant page and the sidebar. A new feature gets at most a one-line entry in the README feature list, linking to its wiki page.
+- Links in the README must be absolute URLs (relative links break on nuget.org).
+- The README quick start must compile and run: verify it in a scratch console project (`dotnet new console`, project reference to `ArgusTransfer`, package `Microsoft.Extensions.Hosting`) whenever it or the APIs it uses change.
+
 ## Git Conventions
 
 - **No co-author trailer**: Do not add a `Co-Authored-By` line for Claude in commit messages.
