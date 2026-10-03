@@ -46,7 +46,7 @@ After making code changes, follow this verification sequence before considering 
 ArgusTransfer/
 ├── Client/          – ArgusClient
 ├── Extensions/      – DI extension methods
-├── Middleware/      – Middleware implementations such as ArgusLoggingMiddleware
+├── Middleware/      – Middleware implementations: ArgusLoggingMiddleware, ArgusExceptionHandlerMiddleware (+ options)
 ├── Protocol/        – ArgusMessage, ArgusRequest, ArgusResponse, ArgusVerb, ArgusStatusCode, ArgusHeaderNames, ArgusProblemDetails
 ├── Routing/         – ArgusRouter, route templates, modules
 ├── Serialization/   – Request/response serializers, body serializer registry, chunked encoding
@@ -84,6 +84,8 @@ Optional retry (`ArgusClient.RetryPolicy`, `null` = disabled) via `ArgusRetryPol
 
 `ArgusPipeHostBackgroundService` extends `BackgroundService`, listens on a named pipe, deserializes incoming requests, and routes them through `ArgusRouter`.
 
+Exception handling is layered: if routing throws (anything except `OperationCanceledException`, which maps to 503 on timeout), the host logs it and returns a generic 500 `ArgusProblemDetails` response (no exception details) instead of dropping the connection; dropping it would make clients with a retry policy re-execute the request. `ArgusExceptionHandlerMiddleware` customizes this inside the pipeline (`IncludeExceptionDetails` for development) and rethrows cancellation of `ArgusContext.RequestAborted` so timeouts still reach the host. Both build the response via the internal `ArgusExceptionHandlerMiddleware.CreateErrorResponse`.
+
 ### DI Integration
 
 - `services.AddArgusModules()` — scans the calling assembly for `IArgusModule` implementations, registers them as transient, and registers `ArgusRouter` as a singleton that wires up all module routes.
@@ -92,6 +94,7 @@ Optional retry (`ArgusClient.RetryPolicy`, `null` = disabled) via `ArgusRetryPol
 - `services.AddArgusClient(string pipeName, TimeSpan? defaultTimeout, Action<ArgusRetryPolicy> configureRetry)` — same, plus a configured `ArgusRetryPolicy` and `ILogger<ArgusClient>` when logging is registered (separate overload to keep the original signature binary compatible).
 - `services.AddArgusPlainTextProtocol()` — registers `PlainTextArgusBodySerializer`, the enumerable `IArgusBodySerializer`, and `IArgusBodySerializerRegistry`.
 - `services.AddArgusBodySerializer<T>()` — registers an additional `IArgusBodySerializer` implementation (deduplicated via `TryAddEnumerable`).
+- `services.AddArgusExceptionHandler(Action<ArgusExceptionHandlerOptions>?)` — registers `ArgusExceptionHandlerMiddleware` as a singleton; the `ArgusRouter` factory in `AddArgusModules()` adds it as the outermost global middleware before modules run `AddRoutes`, independent of registration order.
 
 ## Git Conventions
 

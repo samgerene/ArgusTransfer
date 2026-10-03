@@ -25,6 +25,7 @@ namespace ArgusTransfer.Tests.Extensions
 
     using ArgusTransfer.Client;
     using ArgusTransfer.Extensions;
+    using ArgusTransfer.Middleware;
     using ArgusTransfer.Routing;
     using ArgusTransfer.Serialization;
     using ArgusTransfer.Server;
@@ -103,6 +104,57 @@ namespace ArgusTransfer.Tests.Extensions
             var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IArgusBodySerializer));
 
             Assert.That(descriptor, Is.Not.Null);
+        }
+
+        [Test]
+        public void Verify_that_AddArgusExceptionHandler_registers_middleware_as_singleton()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusExceptionHandler();
+
+            var descriptor = services.Single(d => d.ServiceType == typeof(ArgusExceptionHandlerMiddleware));
+
+            Assert.That(descriptor.Lifetime, Is.EqualTo(ServiceLifetime.Singleton));
+
+            using var provider = services.BuildServiceProvider();
+
+            Assert.That(provider.GetRequiredService<ArgusExceptionHandlerMiddleware>(), Is.Not.Null);
+        }
+
+        [Test]
+        public void Verify_that_AddArgusExceptionHandler_applies_configuration()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusExceptionHandler(options => options.IncludeExceptionDetails = true);
+
+            using var provider = services.BuildServiceProvider();
+
+            Assert.That(provider.GetRequiredService<IOptions<ArgusExceptionHandlerOptions>>().Value.IncludeExceptionDetails, Is.True);
+        }
+
+        [Test]
+        public void Verify_that_AddArgusExceptionHandler_defaults_to_excluding_exception_details()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusExceptionHandler();
+
+            using var provider = services.BuildServiceProvider();
+
+            Assert.That(provider.GetRequiredService<IOptions<ArgusExceptionHandlerOptions>>().Value.IncludeExceptionDetails, Is.False);
+        }
+
+        [Test]
+        public void Verify_that_AddArgusExceptionHandler_called_twice_registers_one_middleware()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusExceptionHandler();
+            services.AddArgusExceptionHandler();
+
+            Assert.That(services.Count(d => d.ServiceType == typeof(ArgusExceptionHandlerMiddleware)), Is.EqualTo(1));
         }
 
         [Test]

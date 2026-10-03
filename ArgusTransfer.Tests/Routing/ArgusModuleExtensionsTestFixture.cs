@@ -20,9 +20,12 @@
 
 namespace ArgusTransfer.Tests.Routing
 {
+    using System;
     using System.Linq;
+    using System.Threading;
     using System.Threading.Tasks;
 
+    using ArgusTransfer.Extensions;
     using ArgusTransfer.Protocol;
     using ArgusTransfer.Routing;
 
@@ -51,11 +54,80 @@ namespace ArgusTransfer.Tests.Routing
     }
 
     /// <summary>
+    /// A test module that registers a global middleware which throws for GET /exception-handler-test
+    /// and passes every other request through, used to verify that the exception handler is the outermost middleware
+    /// </summary>
+    public class ThrowingMiddlewareArgusModule : IArgusModule
+    {
+        public void AddRoutes(IArgusRouteBuilder app)
+        {
+            app.UseMiddleware(new ThrowingMiddleware());
+
+            app.MapGet("/exception-handler-test", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok };
+                return Task.CompletedTask;
+            });
+        }
+
+        private sealed class ThrowingMiddleware : IArgusMiddleware
+        {
+            public Task InvokeAsync(ArgusContext context, ArgusRequestDelegate next)
+            {
+                if (context.Request.Route == "/exception-handler-test")
+                {
+                    throw new InvalidOperationException("thrown by module middleware");
+                }
+
+                return next(context);
+            }
+        }
+    }
+
+    /// <summary>
     /// Suite of tests for the <see cref="ArgusModuleExtensions"/> class
     /// </summary>
     [TestFixture]
     public class ArgusModuleExtensionsTestFixture
     {
+        [Test]
+        public async Task Verify_that_registered_exception_handler_wraps_module_middleware()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusModules();
+            services.AddArgusExceptionHandler();
+
+            using var provider = services.BuildServiceProvider();
+            var router = provider.GetRequiredService<ArgusRouter>();
+
+            var context = new ArgusContext(
+                new ArgusRequest { Verb = ArgusVerb.GET, Route = "/exception-handler-test" },
+                CancellationToken.None);
+
+            await router.RouteAsync(context);
+
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.InternalServerError));
+            Assert.That(ArgusProblemDetails.TryRead(context.Response, out _), Is.True);
+        }
+
+        [Test]
+        public void Verify_that_without_exception_handler_module_middleware_exception_propagates()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusModules();
+
+            using var provider = services.BuildServiceProvider();
+            var router = provider.GetRequiredService<ArgusRouter>();
+
+            var context = new ArgusContext(
+                new ArgusRequest { Verb = ArgusVerb.GET, Route = "/exception-handler-test" },
+                CancellationToken.None);
+
+            Assert.That(async () => await router.RouteAsync(context), Throws.TypeOf<InvalidOperationException>());
+        }
+
         [Test]
         public void Verify_that_AddArgusModules_registers_module_and_router()
         {

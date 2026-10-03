@@ -26,6 +26,7 @@ namespace ArgusTransfer.Transport.Tests.Server
     using System.Threading.Tasks;
 
     using ArgusTransfer.Client;
+    using ArgusTransfer.Middleware;
 
     using ArgusTransfer.Protocol;
     using ArgusTransfer.Routing;
@@ -753,6 +754,96 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             await cts.CancelAsync();
             await acceptService.StopAsync(CancellationToken.None);
+        }
+
+        [Test]
+        public async Task Verify_that_HandleRequestAsync_returns_generic_InternalServerError_for_unhandled_exception()
+        {
+            var router = new ArgusRouter();
+            router.MapGet("/boom", _ => throw new InvalidOperationException("Password=hunter2"));
+
+            var hostService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                Options.Create(new ArgusPipeHostOptions()),
+                new PlainTextArgusBodySerializer());
+
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/boom" };
+
+            var response = await hostService.HandleRequestAsync(request);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.InternalServerError));
+            Assert.That(response.CorrelationToken, Is.EqualTo(request.CorrelationToken));
+            Assert.That(response.Body, Does.Not.Contain("hunter2"));
+            Assert.That(ArgusProblemDetails.TryRead(response, out var problem), Is.True);
+            Assert.That(problem.Detail, Is.EqualTo(ArgusExceptionHandlerMiddleware.GenericErrorDetail));
+            Assert.That(problem.Instance, Is.EqualTo(request.CorrelationToken.ToString()));
+
+            this.mockLogger.Verify(
+                l => l.Log(
+                    LogLevel.Error,
+                    It.IsAny<EventId>(),
+                    It.IsAny<It.IsAnyType>(),
+                    It.IsAny<InvalidOperationException>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Once);
+        }
+
+        [Test]
+        public async Task Verify_that_HandleRequestAsync_returns_InternalServerError_without_body_for_HEAD()
+        {
+            var router = new ArgusRouter();
+            router.MapHead("/boom", _ => throw new InvalidOperationException("failure"));
+
+            var hostService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                Options.Create(new ArgusPipeHostOptions()),
+                new PlainTextArgusBodySerializer());
+
+            var response = await hostService.HandleRequestAsync(new ArgusRequest { Verb = ArgusVerb.HEAD, Route = "/boom" });
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.InternalServerError));
+            Assert.That(response.Body, Is.Null);
+        }
+
+        [Test]
+        public async Task Verify_that_handler_exception_over_the_pipe_returns_InternalServerError_and_is_not_retried()
+        {
+            var pipeName = $"argus-handler-exception-test-{Guid.NewGuid():N}";
+            var invocationCount = 0;
+
+            var router = new ArgusRouter();
+            router.MapGet("/boom", _ =>
+            {
+                Interlocked.Increment(ref invocationCount);
+                throw new InvalidOperationException("Password=hunter2");
+            });
+
+            var hostService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                Options.Create(new ArgusPipeHostOptions { PipeName = pipeName }),
+                new PlainTextArgusBodySerializer());
+
+            using var cts = new CancellationTokenSource();
+            await hostService.StartAsync(cts.Token);
+
+            using var client = new ArgusClient(pipeName)
+            {
+                RetryPolicy = new ArgusRetryPolicy { InitialDelay = TimeSpan.FromMilliseconds(10) }
+            };
+
+            var response = await client.GetAsync("/boom", timeout: TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.InternalServerError));
+            Assert.That(response.Body, Does.Not.Contain("hunter2"));
+            Assert.That(ArgusProblemDetails.TryRead(response, out var problem), Is.True);
+            Assert.That(problem.Detail, Is.EqualTo(ArgusExceptionHandlerMiddleware.GenericErrorDetail));
+            Assert.That(invocationCount, Is.EqualTo(1));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
         }
     }
 }

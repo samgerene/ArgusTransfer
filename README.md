@@ -41,6 +41,23 @@ if (ArgusProblemDetails.TryRead(response, out var problem))
 }
 ```
 
+## Handling Unhandled Exceptions
+
+When a handler or middleware throws, the pipe host logs the exception and returns a generic `500 Internal Server Error` problem details response. The client always gets a response instead of a closed connection, and no exception details are sent to it.
+
+To control this behavior, register `ArgusExceptionHandlerMiddleware`:
+
+```csharp
+services.AddArgusModules();
+services.AddArgusExceptionHandler(options =>
+{
+    // Include the exception message, type and stack trace in the response. Development only!
+    options.IncludeExceptionDetails = builder.Environment.IsDevelopment();
+});
+```
+
+The router created by `AddArgusModules()` registers the middleware as the outermost global middleware, so it also catches exceptions thrown by middleware that modules add. The problem details `instance` is the request correlation token, which also appears in the error log entry. Cancellation caused by the request timeout or server shutdown is not handled by the middleware, so the host still responds with `503 Service Unavailable` in that case.
+
 ## Retrying Transient Pipe Failures
 
 `ArgusClient` can automatically retry requests that fail because of transient named pipe errors, for example when the pipe breaks while the server restarts. Retries are disabled by default. Enable them by registering the client with a retry policy:

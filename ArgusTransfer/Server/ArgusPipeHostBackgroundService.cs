@@ -31,6 +31,7 @@ namespace ArgusTransfer.Server
     using System.Threading;
     using System.Threading.Tasks;
 
+    using ArgusTransfer.Middleware;
     using ArgusTransfer.Protocol;
     using ArgusTransfer.Routing;
     using ArgusTransfer.Serialization;
@@ -263,9 +264,9 @@ namespace ArgusTransfer.Server
                         {
                             await this.router.RouteAsync(context);
                         }
-                        catch (OperationCanceledException) when (!requestToken.IsCancellationRequested)
+                        catch (OperationCanceledException ex) when (!requestToken.IsCancellationRequested)
                         {
-                            this.logger.LogWarning(
+                            this.logger.LogWarning(ex,
                                 "Request {Verb} {Route} timed out after {Timeout}.",
                                 request.Verb, request.Route, this.options.RequestTimeout);
 
@@ -282,6 +283,10 @@ namespace ArgusTransfer.Server
                         catch (OperationCanceledException)
                         {
                             return;
+                        }
+                        catch (Exception ex)
+                        {
+                            context.Response = this.CreateUnhandledExceptionResponse(request, ex);
                         }
 
                         if (!string.IsNullOrEmpty(request.Accept))
@@ -308,7 +313,7 @@ namespace ArgusTransfer.Server
                                 Body = ex.Message
                             };
 
-                            await this.responseSerializer.WriteAsync(errorWriter, badRequest);
+                            await this.responseSerializer.WriteAsync(errorWriter, badRequest, requestToken);
                         }
                         catch
                         {
@@ -411,8 +416,46 @@ namespace ArgusTransfer.Server
                     Body = "Request processing timed out"
                 };
             }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return this.CreateUnhandledExceptionResponse(argusRequest, ex);
+            }
 
             return context.Response;
+        }
+
+        /// <summary>
+        /// Logs an exception that escaped the routing pipeline and creates a generic
+        /// <see cref="ArgusStatusCode.InternalServerError"/> problem details response for it, so the client
+        /// receives a response instead of a closed connection and no exception details leak to the client.
+        /// Register <see cref="ArgusExceptionHandlerMiddleware"/> to customize this behavior
+        /// </summary>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> that was being processed
+        /// </param>
+        /// <param name="exception">
+        /// The unhandled <see cref="Exception"/>
+        /// </param>
+        /// <returns>
+        /// The 500 <see cref="ArgusResponse"/>
+        /// </returns>
+        private ArgusResponse CreateUnhandledExceptionResponse(ArgusRequest request, Exception exception)
+        {
+            this.logger.LogError(
+                exception,
+                "Unhandled exception while processing {Verb} {Route} [{CorrelationToken}]. Returning 500.",
+                request.Verb,
+                request.Route,
+                request.CorrelationToken);
+
+            var response = ArgusExceptionHandlerMiddleware.CreateErrorResponse(request.CorrelationToken, exception, includeExceptionDetails: false);
+
+            if (request.Verb == ArgusVerb.HEAD)
+            {
+                response.Body = null;
+            }
+
+            return response;
         }
 
         /// <summary>
