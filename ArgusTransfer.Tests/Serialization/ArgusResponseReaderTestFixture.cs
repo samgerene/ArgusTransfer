@@ -101,9 +101,19 @@ namespace ArgusTransfer.Tests.Serialization
         }
 
         [Test]
-        public async Task Verify_that_ReadAsync_throws_FormatException_for_empty_stream()
+        public async Task Verify_that_ReadAsync_throws_EndOfStreamException_for_empty_stream()
         {
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(string.Empty));
+            using var reader = new StreamReader(stream);
+
+            await Assert.ThatAsync(async () => await this.serializer.ReadAsync(reader, CancellationToken.None),
+                Throws.TypeOf<EndOfStreamException>());
+        }
+
+        [Test]
+        public async Task Verify_that_ReadAsync_throws_FormatException_for_blank_status_line()
+        {
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes("   \r\n\r\n"));
             using var reader = new StreamReader(stream);
 
             await Assert.ThatAsync(async () => await this.serializer.ReadAsync(reader, CancellationToken.None),

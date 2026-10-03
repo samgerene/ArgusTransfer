@@ -51,6 +51,30 @@ namespace ArgusTransfer.Extensions
         /// </returns>
         public static IServiceCollection AddArgusClient(this IServiceCollection services, string pipeName = "argus", TimeSpan? defaultTimeout = null)
         {
+            return services.AddArgusClient(pipeName, defaultTimeout, null);
+        }
+
+        /// <summary>
+        /// Registers <see cref="IArgusClient"/> with a transient <see cref="ArgusClient"/> implementation
+        /// that retries transient named pipe failures according to an <see cref="ArgusRetryPolicy"/>.
+        /// Retry attempts are logged through <see cref="ILogger{ArgusClient}"/> when logging is registered.
+        /// </summary>
+        /// <param name="services">
+        /// The <see cref="IServiceCollection"/> to register services with
+        /// </param>
+        /// <param name="pipeName">
+        /// The name of the named pipe to connect to
+        /// </param>
+        /// <param name="defaultTimeout">An optional default timeout for all requests made by the client</param>
+        /// <param name="configureRetry">
+        /// An optional <see cref="Action{ArgusRetryPolicy}"/> to configure the retry policy. When <c>null</c>, retries are disabled;
+        /// otherwise the action receives an <see cref="ArgusRetryPolicy"/> initialized with its defaults
+        /// </param>
+        /// <returns>
+        /// The <see cref="IServiceCollection"/> for method chaining
+        /// </returns>
+        public static IServiceCollection AddArgusClient(this IServiceCollection services, string pipeName, TimeSpan? defaultTimeout, Action<ArgusRetryPolicy> configureRetry)
+        {
             services.AddTransient<IArgusClient>(sp =>
             {
                 var registry = sp.GetService<IArgusBodySerializerRegistry>();
@@ -61,6 +85,15 @@ namespace ArgusTransfer.Extensions
                 {
                     client.DefaultTimeout = defaultTimeout.Value;
                 }
+
+                if (configureRetry != null)
+                {
+                    var retryPolicy = new ArgusRetryPolicy();
+                    configureRetry(retryPolicy);
+                    client.RetryPolicy = retryPolicy;
+                }
+
+                client.Logger = sp.GetService<ILogger<ArgusClient>>();
 
                 return client;
             });

@@ -78,6 +78,8 @@ Text-based request/response wire format transmitted over named pipes.
 
 `ArgusClient` creates a `NamedPipeClientStream` per request, serializes via `ArgusRequestSerializer`, reads the response via `ArgusResponseSerializer`. Provides typed convenience methods (`GetAsync`, `PostAsync`, `PutAsync`, `PatchAsync`, `DeleteAsync`, `HeadAsync`) with optional query parameters, per-request timeouts, and streaming body support.
 
+Optional retry (`ArgusClient.RetryPolicy`, `null` = disabled) via `ArgusRetryPolicy` (`MaxRetries`, `InitialDelay`, `MaxDelay`, `RetryBackoffStrategy` Fixed/Linear/Exponential, `ShouldRetry` predicate defaulting to `IOException`). Implemented in-house rather than with Polly to avoid forcing a dependency on library consumers. Rules: failures before the request is written are always retryable; after it is written only idempotent verbs (GET/HEAD/PUT/DELETE) are retried unless `RetryNonIdempotentRequests` is set; a streamed body is only retried after writing if seekable (rewound); `TimeoutException`/`OperationCanceledException` are never retried; the timeout is a budget for the whole call including retries. Retries are logged as warnings through `ArgusClient.Logger`. `ArgusResponseSerializer.ReadAsync` throws `EndOfStreamException` (an `IOException`) when the connection closes before a status line, so a dropped connection is distinguishable from a malformed response (`FormatException`).
+
 ### Server
 
 `ArgusPipeHostBackgroundService` extends `BackgroundService`, listens on a named pipe, deserializes incoming requests, and routes them through `ArgusRouter`.
@@ -87,6 +89,7 @@ Text-based request/response wire format transmitted over named pipes.
 - `services.AddArgusModules()` — scans the calling assembly for `IArgusModule` implementations, registers them as transient, and registers `ArgusRouter` as a singleton that wires up all module routes.
 - `services.AddArgusPipeHost(Action<ArgusPipeHostOptions>?)` — registers `ArgusPipeHostBackgroundService` as a hosted service with optional configuration.
 - `services.AddArgusClient(string pipeName, TimeSpan? defaultTimeout)` — registers `IArgusClient` as transient, using `IArgusBodySerializerRegistry` if available.
+- `services.AddArgusClient(string pipeName, TimeSpan? defaultTimeout, Action<ArgusRetryPolicy> configureRetry)` — same, plus a configured `ArgusRetryPolicy` and `ILogger<ArgusClient>` when logging is registered (separate overload to keep the original signature binary compatible).
 - `services.AddArgusPlainTextProtocol()` — registers `PlainTextArgusBodySerializer`, the enumerable `IArgusBodySerializer`, and `IArgusBodySerializerRegistry`.
 - `services.AddArgusBodySerializer<T>()` — registers an additional `IArgusBodySerializer` implementation (deduplicated via `TryAddEnumerable`).
 

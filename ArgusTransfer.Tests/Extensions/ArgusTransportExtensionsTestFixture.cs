@@ -106,6 +106,54 @@ namespace ArgusTransfer.Tests.Extensions
         }
 
         [Test]
+        public void Verify_that_AddArgusClient_without_configureRetry_leaves_retries_disabled()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusClient("test-pipe");
+
+            using var provider = services.BuildServiceProvider();
+            using var client = (ArgusClient)provider.GetRequiredService<IArgusClient>();
+
+            Assert.That(client.RetryPolicy, Is.Null);
+        }
+
+        [Test]
+        public void Verify_that_AddArgusClient_with_configureRetry_sets_configured_retry_policy()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusClient("test-pipe", TimeSpan.FromSeconds(5), retry =>
+            {
+                retry.MaxRetries = 5;
+                retry.Strategy = RetryBackoffStrategy.Linear;
+            });
+
+            using var provider = services.BuildServiceProvider();
+            using var client = (ArgusClient)provider.GetRequiredService<IArgusClient>();
+
+            Assert.That(client.DefaultTimeout, Is.EqualTo(TimeSpan.FromSeconds(5)));
+            Assert.That(client.RetryPolicy, Is.Not.Null);
+            Assert.That(client.RetryPolicy.MaxRetries, Is.EqualTo(5));
+            Assert.That(client.RetryPolicy.Strategy, Is.EqualTo(RetryBackoffStrategy.Linear));
+            Assert.That(client.RetryPolicy.InitialDelay, Is.EqualTo(TimeSpan.FromMilliseconds(100)));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusClient_uses_registered_logger()
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+
+            services.AddArgusClient("test-pipe", null, retry => retry.MaxRetries = 1);
+
+            using var provider = services.BuildServiceProvider();
+            using var client = (ArgusClient)provider.GetRequiredService<IArgusClient>();
+
+            Assert.That(client.Logger, Is.InstanceOf<ILogger<ArgusClient>>());
+        }
+
+        [Test]
         public void Verify_that_AddArgusClient_registers_IArgusClient()
         {
             var services = new ServiceCollection();
