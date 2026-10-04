@@ -842,6 +842,64 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public async Task Verify_that_accept_failures_are_logged_and_the_host_keeps_running()
+        {
+            var pipeName = $"argus-accept-failure-test-{Guid.NewGuid():N}";
+
+            // Another server instance that allows only one instance occupies the pipe name, so creating the host's
+            // instances fails with a real pipe error until it is released
+            var occupier = new System.IO.Pipes.NamedPipeServerStream(pipeName, System.IO.Pipes.PipeDirection.InOut, 1, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
+
+            var hostService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                new ArgusRouter(),
+                Options.Create(new ArgusPipeHostOptions { PipeName = pipeName }),
+                new PlainTextArgusBodySerializer())
+            {
+                AcceptRetryInitialDelay = TimeSpan.FromMilliseconds(20)
+            };
+
+            using var cts = new CancellationTokenSource();
+            await hostService.StartAsync(cts.Token);
+
+            await Task.Delay(300);
+
+            Assert.That(hostService.ExecuteTask.IsCompleted, Is.False, "the accept loop must survive pipe errors");
+            this.mockLogger.Verify(
+                l => l.Log(
+                    LogLevel.Error,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((state, _) => state.ToString().Contains("Accepting a connection on pipe")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.AtLeastOnce);
+
+            await occupier.DisposeAsync();
+
+            // Once the pipe name is free again, the host recovers and serves clients
+            using var client = new ArgusClient(pipeName);
+            var response = await client.GetAsync("/unknown", timeout: TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.NotFound));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+
+            Assert.That(hostService.ExecuteTask.IsFaulted, Is.False, "stopping must end the loop without an exception");
+        }
+
+        [TestCase(1, 1)]
+        [TestCase(2, 2)]
+        [TestCase(3, 4)]
+        [TestCase(5, 16)]
+        [TestCase(6, 30)]
+        [TestCase(1000, 30)]
+        public void Verify_that_accept_retry_delay_doubles_up_to_30_seconds(int consecutiveFailures, int expectedSeconds)
+        {
+            Assert.That(this.service.GetAcceptRetryDelay(consecutiveFailures), Is.EqualTo(TimeSpan.FromSeconds(expectedSeconds)));
+        }
+
+        [Test]
         public async Task Verify_that_route_with_spaces_reaches_the_handler_unchanged_over_the_pipe()
         {
             var pipeName = $"argus-route-escaping-test-{Guid.NewGuid():N}";
