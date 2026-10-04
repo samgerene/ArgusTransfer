@@ -898,7 +898,7 @@ namespace ArgusTransfer.Transport.Tests.Server
         {
             // The handler ignores RequestAborted and keeps running past the drain timeout and the grace period
             var (hostService, cts, request) = await this.StartHostWithRunningRequestAsync(_ => Task.Delay(1500));
-            var requestTasks = hostService.ActiveRequestTasks;
+            var requestTasks = hostService.GetActiveRequestTasks();
 
             Assert.That(requestTasks, Has.Count.EqualTo(1));
 
@@ -930,7 +930,7 @@ namespace ArgusTransfer.Transport.Tests.Server
         {
             // The handler stops as soon as the drain timeout cancels RequestAborted
             var (hostService, cts, request) = await this.StartHostWithRunningRequestAsync(context => Task.Delay(Timeout.Infinite, context.RequestAborted));
-            var requestTasks = hostService.ActiveRequestTasks;
+            var requestTasks = hostService.GetActiveRequestTasks();
 
             await cts.CancelAsync();
             await hostService.StopAsync(CancellationToken.None);

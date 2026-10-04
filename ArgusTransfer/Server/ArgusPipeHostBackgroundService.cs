@@ -498,9 +498,15 @@ namespace ArgusTransfer.Server
         internal TimeSpan CancellationGracePeriod { get; set; } = TimeSpan.FromSeconds(5);
 
         /// <summary>
-        /// Gets a snapshot of the in-flight request tasks, for tests
+        /// Takes a snapshot of the in-flight request tasks, for tests
         /// </summary>
-        internal IReadOnlyCollection<Task> ActiveRequestTasks => this.activeRequests.Values.ToArray();
+        /// <returns>
+        /// A copy of the currently tracked request tasks
+        /// </returns>
+        internal IReadOnlyCollection<Task> GetActiveRequestTasks()
+        {
+            return this.activeRequests.Values.ToArray();
+        }
 
         /// <summary>
         /// Stops the service, draining in-flight requests within the configured
