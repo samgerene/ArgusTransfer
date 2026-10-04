@@ -22,6 +22,7 @@ namespace ArgusTransfer.Serialization
 {
     using System;
     using System.IO;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -54,17 +55,31 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
-        /// Reads the next line of the header block
+        /// Reads the next line of the header block. The length is checked after <see cref="StreamReader"/> has read the
+        /// whole line, so unlike <see cref="ArgusWireReader"/> this does not bound the memory used while reading it.
         /// </summary>
+        /// <param name="maxLength">
+        /// The maximum length of the line in UTF-8 bytes, excluding its terminator
+        /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> used to signal cancellation
         /// </param>
         /// <returns>
         /// The line without its terminator, or <c>null</c> at the end of the input
         /// </returns>
-        public ValueTask<string> ReadLineAsync(CancellationToken cancellationToken)
+        /// <exception cref="ArgusLineTooLongException">
+        /// Thrown when the line is longer than <paramref name="maxLength"/> bytes
+        /// </exception>
+        public async ValueTask<string> ReadLineAsync(int maxLength, CancellationToken cancellationToken)
         {
-            return this.reader.ReadLineAsync(cancellationToken);
+            var line = await this.reader.ReadLineAsync(cancellationToken);
+
+            if (line != null && Encoding.UTF8.GetByteCount(line) > maxLength)
+            {
+                throw new ArgusLineTooLongException(maxLength);
+            }
+
+            return line;
         }
 
         /// <summary>

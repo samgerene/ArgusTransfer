@@ -53,6 +53,13 @@ namespace ArgusTransfer.Server
         public long MaxRequestBodySize { get; set; } = 1_048_576;
 
         /// <summary>
+        /// Gets or sets the maximum size in bytes of a request's header block -- the request line plus all header lines.
+        /// Defaults to 32 KB (32,768 bytes). The host stops reading as soon as the limit is exceeded and rejects the request
+        /// with a 400 Bad Request response, so a client cannot exhaust memory with an endless header line or endless headers.
+        /// </summary>
+        public int MaxRequestHeaderSize { get; set; } = 32 * 1024;
+
+        /// <summary>
         /// Gets or sets the maximum time to wait for in-flight requests to complete during shutdown.
         /// Defaults to 30 seconds. After this timeout, remaining requests are cancelled.
         /// </summary>

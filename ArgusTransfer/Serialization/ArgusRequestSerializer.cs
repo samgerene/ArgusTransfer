@@ -50,6 +50,11 @@ namespace ArgusTransfer.Serialization
         private IList<IArgusContentEncoding> contentEncodings = new List<IArgusContentEncoding> { new GZipArgusContentEncoding() };
 
         /// <summary>
+        /// Backing field for <see cref="MaxHeaderSize"/>
+        /// </summary>
+        private int maxHeaderSize = ArgusWireFormat.DefaultMaxHeaderSize;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ArgusRequestSerializer"/> class
         /// with the default <see cref="PlainTextArgusBodySerializer"/>
         /// </summary>
@@ -98,6 +103,25 @@ namespace ArgusTransfer.Serialization
             {
                 ArgumentNullException.ThrowIfNull(value);
                 this.contentEncodings = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the maximum size in bytes of the header block -- the request line plus all header lines -- accepted by
+        /// the <see cref="Stream"/> and <see cref="StreamReader"/> readers. Defaults to 32 KB. A larger header block raises an
+        /// <see cref="ArgusProtocolException"/>; the <see cref="Stream"/> readers stop reading as soon as the limit is exceeded.
+        /// The string reader is not limited, because the whole message is already in memory.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the value is zero or negative
+        /// </exception>
+        public int MaxHeaderSize
+        {
+            get => this.maxHeaderSize;
+            set
+            {
+                ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
+                this.maxHeaderSize = value;
             }
         }
         /// <summary>
@@ -352,8 +376,9 @@ namespace ArgusTransfer.Serialization
         /// </returns>
         private async Task<ArgusRequest> ReadCoreAsync(IArgusMessageSource source, long maxBodySize, CancellationToken cancellationToken)
         {
-            var request = ParseRequestLine(await source.ReadLineAsync(cancellationToken));
-            await ArgusWireFormat.ReadHeadersAndBodyAsync(source, request, maxBodySize, this.ResolveSerializer, this.contentEncodings, cancellationToken);
+            var headerBudget = new ArgusHeaderBudget(this.maxHeaderSize);
+            var request = ParseRequestLine(await headerBudget.ReadLineAsync(source, cancellationToken));
+            await ArgusWireFormat.ReadHeadersAndBodyAsync(source, headerBudget, request, maxBodySize, this.ResolveSerializer, this.contentEncodings, cancellationToken);
 
             return request;
         }

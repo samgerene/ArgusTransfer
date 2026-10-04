@@ -842,6 +842,46 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public void Verify_that_MaxRequestHeaderSize_defaults_to_32_KB()
+        {
+            Assert.That(new ArgusPipeHostOptions().MaxRequestHeaderSize, Is.EqualTo(32 * 1024));
+        }
+
+        [Test]
+        public async Task Verify_that_oversized_header_block_over_the_pipe_returns_BadRequest()
+        {
+            var pipeName = $"argus-header-limit-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(new ArgusRouter(), new ArgusPipeHostOptions { PipeName = pipeName, MaxRequestHeaderSize = 1024 });
+
+            using var pipe = new System.IO.Pipes.NamedPipeClientStream(".", pipeName, System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+            await pipe.ConnectAsync(5000);
+
+            // Write in the background: the server stops reading at the limit, so the rest of the write never completes
+            var oversized = System.Text.Encoding.ASCII.GetBytes("GET /items ARGUS/1.0\r\nX-Big: " + new string('x', 8 * 1024) + "\r\n\r\n");
+            var writeTask = Task.Run(async () =>
+            {
+                try
+                {
+                    await pipe.WriteAsync(oversized);
+                }
+                catch (System.IO.IOException)
+                {
+                    // the server closes the pipe after responding
+                }
+            });
+
+            var response = await new ArgusResponseSerializer().ReadAsync(pipe, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
+            Assert.That(response.Body, Does.Contain("header block exceeds the maximum allowed size of 1024 bytes"));
+
+            await writeTask.WaitAsync(TimeSpan.FromSeconds(5));
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
         public async Task Verify_that_malformed_request_over_the_pipe_returns_BadRequest()
         {
             var pipeName = $"argus-malformed-test-{Guid.NewGuid():N}";

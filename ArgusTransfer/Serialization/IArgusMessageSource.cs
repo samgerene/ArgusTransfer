@@ -33,13 +33,19 @@ namespace ArgusTransfer.Serialization
         /// <summary>
         /// Reads the next line of the header block
         /// </summary>
+        /// <param name="maxLength">
+        /// The maximum length of the line in UTF-8 bytes, excluding its terminator
+        /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> used to signal cancellation
         /// </param>
         /// <returns>
         /// The line without its terminator, or <c>null</c> at the end of the input
         /// </returns>
-        ValueTask<string> ReadLineAsync(CancellationToken cancellationToken);
+        /// <exception cref="ArgusLineTooLongException">
+        /// Thrown when the line is longer than <paramref name="maxLength"/> bytes
+        /// </exception>
+        ValueTask<string> ReadLineAsync(int maxLength, CancellationToken cancellationToken);
 
         /// <summary>
         /// Reads a <c>Content-Length</c> delimited body as text
