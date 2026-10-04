@@ -842,6 +842,70 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public async Task Verify_that_streamed_body_over_the_limit_gets_BadRequest_promptly()
+        {
+            var pipeName = $"argus-early-response-stream-test-{Guid.NewGuid():N}";
+            var router = CreateEchoRouter();
+            var (hostService, cts) = await this.StartHostAsync(router, new ArgusPipeHostOptions { PipeName = pipeName, MaxRequestBodySize = 10_000 });
+
+            using var client = new ArgusClient(pipeName);
+            var stopwatch = Stopwatch.StartNew();
+
+            // A 2 MB streamed body: the host rejects it after 10 KB and stops reading while the client is still writing
+            var response = await client.PostAsync("/echo", new System.IO.MemoryStream(new byte[2_000_000]), "application/octet-stream", timeout: TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
+            Assert.That(response.Body, Does.Contain("maximum allowed size"));
+            Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(5)), "the client must not wait for its timeout");
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_large_body_over_the_limit_gets_BadRequest_promptly()
+        {
+            var pipeName = $"argus-early-response-body-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(CreateEchoRouter(), new ArgusPipeHostOptions { PipeName = pipeName, MaxRequestBodySize = 10_000 });
+
+            using var client = new ArgusClient(pipeName);
+            var stopwatch = Stopwatch.StartNew();
+
+            // A 2 MB Content-Length body: the host rejects it from the headers and never reads the body
+            var response = await client.PostAsync("/echo", new string('x', 2_000_000), timeout: TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
+            Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(5)), "the client must not wait for its timeout");
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_oversized_headers_sent_by_ArgusClient_get_BadRequest_promptly()
+        {
+            var pipeName = $"argus-early-response-header-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(CreateEchoRouter(), new ArgusPipeHostOptions { PipeName = pipeName, MaxRequestHeaderSize = 1024 });
+
+            using var client = new ArgusClient(pipeName);
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/echo", Body = "hello" };
+            request.Headers["X-Big"] = new string('x', 200_000);
+
+            var stopwatch = Stopwatch.StartNew();
+            var response = await client.SendAsync(request, TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
+            Assert.That(response.Body, Does.Contain("header block exceeds"));
+            Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(5)), "the client must not wait for its timeout");
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
         public void Verify_that_RequestReadTimeout_and_MaxConcurrentConnections_have_defaults()
         {
             var options = new ArgusPipeHostOptions();

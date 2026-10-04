@@ -188,18 +188,16 @@ namespace ArgusTransfer.Client
                     var requestSent = false;
                     TimeSpan delay;
 
-                    var pipeClient = new NamedPipeClientStream(".", this.pipeName, PipeDirection.InOut);
+                    // Asynchronous: the response is read while the request is written, which a synchronous handle would serialize
+                    var pipeClient = new NamedPipeClientStream(".", this.pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 
                     try
                     {
                         await pipeClient.ConnectAsync(linkedCts.Token);
 
                         requestSent = true;
-                        await this.requestSerializer.WriteAsync(pipeClient, request, linkedCts.Token);
 
-                        var response = await this.responseSerializer.ReadAsync(pipeClient, linkedCts.Token);
-
-                        return response;
+                        return await this.ExchangeAsync(pipeClient, request, linkedCts.Token);
                     }
                     catch (Exception ex) when (CanRetry(retryPolicy, ex, request, requestSent, bodyStreamStart, retryAttempt, linkedCts.Token))
                     {
@@ -690,6 +688,96 @@ namespace ArgusTransfer.Client
         {
             var response = await this.HeadAsync(route, queryParameters, timeout, cancellationToken);
             return response.EnsureSuccessStatusCode();
+        }
+
+        /// <summary>
+        /// Writes the request and reads the response over a connected pipe. The response is read while the request is still
+        /// being written, because the host may answer before it has consumed the whole request -- for example when it rejects
+        /// an oversized header block or body with 400. The host's pipe is unbuffered, so waiting for the write to finish first
+        /// would block both sides until the timeout. When such an early response arrives, the remaining write is cancelled.
+        /// </summary>
+        /// <param name="pipe">
+        /// The connected pipe
+        /// </param>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> to send
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> covering caller cancellation and the request timeout
+        /// </param>
+        /// <returns>
+        /// The <see cref="ArgusResponse"/> received from the server
+        /// </returns>
+        private async Task<ArgusResponse> ExchangeAsync(Stream pipe, ArgusRequest request, CancellationToken cancellationToken)
+        {
+            using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            var readTask = this.responseSerializer.ReadAsync(pipe, cancellationToken);
+            var writeTask = this.requestSerializer.WriteAsync(pipe, request, writeCts.Token);
+
+            // Whichever way this method exits, the other task's exception (e.g. after the pipe is disposed) is observed
+            ObserveFaults(readTask);
+            ObserveFaults(writeTask);
+
+            if (await Task.WhenAny(writeTask, readTask) == readTask)
+            {
+                // The server answered (or closed the connection) before it consumed the whole request: stop writing
+                await writeCts.CancelAsync();
+                return await readTask;
+            }
+
+            try
+            {
+                await writeTask;
+            }
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                // The write failed, typically because the server closed the pipe right after answering early: prefer its
+                // response, otherwise report the write failure
+                var earlyResponse = await TryGetResponseAsync(readTask);
+
+                if (earlyResponse != null)
+                {
+                    return earlyResponse;
+                }
+
+                throw;
+            }
+
+            return await readTask;
+        }
+
+        /// <summary>
+        /// Awaits a response read that may fail
+        /// </summary>
+        /// <param name="readTask">
+        /// The task reading the response
+        /// </param>
+        /// <returns>
+        /// The response, or <c>null</c> when reading it failed
+        /// </returns>
+        private static async Task<ArgusResponse> TryGetResponseAsync(Task<ArgusResponse> readTask)
+        {
+            try
+            {
+                return await readTask;
+            }
+            catch (Exception ex) when (ex is IOException or FormatException or ArgusProtocolException or OperationCanceledException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Marks a task's exception as observed, so a task abandoned when the exchange ends early does not raise
+        /// <see cref="TaskScheduler.UnobservedTaskException"/>
+        /// </summary>
+        /// <param name="task">
+        /// The task to observe
+        /// </param>
+        private static void ObserveFaults(Task task)
+        {
+            task.ContinueWith(t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
 
         /// <summary>
