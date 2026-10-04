@@ -97,6 +97,12 @@ namespace ArgusTransfer.Server
         private SemaphoreSlim concurrencySemaphore;
 
         /// <summary>
+        /// Semaphore used to limit the number of simultaneous client connections. It is not disposed on shutdown, because
+        /// connection tasks that outlive the drain timeout still release it; it uses no wait handle, so nothing leaks.
+        /// </summary>
+        private SemaphoreSlim connectionSemaphore;
+
+        /// <summary>
         /// The current number of in-flight requests being processed
         /// </summary>
         private long currentRequestCount;
@@ -190,18 +196,29 @@ namespace ArgusTransfer.Server
         {
             this.drainCancellationTokenSource = new CancellationTokenSource();
             this.concurrencySemaphore = new SemaphoreSlim(this.options.MaxConcurrentRequests, this.options.MaxConcurrentRequests);
+            this.connectionSemaphore = new SemaphoreSlim(this.options.MaxConcurrentConnections, this.options.MaxConcurrentConnections);
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                var serverStream = this.CreatePipeServer();
+                // Wait for a free connection slot before offering the next pipe instance: at the limit, new clients wait
+                // in ConnectAsync instead of being accepted and buffered
+                await this.connectionSemaphore.WaitAsync(stoppingToken);
+
+                NamedPipeServerStream serverStream = null;
 
                 try
                 {
+                    serverStream = this.CreatePipeServer();
                     await serverStream.WaitForConnectionAsync(stoppingToken);
                 }
-                catch (OperationCanceledException)
+                catch
                 {
-                    await serverStream.DisposeAsync();
+                    if (serverStream != null)
+                    {
+                        await serverStream.DisposeAsync();
+                    }
+
+                    this.connectionSemaphore.Release();
                     throw;
                 }
 
@@ -212,7 +229,26 @@ namespace ArgusTransfer.Server
 
                     try
                     {
-                        var request = await this.requestSerializer.ReadAsync(serverStream, requestToken, this.options.MaxRequestBodySize);
+                        using var readTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(requestToken);
+
+                        if (this.options.RequestReadTimeout != Timeout.InfiniteTimeSpan)
+                        {
+                            readTimeoutCts.CancelAfter(this.options.RequestReadTimeout);
+                        }
+
+                        ArgusRequest request;
+
+                        try
+                        {
+                            request = await this.requestSerializer.ReadAsync(serverStream, readTimeoutCts.Token, this.options.MaxRequestBodySize);
+                        }
+                        catch (Exception ex) when ((ex is OperationCanceledException || ex is IOException) && readTimeoutCts.IsCancellationRequested && !requestToken.IsCancellationRequested)
+                        {
+                            this.logger.LogWarning(
+                                "The client did not send a complete request within {RequestReadTimeout}; closing the connection.",
+                                this.options.RequestReadTimeout);
+                            return;
+                        }
 
                         if (!await this.concurrencySemaphore.WaitAsync(0))
                         {
@@ -348,6 +384,7 @@ namespace ArgusTransfer.Server
                         }
 
                         await serverStream.DisposeAsync();
+                        this.connectionSemaphore.Release();
                     }
                 }, CancellationToken.None);
 

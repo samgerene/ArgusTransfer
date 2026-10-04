@@ -842,6 +842,107 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public void Verify_that_RequestReadTimeout_and_MaxConcurrentConnections_have_defaults()
+        {
+            var options = new ArgusPipeHostOptions();
+
+            Assert.That(options.RequestReadTimeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
+            Assert.That(options.MaxConcurrentConnections, Is.EqualTo(100));
+        }
+
+        private static async Task<System.IO.Pipes.NamedPipeClientStream> ConnectRawAsync(string pipeName, int timeoutMilliseconds = 5000)
+        {
+            var pipe = new System.IO.Pipes.NamedPipeClientStream(".", pipeName, System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+
+            try
+            {
+                await pipe.ConnectAsync(timeoutMilliseconds);
+                return pipe;
+            }
+            catch
+            {
+                await pipe.DisposeAsync();
+                throw;
+            }
+        }
+
+        [Test]
+        public async Task Verify_that_idle_client_is_disconnected_after_RequestReadTimeout()
+        {
+            var pipeName = $"argus-idle-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(new ArgusRouter(), new ArgusPipeHostOptions { PipeName = pipeName, RequestReadTimeout = TimeSpan.FromMilliseconds(300) });
+
+            await using var pipe = await ConnectRawAsync(pipeName);
+            var stopwatch = Stopwatch.StartNew();
+
+            // Send nothing: the host must close the connection, which the client sees as end of stream
+            var read = await pipe.ReadAsync(new byte[16]).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.That(read, Is.Zero);
+            Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(4)));
+
+            this.mockLogger.Verify(
+                l => l.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((state, _) => state.ToString().Contains("did not send a complete request")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Once);
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_client_sending_an_incomplete_request_is_disconnected_after_RequestReadTimeout()
+        {
+            var pipeName = $"argus-trickle-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(new ArgusRouter(), new ArgusPipeHostOptions { PipeName = pipeName, RequestReadTimeout = TimeSpan.FromMilliseconds(300) });
+
+            await using var pipe = await ConnectRawAsync(pipeName);
+
+            // The request line and part of a header, then silence
+            await pipe.WriteAsync(System.Text.Encoding.ASCII.GetBytes("GET /items ARGUS/1.0\r\nX-Partial: "));
+
+            var read = await pipe.ReadAsync(new byte[16]).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.That(read, Is.Zero);
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_MaxConcurrentConnections_makes_further_clients_wait()
+        {
+            var pipeName = $"argus-connection-limit-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(
+                new ArgusRouter(),
+                new ArgusPipeHostOptions { PipeName = pipeName, MaxConcurrentConnections = 1, RequestReadTimeout = Timeout.InfiniteTimeSpan });
+
+            var first = await ConnectRawAsync(pipeName);
+
+            // While the first client holds the only connection slot, no pipe instance is offered
+            Assert.That(async () => await ConnectRawAsync(pipeName, timeoutMilliseconds: 500), Throws.TypeOf<TimeoutException>());
+
+            await first.DisposeAsync();
+
+            // Once the first connection is closed, the next client can connect and is served
+            await using var second = await ConnectRawAsync(pipeName);
+            await new ArgusRequestSerializer().WriteAsync(second, new ArgusRequest { Verb = ArgusVerb.GET, Route = "/unknown" });
+            var response = await new ArgusResponseSerializer().ReadAsync(second, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.NotFound));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
         public void Verify_that_MaxRequestHeaderSize_defaults_to_32_KB()
         {
             Assert.That(new ArgusPipeHostOptions().MaxRequestHeaderSize, Is.EqualTo(32 * 1024));
