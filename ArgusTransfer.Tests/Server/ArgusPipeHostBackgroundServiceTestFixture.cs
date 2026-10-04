@@ -967,9 +967,9 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             var first = await ConnectRawAsync(pipeName);
 
-            // While the first client holds the only connection slot, the second client is not served. On Windows it waits
-            // in ConnectAsync (no pipe instance is offered); on Linux and macOS the connection is queued in the socket's
-            // listen backlog and is not accepted until a slot frees up
+            // While the first client holds the only connection slot, the second client is not served. It connects to the
+            // pipe instance the host keeps ready (Windows) or is queued in the socket's listen backlog (Linux, macOS), and
+            // must survive until a slot frees up instead of being reset when the first connection closes
             var secondClient = Task.Run(async () =>
             {
                 await using var second = await ConnectRawAsync(pipeName, timeoutMilliseconds: 10_000);

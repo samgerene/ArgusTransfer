@@ -200,25 +200,28 @@ namespace ArgusTransfer.Server
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                // Wait for a free connection slot before offering the next pipe instance: at the limit, new clients wait
-                // in ConnectAsync instead of being accepted and buffered
-                await this.connectionSemaphore.WaitAsync(stoppingToken);
-
-                NamedPipeServerStream serverStream = null;
+                // Create the next pipe instance before waiting for a free connection slot. On Linux and macOS the instance
+                // keeps the shared listening socket alive, so clients queued in its backlog are not reset when the last
+                // connected instance closes. Connections are not read until a slot is free, which bounds the memory used.
+                var serverStream = this.CreatePipeServer();
+                var slotAcquired = false;
 
                 try
                 {
-                    serverStream = this.CreatePipeServer();
+                    await this.connectionSemaphore.WaitAsync(stoppingToken);
+                    slotAcquired = true;
+
                     await serverStream.WaitForConnectionAsync(stoppingToken);
                 }
                 catch
                 {
-                    if (serverStream != null)
+                    await serverStream.DisposeAsync();
+
+                    if (slotAcquired)
                     {
-                        await serverStream.DisposeAsync();
+                        this.connectionSemaphore.Release();
                     }
 
-                    this.connectionSemaphore.Release();
                     throw;
                 }
 
