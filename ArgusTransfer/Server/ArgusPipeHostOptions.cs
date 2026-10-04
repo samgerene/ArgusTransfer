@@ -78,6 +78,25 @@ namespace ArgusTransfer.Server
         public int MaxConcurrentRequests { get; set; } = 10;
 
         /// <summary>
+        /// Gets or sets the maximum time a client may take to send its complete request -- request line, headers and
+        /// body -- after connecting. Defaults to 30 seconds. When it expires, the host logs a warning and closes the
+        /// connection, so idle or deliberately slow clients cannot hold a connection indefinitely. Set to
+        /// <see cref="Timeout.InfiniteTimeSpan"/> to disable the timeout.
+        /// </summary>
+        public TimeSpan RequestReadTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// Gets or sets the maximum number of simultaneous client connections, including connections whose request is still
+        /// being received. Defaults to 100. When the limit is reached, the host does not read new connections until one is
+        /// closed. Depending on the platform, further clients either wait in <c>ConnectAsync</c> or connect immediately
+        /// (on Linux and macOS named pipes are Unix domain sockets, and the operating system queues the connection; on
+        /// Windows one client can connect to the pipe instance the host keeps ready) and then wait for their request to be
+        /// read. In both cases the client's own timeout applies. Together with
+        /// <see cref="MaxRequestHeaderSize"/> and <see cref="MaxRequestBodySize"/>, this bounds the memory used for requests.
+        /// </summary>
+        public int MaxConcurrentConnections { get; set; } = 100;
+
+        /// <summary>
         /// Gets or sets the <see cref="ArgusCompressionOptions"/> for request and response bodies. Requests compressed with
         /// one of the configured encodings are always decoded; <see cref="MaxRequestBodySize"/> limits both the compressed
         /// and the decompressed size. When <see cref="ArgusCompressionOptions.Enabled"/> is <c>true</c>, responses whose body
