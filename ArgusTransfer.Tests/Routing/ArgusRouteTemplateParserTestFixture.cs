@@ -213,7 +213,7 @@ namespace ArgusTransfer.Tests.Routing
             Assert.That(() => ArgusRouteTemplateParser.TryMatch(
                 "/healthendpoint/{identifier:UnknownType}",
                 "/healthendpoint/some-value",
-                out _), Throws.TypeOf<InvalidOperationException>());
+                out _), Throws.ArgumentException);
         }
     }
 }

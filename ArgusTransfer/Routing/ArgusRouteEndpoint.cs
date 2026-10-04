@@ -21,25 +21,36 @@
 namespace ArgusTransfer.Routing
 {
     using System.Collections.Generic;
+    using System.Threading;
 
     using ArgusTransfer.Protocol;
 
     /// <summary>
-    /// Represents a registered route endpoint with its verb, route template,
-    /// handler delegate, optional metadata, and per-endpoint middleware
+    /// Represents a registered route endpoint with its verb, parsed route template,
+    /// handler delegate, optional metadata, per-endpoint middleware, and its cached pipeline
     /// </summary>
     internal class ArgusRouteEndpoint
     {
+        /// <summary>
+        /// The middleware instances attached to this endpoint
+        /// </summary>
+        private readonly List<IArgusMiddleware> middlewares = new List<IArgusMiddleware>();
+
+        /// <summary>
+        /// The version of <see cref="middlewares"/>, incremented whenever a middleware is added
+        /// </summary>
+        private int middlewareVersion;
+
         /// <summary>
         /// Gets or sets the <see cref="ArgusVerb"/> this endpoint responds to
         /// </summary>
         public ArgusVerb Verb { get; set; }
 
         /// <summary>
-        /// Gets or sets the route template for this endpoint
+        /// Gets or sets the parsed route template for this endpoint
         /// (e.g. "/healthendpoint/{identifier:Guid}")
         /// </summary>
-        public string RouteTemplate { get; set; } = string.Empty;
+        public ArgusRouteTemplate Template { get; set; }
 
         /// <summary>
         /// Gets or sets the <see cref="ArgusHandlerDelegate"/> that handles matching requests
@@ -52,9 +63,46 @@ namespace ArgusTransfer.Routing
         public Dictionary<string, string> Metadata { get; } = new Dictionary<string, string>();
 
         /// <summary>
-        /// Gets the list of middleware instances attached to this endpoint,
+        /// Gets the middleware instances attached to this endpoint,
         /// executed in registration order (first registered = outermost)
         /// </summary>
-        public List<IArgusMiddleware> Middlewares { get; } = new List<IArgusMiddleware>();
+        public IReadOnlyList<IArgusMiddleware> Middlewares => this.middlewares;
+
+        /// <summary>
+        /// Gets the version of <see cref="Middlewares"/>, which changes whenever a middleware is added
+        /// </summary>
+        public int MiddlewareVersion => Volatile.Read(ref this.middlewareVersion);
+
+        /// <summary>
+        /// Gets or sets the composed pipeline cached by the router, or <c>null</c> when none has been built yet
+        /// </summary>
+        public CachedPipeline Pipeline { get; set; }
+
+        /// <summary>
+        /// Attaches a middleware to this endpoint and invalidates the cached pipeline
+        /// </summary>
+        /// <param name="middleware">
+        /// The <see cref="IArgusMiddleware"/> to attach
+        /// </param>
+        public void AddMiddleware(IArgusMiddleware middleware)
+        {
+            this.middlewares.Add(middleware);
+            Interlocked.Increment(ref this.middlewareVersion);
+        }
+
+        /// <summary>
+        /// A composed pipeline together with the middleware versions it was built from; it is current only while
+        /// both versions are unchanged
+        /// </summary>
+        /// <param name="GlobalMiddlewareVersion">
+        /// The router's global middleware version the pipeline was built from
+        /// </param>
+        /// <param name="EndpointMiddlewareVersion">
+        /// The endpoint's <see cref="MiddlewareVersion"/> the pipeline was built from
+        /// </param>
+        /// <param name="Delegate">
+        /// The composed <see cref="ArgusRequestDelegate"/>
+        /// </param>
+        internal sealed record CachedPipeline(int GlobalMiddlewareVersion, int EndpointMiddlewareVersion, ArgusRequestDelegate Delegate);
     }
 }
