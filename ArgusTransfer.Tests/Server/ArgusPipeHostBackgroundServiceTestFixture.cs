@@ -916,6 +916,48 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public async Task Verify_that_client_trickling_bytes_is_disconnected_after_RequestReadTimeout()
+        {
+            var pipeName = $"argus-slow-trickle-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(new ArgusRouter(), new ArgusPipeHostOptions { PipeName = pipeName, RequestReadTimeout = TimeSpan.FromMilliseconds(500) });
+
+            await using var pipe = await ConnectRawAsync(pipeName);
+            using var stopTrickling = new CancellationTokenSource();
+
+            // Keep the connection busy with one byte every 50 ms of a header line that never ends: the timeout limits the
+            // total time to receive the request, not the idle time, so activity does not extend it
+            var trickle = Task.Run(async () =>
+            {
+                try
+                {
+                    await pipe.WriteAsync(System.Text.Encoding.ASCII.GetBytes("GET /items ARGUS/1.0\r\nX-Slow: "), stopTrickling.Token);
+
+                    while (!stopTrickling.IsCancellationRequested)
+                    {
+                        await pipe.WriteAsync(new[] { (byte)'a' }, stopTrickling.Token);
+                        await Task.Delay(50, stopTrickling.Token);
+                    }
+                }
+                catch (Exception ex) when (ex is System.IO.IOException or OperationCanceledException)
+                {
+                    // the host closed the connection, or the test is done
+                }
+            });
+
+            var stopwatch = Stopwatch.StartNew();
+            var read = await pipe.ReadAsync(new byte[16]).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.That(read, Is.Zero, "the host must close the connection although the client keeps sending");
+            Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(4)));
+
+            await stopTrickling.CancelAsync();
+            await trickle.WaitAsync(TimeSpan.FromSeconds(5));
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
         public async Task Verify_that_MaxConcurrentConnections_makes_further_clients_wait()
         {
             var pipeName = $"argus-connection-limit-test-{Guid.NewGuid():N}";
