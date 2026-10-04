@@ -40,7 +40,7 @@ namespace ArgusTransfer.Extensions
         /// <summary>
         /// Registers <see cref="ArgusExceptionHandlerMiddleware"/> as a singleton and optionally configures
         /// <see cref="ArgusExceptionHandlerOptions"/>. The <see cref="ArgusRouter"/> created by
-        /// <see cref="ArgusModuleExtensions.AddArgusModules"/> registers it as the outermost global middleware,
+        /// <see cref="ArgusModuleExtensions.AddArgusModules(Microsoft.Extensions.DependencyInjection.IServiceCollection)"/> registers it as the outermost global middleware,
         /// before any middleware added by modules, regardless of the order in which both methods are called.
         /// </summary>
         /// <param name="services">
@@ -72,7 +72,7 @@ namespace ArgusTransfer.Extensions
         /// Registers <typeparamref name="THandler"/> as the singleton <see cref="IArgusAuthenticationHandler"/> and
         /// <see cref="ArgusAuthenticationMiddleware"/> as a singleton, and optionally configures
         /// <see cref="ArgusAuthenticationOptions"/>. The <see cref="ArgusRouter"/> created by
-        /// <see cref="ArgusModuleExtensions.AddArgusModules"/> registers the middleware as a global middleware directly after
+        /// <see cref="ArgusModuleExtensions.AddArgusModules(Microsoft.Extensions.DependencyInjection.IServiceCollection)"/> registers the middleware as a global middleware directly after
         /// the exception handler (when registered) and before any middleware added by modules, regardless of the order in which
         /// the methods are called. When called more than once, the first registered handler is used.
         /// </summary>

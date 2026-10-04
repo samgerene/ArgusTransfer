@@ -22,6 +22,7 @@ namespace ArgusTransfer.Tests.Routing
 {
     using System;
     using System.Linq;
+    using System.Reflection;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -225,6 +226,80 @@ namespace ArgusTransfer.Tests.Routing
             var result = services.AddArgusModules();
 
             Assert.That(result, Is.SameAs(services));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusModules_is_never_inlined()
+        {
+            var method = typeof(ArgusModuleExtensions).GetMethod(nameof(ArgusModuleExtensions.AddArgusModules), [typeof(IServiceCollection)]);
+
+            Assert.That(method.MethodImplementationFlags.HasFlag(MethodImplAttributes.NoInlining), Is.True);
+        }
+
+        [Test]
+        public async Task Verify_that_AddArgusModules_with_assemblies_scans_the_specified_assembly()
+        {
+            var services = new ServiceCollection();
+
+            var result = services.AddArgusModules(typeof(TestArgusModule).Assembly);
+
+            Assert.That(result, Is.SameAs(services));
+
+            using var provider = services.BuildServiceProvider();
+            var router = provider.GetRequiredService<ArgusRouter>();
+
+            var context = new ArgusContext(new ArgusRequest { Verb = ArgusVerb.GET, Route = "/module-test" }, CancellationToken.None);
+            await router.RouteAsync(context);
+
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
+        public async Task Verify_that_AddArgusModules_with_assemblies_does_not_scan_the_calling_assembly()
+        {
+            var services = new ServiceCollection();
+
+            // The ArgusTransfer assembly contains no modules; the test modules in the calling assembly must not be registered
+            services.AddArgusModules(typeof(ArgusRouter).Assembly);
+
+            Assert.That(services.Any(d => d.ServiceType == typeof(IArgusModule)), Is.False);
+
+            using var provider = services.BuildServiceProvider();
+            var router = provider.GetRequiredService<ArgusRouter>();
+
+            var context = new ArgusContext(new ArgusRequest { Verb = ArgusVerb.GET, Route = "/module-test" }, CancellationToken.None);
+            await router.RouteAsync(context);
+
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.NotFound));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusModules_registers_modules_and_router_only_once_when_called_repeatedly()
+        {
+            var services = new ServiceCollection();
+
+            services.AddArgusModules();
+            var moduleCount = services.Count(d => d.ServiceType == typeof(IArgusModule));
+
+            services.AddArgusModules();
+            services.AddArgusModules(typeof(TestArgusModule).Assembly, typeof(TestArgusModule).Assembly, typeof(ArgusRouter).Assembly);
+
+            Assert.That(moduleCount, Is.GreaterThan(0));
+            Assert.That(services.Count(d => d.ServiceType == typeof(IArgusModule)), Is.EqualTo(moduleCount));
+            Assert.That(services.Count(d => d.ServiceType == typeof(ArgusRouter)), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusModules_with_invalid_arguments_throws()
+        {
+            var services = new ServiceCollection();
+            var assembly = typeof(TestArgusModule).Assembly;
+
+            Assert.That(() => ((IServiceCollection)null).AddArgusModules(assembly), Throws.ArgumentNullException);
+            Assert.That(() => services.AddArgusModules((Assembly[])null), Throws.ArgumentNullException);
+            Assert.That(() => services.AddArgusModules([]), Throws.ArgumentException);
+            Assert.That(() => services.AddArgusModules(assembly, null), Throws.ArgumentException);
+            Assert.That(() => ((IServiceCollection)null).AddArgusModules(), Throws.ArgumentNullException);
         }
     }
 }

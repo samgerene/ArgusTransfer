@@ -105,7 +105,8 @@ Authentication: `ArgusAuthenticationMiddleware` calls the singleton `IArgusAuthe
 
 ### DI Integration
 
-- `services.AddArgusModules()` — scans the calling assembly for `IArgusModule` implementations, registers them as transient, and registers `ArgusRouter` as a singleton that wires up all module routes.
+- `services.AddArgusModules()` — scans the calling assembly for `IArgusModule` implementations, registers them as transient, and registers `ArgusRouter` as a singleton that wires up all module routes. Marked `[MethodImpl(MethodImplOptions.NoInlining)]` so `Assembly.GetCallingAssembly()` cannot resolve to the wrong assembly when the JIT would inline it.
+- `services.AddArgusModules(params Assembly[] assemblies)` — the same, but scans the given assemblies explicitly (modules in other assemblies). Module types are registered with `TryAddEnumerable` and the router with `TryAddSingleton`, so repeated or combined calls register each module and the router once.
 - `services.AddArgusPipeHost(Action<ArgusPipeHostOptions>?)` — registers `ArgusPipeHostBackgroundService` as a hosted service with optional configuration.
 - `services.AddArgusClient(string pipeName, TimeSpan? defaultTimeout)` — registers `IArgusClient` as transient, using `IArgusBodySerializerRegistry` if available.
 - `services.AddArgusClient(string pipeName, Action<ArgusClient> configure)` — same, configuring each created client (timeout, retry policy, compression, …).
@@ -137,6 +138,7 @@ Authentication: `ArgusAuthenticationMiddleware` calls the singleton `IArgusAuthe
 - **Logging in catch clauses**: always pass the caught exception to the logger (`logger.LogWarning(ex, "...")`), never log only a message (Sonar S6667).
 - **No assignments inside conditions**: read the next value before the loop and at the end of its body instead of `while ((x = Read()) != null)` (Sonar S1121).
 - **Don't update a `for` loop's counter in its body**: use a `while` loop with an explicit position when the step varies (Sonar S127).
+- **Properties must not copy collections**: expose a method (e.g. `GetActiveRequestTasks()`) instead of a property that returns a new array or list on each access (Sonar S2365).
 
 ## Testing Conventions
 
