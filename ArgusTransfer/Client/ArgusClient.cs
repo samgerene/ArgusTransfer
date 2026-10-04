@@ -737,7 +737,7 @@ namespace ArgusTransfer.Client
         {
             using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-            var readTask = this.responseSerializer.ReadAsync(pipe, cancellationToken, this.maxResponseBodySize);
+            var readTask = this.responseSerializer.ReadAsync(pipe, this.maxResponseBodySize, cancellationToken);
             var writeTask = this.requestSerializer.WriteAsync(pipe, request, writeCts.Token);
 
             // Whichever way this method exits, the other task's exception (e.g. after the pipe is disposed) is observed

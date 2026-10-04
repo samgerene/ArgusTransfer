@@ -361,7 +361,7 @@ namespace ArgusTransfer.Serialization
         /// </exception>
         public Task<ArgusResponse> ReadAsync(StreamReader reader, CancellationToken cancellationToken)
         {
-            return this.ReadAsync(reader, cancellationToken, 0);
+            return this.ReadAsync(reader, 0, cancellationToken);
         }
 
         /// <summary>
@@ -370,11 +370,11 @@ namespace ArgusTransfer.Serialization
         /// <param name="reader">
         /// The <see cref="StreamReader"/> to read from
         /// </param>
-        /// <param name="cancellationToken">
-        /// The <see cref="CancellationToken"/> used to signal cancellation
-        /// </param>
         /// <param name="maxBodySize">
         /// The maximum allowed body size in bytes, applied to the <c>Content-Length</c> and to chunked bodies. Pass 0 for no limit.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
         /// </param>
         /// <returns>
         /// The deserialized <see cref="ArgusResponse"/>
@@ -388,7 +388,7 @@ namespace ArgusTransfer.Serialization
         /// <exception cref="InvalidOperationException">
         /// Thrown when the body exceeds <paramref name="maxBodySize"/>
         /// </exception>
-        public Task<ArgusResponse> ReadAsync(StreamReader reader, CancellationToken cancellationToken, long maxBodySize)
+        public Task<ArgusResponse> ReadAsync(StreamReader reader, long maxBodySize, CancellationToken cancellationToken)
         {
             return this.ReadCoreAsync(new ArgusTextMessageSource(reader), maxBodySize, cancellationToken);
         }
@@ -417,7 +417,7 @@ namespace ArgusTransfer.Serialization
         /// </exception>
         public Task<ArgusResponse> ReadAsync(Stream stream, CancellationToken cancellationToken)
         {
-            return this.ReadAsync(stream, cancellationToken, 0);
+            return this.ReadAsync(stream, 0, cancellationToken);
         }
 
         /// <summary>
@@ -428,13 +428,13 @@ namespace ArgusTransfer.Serialization
         /// <param name="stream">
         /// The <see cref="Stream"/> to read from. The method reads one message and may buffer bytes that belong to it only
         /// </param>
-        /// <param name="cancellationToken">
-        /// The <see cref="CancellationToken"/> used to signal cancellation
-        /// </param>
         /// <param name="maxBodySize">
         /// The maximum allowed body size in bytes, applied to the <c>Content-Length</c>, to chunked bodies, and to the
         /// decompressed size of a compressed body. A <c>Content-Length</c> above the limit is rejected before the body is
         /// read. Pass 0 for no limit.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
         /// </param>
         /// <returns>
         /// The deserialized <see cref="ArgusResponse"/>
@@ -451,7 +451,7 @@ namespace ArgusTransfer.Serialization
         /// <exception cref="InvalidOperationException">
         /// Thrown when the body or its decompressed size exceeds <paramref name="maxBodySize"/>
         /// </exception>
-        public Task<ArgusResponse> ReadAsync(Stream stream, CancellationToken cancellationToken, long maxBodySize)
+        public Task<ArgusResponse> ReadAsync(Stream stream, long maxBodySize, CancellationToken cancellationToken)
         {
             return this.ReadCoreAsync(new ArgusWireReader(stream), maxBodySize, cancellationToken);
         }
