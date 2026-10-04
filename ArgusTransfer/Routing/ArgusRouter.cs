@@ -20,6 +20,7 @@
 
 namespace ArgusTransfer.Routing
 {
+    using System;
     using System.Collections.Generic;
     using System.Threading.Tasks;
 
@@ -66,6 +67,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         public IArgusEndpointConventionBuilder MapGet(string routeTemplate, ArgusHandlerDelegate handler)
         {
             return this.Map(ArgusVerb.GET, routeTemplate, handler);
@@ -83,6 +90,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         public IArgusEndpointConventionBuilder MapPost(string routeTemplate, ArgusHandlerDelegate handler)
         {
             return this.Map(ArgusVerb.POST, routeTemplate, handler);
@@ -100,6 +113,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         public IArgusEndpointConventionBuilder MapPut(string routeTemplate, ArgusHandlerDelegate handler)
         {
             return this.Map(ArgusVerb.PUT, routeTemplate, handler);
@@ -117,6 +136,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         public IArgusEndpointConventionBuilder MapPatch(string routeTemplate, ArgusHandlerDelegate handler)
         {
             return this.Map(ArgusVerb.PATCH, routeTemplate, handler);
@@ -134,6 +159,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         public IArgusEndpointConventionBuilder MapHead(string routeTemplate, ArgusHandlerDelegate handler)
         {
             return this.Map(ArgusVerb.HEAD, routeTemplate, handler);
@@ -151,6 +182,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         public IArgusEndpointConventionBuilder MapDelete(string routeTemplate, ArgusHandlerDelegate handler)
         {
             return this.Map(ArgusVerb.DELETE, routeTemplate, handler);
@@ -271,8 +308,18 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="ArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an
+        /// unknown route constraint
+        /// </exception>
         private ArgusEndpointConventionBuilder Map(ArgusVerb verb, string routeTemplate, ArgusHandlerDelegate handler)
         {
+            ArgusRouteTemplateParser.Validate(routeTemplate);
+            ArgumentNullException.ThrowIfNull(handler);
+
             var endpoint = new ArgusRouteEndpoint
             {
                 Verb = verb,
