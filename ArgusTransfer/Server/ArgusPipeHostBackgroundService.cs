@@ -22,6 +22,7 @@ namespace ArgusTransfer.Server
 {
     using System;
     using System.Collections.Concurrent;
+    using System.Collections.Generic;
     using System.IO;
     using System.IO.Pipes;
     using System.Linq;
@@ -97,8 +98,8 @@ namespace ArgusTransfer.Server
         private SemaphoreSlim concurrencySemaphore;
 
         /// <summary>
-        /// Semaphore used to limit the number of simultaneous client connections. It is not disposed on shutdown, because
-        /// connection tasks that outlive the drain timeout still release it; it uses no wait handle, so nothing leaks.
+        /// Semaphore used to limit the number of simultaneous client connections. Like the other shutdown resources it is
+        /// disposed only when every connection task has finished (see <see cref="StopAsync"/>).
         /// </summary>
         private SemaphoreSlim connectionSemaphore;
 
@@ -491,8 +492,22 @@ namespace ArgusTransfer.Server
         }
 
         /// <summary>
+        /// Gets or sets how long <see cref="StopAsync"/> waits for cancelled requests to finish after the drain timeout
+        /// expired. Defaults to 5 seconds. Settable for tests.
+        /// </summary>
+        internal TimeSpan CancellationGracePeriod { get; set; } = TimeSpan.FromSeconds(5);
+
+        /// <summary>
+        /// Gets a snapshot of the in-flight request tasks, for tests
+        /// </summary>
+        internal IReadOnlyCollection<Task> ActiveRequestTasks => this.activeRequests.Values.ToArray();
+
+        /// <summary>
         /// Stops the service, draining in-flight requests within the configured
-        /// <see cref="ArgusPipeHostOptions.ShutdownDrainTimeout"/> before cancelling them
+        /// <see cref="ArgusPipeHostOptions.ShutdownDrainTimeout"/> before cancelling them. After cancelling, the remaining
+        /// requests get <see cref="CancellationGracePeriod"/> to finish. The token source and semaphores the requests use are
+        /// disposed only when every request has finished; when a handler ignores cancellation and is still running,
+        /// disposal is skipped (they hold no wait handles, so nothing leaks) so that the request can still release them.
         /// </summary>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> used to signal forced shutdown
@@ -505,26 +520,38 @@ namespace ArgusTransfer.Server
             await base.StopAsync(cancellationToken);
 
             var pending = this.activeRequests.Values.ToArray();
+            var drainTask = Task.WhenAll(pending);
 
             if (pending.Length > 0)
             {
                 this.logger.LogInformation("Draining {Count} in-flight request(s)...", pending.Length);
 
-                var drainTask = Task.WhenAll(pending);
                 var completed = await Task.WhenAny(drainTask, Task.Delay(this.options.ShutdownDrainTimeout, cancellationToken));
 
                 if (completed != drainTask)
                 {
                     this.logger.LogWarning("Shutdown drain timeout expired. Cancelling {Count} remaining request(s).", this.activeRequests.Count);
+
                     if (this.drainCancellationTokenSource != null)
                     {
                         await this.drainCancellationTokenSource.CancelAsync();
                     }
+
+                    await Task.WhenAny(drainTask, Task.Delay(this.CancellationGracePeriod, CancellationToken.None));
                 }
+            }
+
+            if (!drainTask.IsCompleted)
+            {
+                this.logger.LogWarning(
+                    "{Count} request(s) did not finish after cancellation; their resources are left to be released when they complete.",
+                    this.activeRequests.Count);
+                return;
             }
 
             this.drainCancellationTokenSource?.Dispose();
             this.concurrencySemaphore?.Dispose();
+            this.connectionSemaphore?.Dispose();
         }
 
         /// <summary>
