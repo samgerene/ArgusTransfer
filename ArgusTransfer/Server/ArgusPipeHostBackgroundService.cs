@@ -198,31 +198,45 @@ namespace ArgusTransfer.Server
             this.concurrencySemaphore = new SemaphoreSlim(this.options.MaxConcurrentRequests, this.options.MaxConcurrentRequests);
             this.connectionSemaphore = new SemaphoreSlim(this.options.MaxConcurrentConnections, this.options.MaxConcurrentConnections);
 
+            var consecutiveFailures = 0;
+
             while (!stoppingToken.IsCancellationRequested)
             {
-                // Create the next pipe instance before waiting for a free connection slot. On Linux and macOS the instance
-                // keeps the shared listening socket alive, so clients queued in its backlog are not reset when the last
-                // connected instance closes. Connections are not read until a slot is free, which bounds the memory used.
-                var serverStream = this.CreatePipeServer();
-                var slotAcquired = false;
+                NamedPipeServerStream serverStream;
 
                 try
                 {
-                    await this.connectionSemaphore.WaitAsync(stoppingToken);
-                    slotAcquired = true;
-
-                    await serverStream.WaitForConnectionAsync(stoppingToken);
+                    serverStream = await this.AcceptConnectionAsync(stoppingToken);
+                    consecutiveFailures = 0;
                 }
-                catch
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
-                    await serverStream.DisposeAsync();
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // A transient pipe error (all instances busy, an ACL problem, a broken pipe while waiting) must not
+                    // stop the host: log it, back off and keep accepting
+                    consecutiveFailures++;
+                    var delay = this.GetAcceptRetryDelay(consecutiveFailures);
 
-                    if (slotAcquired)
+                    this.logger.LogError(
+                        ex,
+                        "Accepting a connection on pipe '{PipeName}' failed ({ConsecutiveFailures} consecutive failure(s)); retrying in {RetryDelay}.",
+                        this.options.PipeName,
+                        consecutiveFailures,
+                        delay);
+
+                    try
                     {
-                        this.connectionSemaphore.Release();
+                        await Task.Delay(delay, stoppingToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
                     }
 
-                    throw;
+                    continue;
                 }
 
                 var requestToken = this.drainCancellationTokenSource.Token;
@@ -254,7 +268,9 @@ namespace ArgusTransfer.Server
                             return;
                         }
 
-                        if (!await this.concurrencySemaphore.WaitAsync(0))
+                        // Non-blocking check: a timeout of 0 completes immediately, and a request that was already read is still
+                        // processed during the shutdown drain, so no cancellation token applies here
+                        if (!await this.concurrencySemaphore.WaitAsync(0, CancellationToken.None))
                         {
                             Interlocked.Increment(ref this.rejectedRequestCount);
 
@@ -405,6 +421,73 @@ namespace ArgusTransfer.Server
                 this.activeRequests[taskId] = task;
                 _ = task.ContinueWith(_ => this.activeRequests.TryRemove(taskId, out _), TaskContinuationOptions.ExecuteSynchronously);
             }
+        }
+
+        /// <summary>
+        /// Gets or sets the delay before the first retry after accepting a connection failed. The delay doubles with every
+        /// consecutive failure up to <see cref="MaxAcceptRetryDelay"/>. Settable for tests.
+        /// </summary>
+        internal TimeSpan AcceptRetryInitialDelay { get; set; } = TimeSpan.FromSeconds(1);
+
+        /// <summary>
+        /// The maximum delay between retries after accepting a connection failed
+        /// </summary>
+        private static readonly TimeSpan MaxAcceptRetryDelay = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// Creates the next pipe instance, waits for a free connection slot and then for a client to connect. The instance
+        /// is created before waiting for the slot: on Linux and macOS it keeps the shared listening socket alive, so clients
+        /// queued in its backlog are not reset when the last connected instance closes. Connections are not read until a
+        /// slot is free, which bounds the memory used.
+        /// </summary>
+        /// <param name="stoppingToken">
+        /// The <see cref="CancellationToken"/> that is triggered when the host stops
+        /// </param>
+        /// <returns>
+        /// The connected <see cref="NamedPipeServerStream"/>; the caller owns it and the acquired connection slot
+        /// </returns>
+        private async Task<NamedPipeServerStream> AcceptConnectionAsync(CancellationToken stoppingToken)
+        {
+            var serverStream = this.CreatePipeServer();
+            var slotAcquired = false;
+
+            try
+            {
+                await this.connectionSemaphore.WaitAsync(stoppingToken);
+                slotAcquired = true;
+
+                await serverStream.WaitForConnectionAsync(stoppingToken);
+
+                return serverStream;
+            }
+            catch
+            {
+                await serverStream.DisposeAsync();
+
+                if (slotAcquired)
+                {
+                    this.connectionSemaphore.Release();
+                }
+
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Calculates the delay before the next accept attempt: <see cref="AcceptRetryInitialDelay"/> doubled for every
+        /// further consecutive failure, capped at <see cref="MaxAcceptRetryDelay"/>
+        /// </summary>
+        /// <param name="consecutiveFailures">
+        /// The number of consecutive failed attempts, at least 1
+        /// </param>
+        /// <returns>
+        /// The delay before the next attempt
+        /// </returns>
+        internal TimeSpan GetAcceptRetryDelay(int consecutiveFailures)
+        {
+            var ticks = this.AcceptRetryInitialDelay.Ticks * Math.Pow(2, Math.Min(consecutiveFailures - 1, 16));
+
+            return ticks >= MaxAcceptRetryDelay.Ticks ? MaxAcceptRetryDelay : TimeSpan.FromTicks((long)ticks);
         }
 
         /// <summary>
