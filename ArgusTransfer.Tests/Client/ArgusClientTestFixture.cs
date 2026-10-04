@@ -1524,5 +1524,125 @@ namespace ArgusTransfer.Tests.Client
             Assert.That(ArgusClient.CanRetry(new ArgusRetryPolicy { ShouldRetry = e => e is FormatException }, new FormatException(), request, false, -1, 0, CancellationToken.None), Is.True);
             Assert.That(ArgusClient.CanRetry(new ArgusRetryPolicy { ShouldRetry = null }, new IOException(), request, false, -1, 0, CancellationToken.None), Is.False);
         }
+
+        [Test]
+        public void Verify_that_MaxResponseBodySize_defaults_to_unlimited_and_rejects_negative_values()
+        {
+            using var client = new ArgusClient("unused");
+
+            Assert.That(client.MaxResponseBodySize, Is.Zero);
+            Assert.That(() => client.MaxResponseBodySize = -1, Throws.TypeOf<ArgumentOutOfRangeException>());
+        }
+
+        [Test]
+        public async Task Verify_that_response_with_Content_Length_above_MaxResponseBodySize_is_rejected_before_the_body_is_read()
+        {
+            var pipeName = $"argus-max-response-{Guid.NewGuid():N}";
+
+            // The server announces 2 GB but sends nothing: the client must reject the header instead of allocating or waiting
+            var serverTask = this.RunRawResponseServerAsync(pipeName, async server =>
+            {
+                await server.WriteAsync(Encoding.ASCII.GetBytes("ARGUS/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2147483647\r\n\r\n"));
+                await server.FlushAsync();
+            });
+
+            using var client = new ArgusClient(pipeName) { MaxResponseBodySize = 1024 };
+
+            var exception = await Assert.ThrowsAsync<ArgusProtocolException>(async () => await client.GetAsync("/big", timeout: TimeSpan.FromSeconds(5)));
+
+            Assert.That(exception.Message, Does.Contain("1024"));
+            await serverTask;
+        }
+
+        [Test]
+        public async Task Verify_that_endless_chunked_response_is_rejected_when_it_exceeds_MaxResponseBodySize()
+        {
+            var pipeName = $"argus-max-response-{Guid.NewGuid():N}";
+
+            var serverTask = this.RunRawResponseServerAsync(pipeName, async server =>
+            {
+                await server.WriteAsync(Encoding.ASCII.GetBytes("ARGUS/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nTransfer-Encoding: chunked\r\n\r\n"));
+                var chunk = Encoding.ASCII.GetBytes($"400\r\n{new string('x', 1024)}\r\n");
+
+                // Keep sending until the client gives up and closes the pipe
+                while (true)
+                {
+                    await server.WriteAsync(chunk);
+                }
+            });
+
+            using var client = new ArgusClient(pipeName) { MaxResponseBodySize = 64 * 1024 };
+
+            await Assert.ThrowsAsync<ArgusProtocolException>(async () => await client.GetAsync("/endless", timeout: TimeSpan.FromSeconds(5)));
+            await serverTask;
+        }
+
+        [Test]
+        public async Task Verify_that_compressed_response_is_rejected_when_its_decompressed_size_exceeds_MaxResponseBodySize()
+        {
+            var pipeName = $"argus-max-response-{Guid.NewGuid():N}";
+
+            // 10 MB of zeros compresses to about 10 KB: small on the wire, large after decompression
+            using var compressed = new MemoryStream();
+            using (var gzip = new System.IO.Compression.GZipStream(compressed, System.IO.Compression.CompressionLevel.SmallestSize, leaveOpen: true))
+            {
+                gzip.Write(new byte[10 * 1024 * 1024]);
+            }
+
+            var bomb = compressed.ToArray();
+
+            var serverTask = this.RunRawResponseServerAsync(pipeName, async server =>
+            {
+                await server.WriteAsync(Encoding.ASCII.GetBytes($"ARGUS/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Encoding: gzip\r\nContent-Length: {bomb.Length}\r\n\r\n"));
+                await server.WriteAsync(bomb);
+                await server.FlushAsync();
+            });
+
+            using var client = new ArgusClient(pipeName) { MaxResponseBodySize = 1024 * 1024 };
+
+            Assert.That(bomb.Length, Is.LessThan(client.MaxResponseBodySize));
+            await Assert.ThrowsAsync<ArgusProtocolException>(async () => await client.GetAsync("/bomb", timeout: TimeSpan.FromSeconds(5)));
+            await serverTask;
+        }
+
+        [Test]
+        public async Task Verify_that_response_within_MaxResponseBodySize_is_read()
+        {
+            var pipeName = $"argus-max-response-{Guid.NewGuid():N}";
+            var serverTask = this.RunFakeServerAsync(pipeName, null, ArgusStatusCode.Ok, new string('x', 1024));
+
+            using var client = new ArgusClient(pipeName) { MaxResponseBodySize = 1024 };
+
+            var response = await client.GetAsync("/exact", timeout: TimeSpan.FromSeconds(5));
+
+            Assert.That(response.Body, Has.Length.EqualTo(1024));
+            await serverTask;
+        }
+
+        /// <summary>
+        /// Runs a single-shot pipe server that reads one request and then lets <paramref name="respond"/> write raw bytes;
+        /// an <see cref="IOException"/> because the client closed the pipe ends the server quietly
+        /// </summary>
+        /// <param name="pipeName">The name of the pipe to listen on</param>
+        /// <param name="respond">Writes the raw response</param>
+        /// <returns>A task that completes when the server is done</returns>
+        private Task RunRawResponseServerAsync(string pipeName, Func<NamedPipeServerStream, Task> respond)
+        {
+            return Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                await server.WaitForConnectionAsync();
+                await this.requestSerializer.ReadAsync(server, CancellationToken.None);
+
+                try
+                {
+                    await respond(server);
+                }
+                catch (IOException)
+                {
+                    // The client closed the pipe after rejecting the response
+                }
+            });
+        }
     }
 }

@@ -71,6 +71,11 @@ namespace ArgusTransfer.Client
         private ArgusCompressionOptions compression = new ArgusCompressionOptions();
 
         /// <summary>
+        /// Backing field for <see cref="MaxResponseBodySize"/>
+        /// </summary>
+        private long maxResponseBodySize;
+
+        /// <summary>
         /// Gets or sets the default timeout for requests. Defaults to 30 seconds.
         /// The timeout applies to the whole call, including retries and the delays between them.
         /// </summary>
@@ -81,6 +86,26 @@ namespace ArgusTransfer.Client
         /// transient named pipe errors. Defaults to <c>null</c>, which disables retries.
         /// </summary>
         public ArgusRetryPolicy RetryPolicy { get; set; }
+
+        /// <summary>
+        /// Gets or sets the maximum size in bytes of a response body. The limit applies to the <c>Content-Length</c>
+        /// (checked before the body is read), to chunked bodies while they are read, and to the decompressed size of a
+        /// compressed body, so a misbehaving server cannot exhaust the client's memory. A response above the limit fails
+        /// with an <see cref="ArgusProtocolException"/>, which the default <see cref="ArgusRetryPolicy.ShouldRetry"/> does not
+        /// retry. Defaults to 0, which means no limit.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the value is negative
+        /// </exception>
+        public long MaxResponseBodySize
+        {
+            get => this.maxResponseBodySize;
+            set
+            {
+                ArgumentOutOfRangeException.ThrowIfNegative(value);
+                this.maxResponseBodySize = value;
+            }
+        }
 
         /// <summary>
         /// Gets or sets the <see cref="ILogger"/> used to log retry attempts. Defaults to <see cref="NullLogger.Instance"/>;
@@ -712,7 +737,7 @@ namespace ArgusTransfer.Client
         {
             using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-            var readTask = this.responseSerializer.ReadAsync(pipe, cancellationToken);
+            var readTask = this.responseSerializer.ReadAsync(pipe, cancellationToken, this.maxResponseBodySize);
             var writeTask = this.requestSerializer.WriteAsync(pipe, request, writeCts.Token);
 
             // Whichever way this method exits, the other task's exception (e.g. after the pipe is disposed) is observed
