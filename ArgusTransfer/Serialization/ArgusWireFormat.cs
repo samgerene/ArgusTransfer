@@ -24,6 +24,7 @@ namespace ArgusTransfer.Serialization
     using System.Collections.Generic;
     using System.Globalization;
     using System.IO;
+    using System.Linq;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
@@ -61,8 +62,19 @@ namespace ArgusTransfer.Serialization
         /// <param name="message">
         /// The <see cref="ArgusMessage"/> whose headers are written
         /// </param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when a header name is not a valid token or a header value contains a carriage return, line feed or NUL,
+        /// which would corrupt the message or inject additional headers
+        /// </exception>
         public static void AppendStandardHeaders(StringBuilder sb, ArgusMessage message)
         {
+            var headerError = GetHeaderError(message);
+
+            if (headerError != null)
+            {
+                throw new InvalidOperationException(headerError);
+            }
+
             sb.Append(ArgusHeaderNames.CorrelationToken + ": ");
             sb.Append(message.CorrelationToken.ToString());
             sb.Append("\r\n");
@@ -78,6 +90,67 @@ namespace ArgusTransfer.Serialization
                 sb.Append(header.Value);
                 sb.Append("\r\n");
             }
+        }
+
+        /// <summary>
+        /// Checks the custom headers of a message: a name must be a non-empty token of visible ASCII characters without
+        /// <c>:</c>, and a value must not contain a carriage return, line feed or NUL character
+        /// </summary>
+        /// <param name="message">
+        /// The <see cref="ArgusMessage"/> to check
+        /// </param>
+        /// <returns>
+        /// A description of the first invalid header, or <c>null</c> when all headers are valid
+        /// </returns>
+        public static string GetHeaderError(ArgusMessage message)
+        {
+            foreach (var header in message.Headers)
+            {
+                if (string.IsNullOrEmpty(header.Key) || header.Key.Any(c => c <= ' ' || c >= '\u007f' || c == ':'))
+                {
+                    return $"The header name '{EscapeForMessage(header.Key)}' is invalid: it must be a non-empty token of visible ASCII characters without ':'.";
+                }
+
+                if (header.Value != null && header.Value.AsSpan().IndexOfAny('\r', '\n', '\0') >= 0)
+                {
+                    return $"The value of header '{header.Key}' contains a carriage return, line feed or NUL character.";
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Makes control characters in a header name visible in an error message
+        /// </summary>
+        /// <param name="value">
+        /// The value to escape
+        /// </param>
+        /// <returns>
+        /// The value with control characters written as <c>\uXXXX</c>
+        /// </returns>
+        private static string EscapeForMessage(string value)
+        {
+            if (value == null)
+            {
+                return string.Empty;
+            }
+
+            var sb = new StringBuilder(value.Length);
+
+            foreach (var c in value)
+            {
+                if (char.IsControl(c))
+                {
+                    sb.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+
+            return sb.ToString();
         }
 
         /// <summary>

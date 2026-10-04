@@ -343,6 +343,15 @@ namespace ArgusTransfer.Server
                                 new InvalidOperationException($"The response has an unsupported Content-Encoding '{context.Response.Headers[ArgusHeaderNames.ContentEncoding]}'."));
                         }
 
+                        var headerError = ArgusWireFormat.GetHeaderError(context.Response);
+
+                        if (headerError != null)
+                        {
+                            // A handler set a header that cannot be written safely (invalid name, CR/LF in a value): a server
+                            // fault, reported before anything is written so the client still receives a well-formed 500
+                            context.Response = this.CreateUnhandledExceptionResponse(request, new InvalidOperationException(headerError));
+                        }
+
                         ArgusCompression.ApplyToResponse(request, context.Response, this.compression);
 
                         if (!string.IsNullOrEmpty(request.Accept))

@@ -60,7 +60,8 @@ ArgusTransfer/
 
 Text-based request/response wire format transmitted over named pipes.
 
-- **Request line**: `{VERB} {ROUTE} ARGUS/1.0`
+- **Request line**: `{VERB} {ROUTE} ARGUS/1.0`, exactly three space-separated parts. The route is percent-encoded by the internal `ArgusRouteEncoding` (path: `%`, space and control characters; a query embedded in the route: space and control characters only) and decoded on parse (never `%2F`), so the server sees exactly the client's `Route` and CR/LF in a route cannot inject headers
+- **Header validation**: `ArgusWireFormat.AppendStandardHeaders` rejects header names that are not visible-ASCII tokens without `:` and values containing CR, LF or NUL (`InvalidOperationException`); the host checks a handler's response with `GetHeaderError` before writing and answers invalid headers with the generic 500
 - **Response status line**: `ARGUS/1.0 {StatusCode} {ReasonPhrase}`
 - **Standard headers**: `X-Correlation-Token`, `X-Timestamp`, `Content-Length`, `Content-Type`, `Accept`, `Authorization`, `Content-Encoding`, `Accept-Encoding`
 - **Authorization**: `Authorization: {scheme} {parameter}` (e.g. `Bearer token123`). Like `Accept`, it lives in `ArgusMessage.Headers` (so all serializer paths round-trip it) with convenience members on `ArgusRequest`: `Authorization` (raw), `AuthorizationScheme` / `AuthorizationParameter` (parsed at the first white space) and `SetAuthorization(scheme, parameter)`. Values with CR/LF are rejected to prevent header injection. Never log it.

@@ -842,6 +842,56 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public async Task Verify_that_route_with_spaces_reaches_the_handler_unchanged_over_the_pipe()
+        {
+            var pipeName = $"argus-route-escaping-test-{Guid.NewGuid():N}";
+            var router = new ArgusRouter();
+            router.MapGet("/items/{name}", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = context.RouteValues["name"] };
+                return Task.CompletedTask;
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(router, new ArgusPipeHostOptions { PipeName = pipeName });
+
+            using var client = new ArgusClient(pipeName);
+            var response = await client.GetAsync("/items/a b 50%", timeout: TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Is.EqualTo("a b 50%"));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_response_header_with_CRLF_returns_InternalServerError_over_the_pipe()
+        {
+            var pipeName = $"argus-header-injection-test-{Guid.NewGuid():N}";
+            var router = new ArgusRouter();
+            router.MapGet("/items", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = "data" };
+                context.Response.Headers["X-Echo"] = "value\r\nX-Injected: yes";
+                return Task.CompletedTask;
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(router, new ArgusPipeHostOptions { PipeName = pipeName });
+
+            using var client = new ArgusClient(pipeName);
+            var response = await client.GetAsync("/items", timeout: TimeSpan.FromSeconds(5));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.InternalServerError));
+            Assert.That(response.Headers.ContainsKey("X-Injected"), Is.False);
+            Assert.That(ArgusProblemDetails.TryRead(response, out _), Is.True);
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
         public async Task Verify_that_streamed_body_over_the_limit_gets_BadRequest_promptly()
         {
             var pipeName = $"argus-early-response-stream-test-{Guid.NewGuid():N}";
