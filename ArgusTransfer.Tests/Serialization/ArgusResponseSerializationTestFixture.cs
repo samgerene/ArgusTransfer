@@ -168,5 +168,48 @@ namespace ArgusTransfer.Tests.Serialization
 
             Assert.That(deserialized.Headers["Content-Type"], Is.EqualTo("text/plain"));
         }
+
+        [Test]
+        public void Verify_that_Write_with_Accept_list_uses_the_negotiated_serializer()
+        {
+            var registry = new ArgusBodySerializerRegistry([new PlainTextArgusBodySerializer(), new TaggingBodySerializer("application/json")]);
+            var negotiatingSerializer = new ArgusResponseSerializer(registry);
+            var response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = "ok" };
+
+            var text = negotiatingSerializer.Write(response, "text/plain;q=0.5, application/json");
+
+            Assert.That(response.Headers[ArgusHeaderNames.ContentType], Is.EqualTo("application/json"));
+            Assert.That(text, Does.EndWith("\r\n\r\n[application/json]ok"));
+        }
+
+        [Test]
+        public void Verify_that_Write_with_Accept_keeps_an_explicit_Content_Type_and_its_serializer()
+        {
+            var registry = new ArgusBodySerializerRegistry([new PlainTextArgusBodySerializer(), new TaggingBodySerializer("application/json")]);
+            var negotiatingSerializer = new ArgusResponseSerializer(registry);
+            var response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = "ok" };
+            response.Headers[ArgusHeaderNames.ContentType] = "text/plain";
+
+            var text = negotiatingSerializer.Write(response, "application/json");
+
+            Assert.That(response.Headers[ArgusHeaderNames.ContentType], Is.EqualTo("text/plain"));
+            Assert.That(text, Does.EndWith("\r\n\r\nok"));
+        }
+
+        [Test]
+        public void Verify_that_Write_with_unacceptable_or_missing_Accept_uses_the_default_serializer()
+        {
+            var registry = new ArgusBodySerializerRegistry([new PlainTextArgusBodySerializer(), new TaggingBodySerializer("application/json")]);
+            var negotiatingSerializer = new ArgusResponseSerializer(registry);
+
+            var unacceptable = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = "ok" };
+            negotiatingSerializer.Write(unacceptable, "image/png");
+
+            var missing = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = "ok" };
+            negotiatingSerializer.Write(missing, null);
+
+            Assert.That(unacceptable.Headers[ArgusHeaderNames.ContentType], Is.EqualTo("text/plain"));
+            Assert.That(missing.Headers[ArgusHeaderNames.ContentType], Is.EqualTo("text/plain"));
+        }
     }
 }

@@ -293,12 +293,19 @@ namespace ArgusTransfer.Server
                         semaphoreAcquired = true;
                         Interlocked.Increment(ref this.currentRequestCount);
 
+                        // The media type negotiated from the Accept header, reused when the response is written; null means
+                        // the response serializer's default
+                        string negotiatedContentType = null;
+
                         if (this.bodySerializerRegistry != null)
                         {
-                            var acceptType = request.Accept;
+                            var negotiated = ArgusContentNegotiation.SelectSerializer(this.bodySerializerRegistry, request.Accept);
 
-                            if (!string.IsNullOrEmpty(acceptType)
-                                && !this.bodySerializerRegistry.TryGetSerializer(acceptType, out _))
+                            if (negotiated != null)
+                            {
+                                negotiatedContentType = negotiated.ContentType;
+                            }
+                            else
                             {
                                 var notAcceptable = new ArgusResponse
                                 {
@@ -371,14 +378,7 @@ namespace ArgusTransfer.Server
 
                         ArgusCompression.ApplyToResponse(request, context.Response, this.compression);
 
-                        if (!string.IsNullOrEmpty(request.Accept))
-                        {
-                            await this.responseSerializer.WriteAsync(serverStream, context.Response, request.Accept, requestToken);
-                        }
-                        else
-                        {
-                            await this.responseSerializer.WriteAsync(serverStream, context.Response, requestToken);
-                        }
+                        await this.responseSerializer.WriteAsync(serverStream, context.Response, negotiatedContentType, requestToken);
                     }
                     catch (Exception ex) when (ex is ArgusProtocolException or FormatException)
                     {

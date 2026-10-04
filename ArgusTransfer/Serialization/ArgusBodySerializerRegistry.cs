@@ -22,6 +22,7 @@ namespace ArgusTransfer.Serialization
 {
     using System;
     using System.Collections.Generic;
+    using System.Collections.ObjectModel;
     using System.Linq;
 
     /// <summary>
@@ -35,6 +36,11 @@ namespace ArgusTransfer.Serialization
         /// The backing dictionary that maps content types to serializers
         /// </summary>
         private readonly Dictionary<string, IArgusBodySerializer> serializers;
+
+        /// <summary>
+        /// The registered serializers in registration order, one per content type
+        /// </summary>
+        private readonly ReadOnlyCollection<IArgusBodySerializer> registered;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ArgusBodySerializerRegistry"/> class
@@ -59,6 +65,8 @@ namespace ArgusTransfer.Serialization
             {
                 this.serializers[serializer.ContentType] = serializer;
             }
+
+            this.registered = Array.AsReadOnly(this.serializers.Values.ToArray());
 
             this.DefaultSerializer = this.serializers.TryGetValue("text/plain", out var textPlainSerializer)
                 ? textPlainSerializer
@@ -88,6 +96,19 @@ namespace ArgusTransfer.Serialization
         public bool TryGetSerializer(string contentType, out IArgusBodySerializer serializer)
         {
             return this.serializers.TryGetValue(contentType, out serializer);
+        }
+
+        /// <summary>
+        /// Gets all registered <see cref="IArgusBodySerializer"/> instances, one per content type (the last registered
+        /// serializer for a content type wins), used for content negotiation of wildcard media ranges such as
+        /// <c>application/*</c> in an <c>Accept</c> header
+        /// </summary>
+        /// <returns>
+        /// The registered serializers, in registration order
+        /// </returns>
+        public IReadOnlyCollection<IArgusBodySerializer> GetSerializers()
+        {
+            return this.registered;
         }
     }
 }

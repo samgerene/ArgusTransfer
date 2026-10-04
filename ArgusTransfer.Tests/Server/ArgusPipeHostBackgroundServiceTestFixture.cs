@@ -34,6 +34,7 @@ namespace ArgusTransfer.Transport.Tests.Server
     using ArgusTransfer.Routing;
     using ArgusTransfer.Serialization;
     using ArgusTransfer.Server;
+    using ArgusTransfer.Tests.Serialization;
 
     using Microsoft.Extensions.Logging;
     using Microsoft.Extensions.Options;
@@ -756,6 +757,91 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             await cts.CancelAsync();
             await acceptService.StopAsync(CancellationToken.None);
+        }
+
+        [TestCase("application/json, text/plain", "application/json", "[application/json]ok")]
+        [TestCase("text/plain;q=0.5, application/json;q=0.9", "application/json", "[application/json]ok")]
+        [TestCase("application/*", "application/json", "[application/json]ok")]
+        [TestCase("*/*", "text/plain", "ok")]
+        [TestCase("application/xml, text/*;q=0.1", "text/plain", "ok")]
+        [TestCase(null, "text/plain", "ok")]
+        public async Task Verify_that_Accept_header_is_negotiated_and_reused_for_the_response(string accept, string expectedContentType, string expectedBody)
+        {
+            var pipeName = $"argus-negotiation-test-{Guid.NewGuid():N}";
+            var registry = new ArgusBodySerializerRegistry([new PlainTextArgusBodySerializer(), new TaggingBodySerializer("application/json")]);
+
+            var router = new ArgusRouter();
+            router.MapGet("/test", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = "ok" };
+                return Task.CompletedTask;
+            });
+
+            var service = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                Options.Create(new ArgusPipeHostOptions { PipeName = pipeName }),
+                registry);
+
+            using var cts = new CancellationTokenSource();
+            await service.StartAsync(cts.Token);
+
+            try
+            {
+                using var client = new ArgusClient(pipeName);
+                var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/test", Accept = accept };
+
+                var response = await client.SendAsync(request);
+
+                Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+                Assert.That(response.Headers[ArgusHeaderNames.ContentType], Is.EqualTo(expectedContentType));
+                Assert.That(response.Body, Is.EqualTo(expectedBody));
+            }
+            finally
+            {
+                await cts.CancelAsync();
+                await service.StopAsync(CancellationToken.None);
+            }
+        }
+
+        [Test]
+        public async Task Verify_that_response_with_explicit_Content_Type_is_written_with_its_own_serializer()
+        {
+            var pipeName = $"argus-negotiation-test-{Guid.NewGuid():N}";
+            var registry = new ArgusBodySerializerRegistry([new PlainTextArgusBodySerializer(), new TaggingBodySerializer("application/json")]);
+
+            var router = new ArgusRouter();
+            router.MapGet("/test", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = "ok" };
+                context.Response.Headers[ArgusHeaderNames.ContentType] = "text/plain";
+                return Task.CompletedTask;
+            });
+
+            var service = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                Options.Create(new ArgusPipeHostOptions { PipeName = pipeName }),
+                registry);
+
+            using var cts = new CancellationTokenSource();
+            await service.StartAsync(cts.Token);
+
+            try
+            {
+                using var client = new ArgusClient(pipeName);
+                var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/test", Accept = "application/json, text/plain" };
+
+                var response = await client.SendAsync(request);
+
+                Assert.That(response.Headers[ArgusHeaderNames.ContentType], Is.EqualTo("text/plain"));
+                Assert.That(response.Body, Is.EqualTo("ok"));
+            }
+            finally
+            {
+                await cts.CancelAsync();
+                await service.StopAsync(CancellationToken.None);
+            }
         }
 
         [Test]
