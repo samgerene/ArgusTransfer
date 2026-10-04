@@ -22,6 +22,8 @@ namespace ArgusTransfer.Tests.Routing
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -472,6 +474,113 @@ namespace ArgusTransfer.Tests.Routing
 
             Assert.That(() => this.router.MapGet("/items/{id:Guid}/parts/{partId:shortguid}/{name}", handler), Throws.Nothing);
             Assert.That(() => this.router.MapGet("/", handler), Throws.Nothing);
+        }
+
+        [Test]
+        public void Verify_that_route_template_is_parsed_at_registration()
+        {
+            this.router.MapGet("/items/{id:Guid}", _ => Task.CompletedTask);
+
+            var endpoint = this.router.Endpoints[0];
+
+            Assert.That(endpoint.Template, Is.Not.Null);
+            Assert.That(endpoint.Template.Text, Is.EqualTo("/items/{id:Guid}"));
+        }
+
+        [Test]
+        public async Task Verify_that_composed_pipeline_is_cached_across_requests()
+        {
+            this.router.UseMiddleware(new CountingMiddleware());
+            this.router.MapGet("/resource", OkHandler).WithMiddleware(new CountingMiddleware());
+
+            await this.RouteGetAsync("/resource");
+            var first = this.router.Endpoints[0].Pipeline;
+
+            await this.RouteGetAsync("/resource");
+            var second = this.router.Endpoints[0].Pipeline;
+
+            Assert.That(first, Is.Not.Null);
+            Assert.That(second, Is.SameAs(first));
+        }
+
+        [Test]
+        public async Task Verify_that_global_middleware_added_after_a_request_invalidates_the_cached_pipeline()
+        {
+            this.router.MapGet("/resource", OkHandler);
+
+            await this.RouteGetAsync("/resource");
+            var before = this.router.Endpoints[0].Pipeline;
+
+            var middleware = new CountingMiddleware();
+            this.router.UseMiddleware(middleware);
+
+            await this.RouteGetAsync("/resource");
+
+            Assert.That(middleware.Invocations, Is.EqualTo(1));
+            Assert.That(this.router.Endpoints[0].Pipeline, Is.Not.SameAs(before));
+        }
+
+        [Test]
+        public async Task Verify_that_endpoint_middleware_added_after_a_request_invalidates_the_cached_pipeline()
+        {
+            var builder = this.router.MapGet("/resource", OkHandler);
+
+            await this.RouteGetAsync("/resource");
+            var before = this.router.Endpoints[0].Pipeline;
+
+            var middleware = new CountingMiddleware();
+            builder.WithMiddleware(middleware);
+
+            await this.RouteGetAsync("/resource");
+
+            Assert.That(middleware.Invocations, Is.EqualTo(1));
+            Assert.That(this.router.Endpoints[0].Pipeline, Is.Not.SameAs(before));
+        }
+
+        [Test]
+        public async Task Verify_that_cached_pipeline_serves_concurrent_requests()
+        {
+            var middleware = new CountingMiddleware();
+            this.router.UseMiddleware(middleware);
+            this.router.MapGet("/items/{id}", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = context.RouteValues["id"] };
+                return Task.CompletedTask;
+            });
+
+            var contexts = await Task.WhenAll(Enumerable.Range(0, 200).Select(i => Task.Run(() => this.RouteGetAsync($"/items/{i}"))));
+
+            Assert.That(middleware.Invocations, Is.EqualTo(200));
+            Assert.That(contexts.Select(c => c.Response.Body), Is.EqualTo(Enumerable.Range(0, 200).Select(i => i.ToString(CultureInfo.InvariantCulture))));
+        }
+
+        private static Task OkHandler(ArgusContext context)
+        {
+            context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok };
+            return Task.CompletedTask;
+        }
+
+        private async Task<ArgusContext> RouteGetAsync(string route)
+        {
+            var context = new ArgusContext(new ArgusRequest { Verb = ArgusVerb.GET, Route = route }, CancellationToken.None);
+            await this.router.RouteAsync(context);
+            return context;
+        }
+
+        /// <summary>
+        /// A middleware that counts how often it is invoked
+        /// </summary>
+        private sealed class CountingMiddleware : IArgusMiddleware
+        {
+            private int invocations;
+
+            public int Invocations => Volatile.Read(ref this.invocations);
+
+            public Task InvokeAsync(ArgusContext context, ArgusRequestDelegate next)
+            {
+                Interlocked.Increment(ref this.invocations);
+                return next(context);
+            }
         }
     }
 }

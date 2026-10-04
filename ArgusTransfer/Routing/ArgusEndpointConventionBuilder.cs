@@ -71,7 +71,7 @@ namespace ArgusTransfer.Routing
         /// </returns>
         public IArgusEndpointConventionBuilder WithMiddleware(IArgusMiddleware middleware)
         {
-            this.endpoint.Middlewares.Add(middleware);
+            this.endpoint.AddMiddleware(middleware);
             return this;
         }
     }

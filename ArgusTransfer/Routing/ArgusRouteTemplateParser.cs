@@ -67,54 +67,57 @@ namespace ArgusTransfer.Routing
         }
 
         /// <summary>
-        /// Validates a route template so that errors surface when the route is registered instead of when a request
-        /// is matched against it
+        /// Gets the constraint registered under the specified name
+        /// </summary>
+        /// <param name="name">
+        /// The constraint name (case-insensitive)
+        /// </param>
+        /// <param name="constraint">
+        /// When the method returns <c>true</c>, the registered <see cref="IArgusRouteConstraint"/>
+        /// </param>
+        /// <returns>
+        /// <c>true</c> if a constraint is registered under <paramref name="name"/>; otherwise, <c>false</c>
+        /// </returns>
+        public static bool TryGetConstraint(string name, out IArgusRouteConstraint constraint)
+        {
+            return Constraints.TryGetValue(name, out constraint);
+        }
+
+        /// <summary>
+        /// Gets the names of the registered constraints, sorted and comma-separated, for use in error messages
+        /// </summary>
+        /// <returns>
+        /// The registered constraint names (e.g. "Guid, ShortGuid")
+        /// </returns>
+        public static string GetConstraintNames()
+        {
+            return string.Join(", ", Constraints.Keys.Order(StringComparer.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
+        /// Parses and validates a route template, so that errors surface when the route is registered instead of when
+        /// a request is matched against it
         /// </summary>
         /// <param name="routeTemplate">
-        /// The route template to validate (e.g. "/healthendpoint/{identifier:ShortGuid}")
+        /// The route template to parse (e.g. "/healthendpoint/{identifier:ShortGuid}")
         /// </param>
+        /// <returns>
+        /// The parsed <see cref="ArgusRouteTemplate"/>
+        /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="routeTemplate"/> is <c>null</c>
         /// </exception>
         /// <exception cref="ArgumentException">
         /// Thrown when a parameter segment has an empty name or references an empty or unknown constraint name
         /// </exception>
-        public static void Validate(string routeTemplate)
+        public static ArgusRouteTemplate Parse(string routeTemplate)
         {
-            ArgumentNullException.ThrowIfNull(routeTemplate);
-
-            foreach (var segment in routeTemplate.Split('/'))
-            {
-                if (!segment.StartsWith('{') || !segment.EndsWith('}'))
-                {
-                    continue;
-                }
-
-                var paramContent = segment.Substring(1, segment.Length - 2);
-                var colonIndex = paramContent.IndexOf(':');
-                var paramName = colonIndex >= 0 ? paramContent.Substring(0, colonIndex) : paramContent;
-
-                if (string.IsNullOrWhiteSpace(paramName))
-                {
-                    throw new ArgumentException($"The route template '{routeTemplate}' contains a parameter without a name: '{segment}'.", nameof(routeTemplate));
-                }
-
-                if (colonIndex < 0)
-                {
-                    continue;
-                }
-
-                var constraint = paramContent.Substring(colonIndex + 1);
-
-                if (!Constraints.ContainsKey(constraint))
-                {
-                    throw new ArgumentException($"The route template '{routeTemplate}' references an unknown route constraint: '{constraint}'. Known constraints: {string.Join(", ", Constraints.Keys.Order(StringComparer.OrdinalIgnoreCase))}.", nameof(routeTemplate));
-                }
-            }
+            return ArgusRouteTemplate.Parse(routeTemplate);
         }
 
         /// <summary>
-        /// Attempts to match a route against a route template, extracting parameter values
+        /// Attempts to match a route against a route template, extracting parameter values. The template is parsed
+        /// on every call; the router parses each template once with <see cref="Parse"/> instead
         /// </summary>
         /// <param name="template">
         /// The route template (e.g. "/healthendpoint/{identifier:ShortGuid}")
@@ -123,75 +126,18 @@ namespace ArgusTransfer.Routing
         /// The actual route to match (e.g. "/healthendpoint/kOWyz4q5vE2OVvXTiaw6jg")
         /// </param>
         /// <param name="routeValues">
-        /// When the method returns <c>true</c>, contains the extracted parameter values keyed by parameter name
+        /// When the method returns <c>true</c>, contains the extracted parameter values keyed by parameter name;
+        /// otherwise, <c>null</c>
         /// </param>
         /// <returns>
         /// <c>true</c> if the route matches the template; otherwise, <c>false</c>
         /// </returns>
-        /// <exception cref="InvalidOperationException">
-        /// Thrown when the route template references an unknown constraint name; cannot happen for templates
-        /// registered through <see cref="ArgusRouter"/>, which validates them with <see cref="Validate"/>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the route template is invalid, for example when it references an unknown constraint name
         /// </exception>
         public static bool TryMatch(string template, string route, out IReadOnlyDictionary<string, string> routeValues)
         {
-            routeValues = new Dictionary<string, string>();
-
-            var templateSegments = template.Split('/');
-            var routeSegments = route.Split('/');
-
-            if (templateSegments.Length != routeSegments.Length)
-            {
-                return false;
-            }
-
-            var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            for (var i = 0; i < templateSegments.Length; i++)
-            {
-                var templateSegment = templateSegments[i];
-                var routeSegment = routeSegments[i];
-
-                if (templateSegment.StartsWith('{') && templateSegment.EndsWith('}'))
-                {
-                    var paramContent = templateSegment.Substring(1, templateSegment.Length - 2);
-
-                    var colonIndex = paramContent.IndexOf(':');
-
-                    if (colonIndex >= 0)
-                    {
-                        var paramName = paramContent.Substring(0, colonIndex);
-                        var constraint = paramContent.Substring(colonIndex + 1);
-
-                        if (Constraints.TryGetValue(constraint, out var routeConstraint))
-                        {
-                            if (!routeConstraint.Match(routeSegment))
-                            {
-                                return false;
-                            }
-                        }
-                        else
-                        {
-                            throw new InvalidOperationException($"Unknown route constraint: '{constraint}'");
-                        }
-
-                        values[paramName] = routeSegment;
-                    }
-                    else
-                    {
-                        values[paramContent] = routeSegment;
-                    }
-                }
-                else
-                {
-                    if (!string.Equals(templateSegment, routeSegment, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return false;
-                    }
-                }
-            }
-
-            routeValues = values;
-            return true;
+            return Parse(template).TryMatch(route.Split('/'), out routeValues);
         }
     }
 }

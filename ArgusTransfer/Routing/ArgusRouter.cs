@@ -22,6 +22,7 @@ namespace ArgusTransfer.Routing
 {
     using System;
     using System.Collections.Generic;
+    using System.Threading;
     using System.Threading.Tasks;
 
     using ArgusTransfer.Protocol;
@@ -44,6 +45,17 @@ namespace ArgusTransfer.Routing
         private readonly List<IArgusMiddleware> globalMiddlewares = new List<IArgusMiddleware>();
 
         /// <summary>
+        /// The version of <see cref="globalMiddlewares"/>, incremented whenever a global middleware is added so that
+        /// the pipelines cached per endpoint are rebuilt
+        /// </summary>
+        private int globalMiddlewareVersion;
+
+        /// <summary>
+        /// Gets the registered route endpoints in registration order
+        /// </summary>
+        internal IReadOnlyList<ArgusRouteEndpoint> Endpoints => this.endpoints;
+
+        /// <summary>
         /// Registers a global middleware that runs for all requests in registration order.
         /// Global middleware executes before per-endpoint middleware
         /// </summary>
@@ -53,6 +65,7 @@ namespace ArgusTransfer.Routing
         public void UseMiddleware(IArgusMiddleware middleware)
         {
             this.globalMiddlewares.Add(middleware);
+            Interlocked.Increment(ref this.globalMiddlewareVersion);
         }
 
         /// <summary>
@@ -209,10 +222,11 @@ namespace ArgusTransfer.Routing
         public async Task RouteAsync(ArgusContext context)
         {
             var routeMatched = false;
+            var routeSegments = context.Request.Route.Split('/');
 
             foreach (var endpoint in this.endpoints)
             {
-                if (ArgusRouteTemplateParser.TryMatch(endpoint.RouteTemplate, context.Request.Route, out var routeValues))
+                if (endpoint.Template.TryMatch(routeSegments, out var routeValues))
                 {
                     routeMatched = true;
 
@@ -222,7 +236,7 @@ namespace ArgusTransfer.Routing
                         context.QueryValues = context.Request.QueryParameters;
                         context.EndpointMetadata = endpoint.Metadata;
 
-                        var pipeline = this.BuildPipeline(endpoint);
+                        var pipeline = this.GetPipeline(endpoint);
                         await pipeline(context);
 
                         StampCorrelationToken(context);
@@ -260,6 +274,35 @@ namespace ArgusTransfer.Routing
             {
                 context.Response.CorrelationToken = context.CorrelationToken;
             }
+        }
+
+        /// <summary>
+        /// Gets the composed pipeline of an endpoint, building it only when no pipeline is cached yet or when global
+        /// or endpoint middleware was added since it was built
+        /// </summary>
+        /// <param name="endpoint">
+        /// The <see cref="ArgusRouteEndpoint"/> whose pipeline to get
+        /// </param>
+        /// <returns>
+        /// An <see cref="ArgusRequestDelegate"/> representing the complete pipeline
+        /// </returns>
+        private ArgusRequestDelegate GetPipeline(ArgusRouteEndpoint endpoint)
+        {
+            // Read the versions before building, so a pipeline built while middleware is being added is never
+            // cached under the newer version
+            var globalVersion = Volatile.Read(ref this.globalMiddlewareVersion);
+            var endpointVersion = endpoint.MiddlewareVersion;
+            var cached = endpoint.Pipeline;
+
+            if (cached != null && cached.GlobalMiddlewareVersion == globalVersion && cached.EndpointMiddlewareVersion == endpointVersion)
+            {
+                return cached.Delegate;
+            }
+
+            var pipeline = this.BuildPipeline(endpoint);
+            endpoint.Pipeline = new ArgusRouteEndpoint.CachedPipeline(globalVersion, endpointVersion, pipeline);
+
+            return pipeline;
         }
 
         /// <summary>
@@ -317,13 +360,13 @@ namespace ArgusTransfer.Routing
         /// </exception>
         private ArgusEndpointConventionBuilder Map(ArgusVerb verb, string routeTemplate, ArgusHandlerDelegate handler)
         {
-            ArgusRouteTemplateParser.Validate(routeTemplate);
+            var template = ArgusRouteTemplateParser.Parse(routeTemplate);
             ArgumentNullException.ThrowIfNull(handler);
 
             var endpoint = new ArgusRouteEndpoint
             {
                 Verb = verb,
-                RouteTemplate = routeTemplate,
+                Template = template,
                 Handler = handler
             };
 
