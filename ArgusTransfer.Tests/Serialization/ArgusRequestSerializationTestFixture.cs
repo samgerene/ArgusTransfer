@@ -263,15 +263,16 @@ namespace ArgusTransfer.Tests.Serialization
         }
 
         [Test]
-        public void Verify_that_Accept_defaults_to_text_plain()
+        public void Verify_that_Accept_is_not_set_by_default()
         {
             var request = new ArgusRequest();
 
-            Assert.That(request.Accept, Is.EqualTo("text/plain"));
+            Assert.That(request.Accept, Is.Null);
+            Assert.That(request.Headers.ContainsKey("Accept"), Is.False);
         }
 
         [Test]
-        public void Verify_that_default_Accept_header_appears_on_wire()
+        public void Verify_that_no_Accept_header_appears_on_wire_by_default()
         {
             var request = new ArgusRequest
             {
@@ -282,7 +283,7 @@ namespace ArgusTransfer.Tests.Serialization
 
             var text = this.serializer.Write(request);
 
-            Assert.That(text, Does.Contain("Accept: text/plain\r\n"));
+            Assert.That(text, Does.Not.Contain("Accept:"));
         }
 
         [Test]

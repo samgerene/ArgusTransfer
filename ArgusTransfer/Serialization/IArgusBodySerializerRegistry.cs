@@ -20,6 +20,8 @@
 
 namespace ArgusTransfer.Serialization
 {
+    using System.Collections.Generic;
+
     /// <summary>
     /// Defines the contract for a registry that resolves <see cref="IArgusBodySerializer"/> instances by content type
     /// </summary>
@@ -44,5 +46,15 @@ namespace ArgusTransfer.Serialization
         /// <c>true</c> if a serializer was found for the content type; otherwise, <c>false</c>
         /// </returns>
         bool TryGetSerializer(string contentType, out IArgusBodySerializer serializer);
+
+        /// <summary>
+        /// Gets all registered <see cref="IArgusBodySerializer"/> instances, used for content negotiation of
+        /// wildcard media ranges such as <c>application/*</c> in an <c>Accept</c> header. The default implementation
+        /// returns only <see cref="DefaultSerializer"/>; registries should return every registered serializer
+        /// </summary>
+        /// <returns>
+        /// The registered serializers, in registration order
+        /// </returns>
+        IReadOnlyCollection<IArgusBodySerializer> GetSerializers() => [this.DefaultSerializer];
     }
 }

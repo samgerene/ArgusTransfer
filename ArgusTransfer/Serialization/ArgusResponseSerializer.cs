@@ -146,21 +146,18 @@ namespace ArgusTransfer.Serialization
         /// The <see cref="ArgusResponse"/> to serialize
         /// </param>
         /// <param name="acceptContentType">
-        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
+        /// The request's <c>Accept</c> header value (a single media type, or a list of media ranges with quality values)
+        /// used to select the <see cref="IArgusBodySerializer"/> when the response has no <c>Content-Type</c>; the selected
+        /// serializer's content type is then set as <c>Content-Type</c>. A response that already has a <c>Content-Type</c> is
+        /// serialized with the serializer for that content type. Without a registry, or when nothing acceptable is registered,
+        /// the default serializer is used
         /// </param>
         /// <returns>
         /// A string containing the serialized response in ARGUS/1.0 wire format
         /// </returns>
         public string Write(ArgusResponse response, string acceptContentType)
         {
-            var resolvedSerializer = this.ResolveSerializer(acceptContentType);
-
-            if (!response.Headers.ContainsKey(ArgusHeaderNames.ContentType))
-            {
-                response.Headers[ArgusHeaderNames.ContentType] = resolvedSerializer.ContentType;
-            }
-
-            return WriteCore(response, resolvedSerializer);
+            return WriteCore(response, this.ResolveResponseSerializer(response, acceptContentType));
         }
 
         /// <summary>
@@ -189,7 +186,11 @@ namespace ArgusTransfer.Serialization
         /// The <see cref="ArgusResponse"/> to serialize
         /// </param>
         /// <param name="acceptContentType">
-        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
+        /// The request's <c>Accept</c> header value (a single media type, or a list of media ranges with quality values)
+        /// used to select the <see cref="IArgusBodySerializer"/> when the response has no <c>Content-Type</c>; the selected
+        /// serializer's content type is then set as <c>Content-Type</c>. A response that already has a <c>Content-Type</c> is
+        /// serialized with the serializer for that content type. Without a registry, or when nothing acceptable is registered,
+        /// the default serializer is used
         /// </param>
         public void Write(StreamWriter writer, ArgusResponse response, string acceptContentType)
         {
@@ -234,7 +235,11 @@ namespace ArgusTransfer.Serialization
         /// The <see cref="ArgusResponse"/> to serialize
         /// </param>
         /// <param name="acceptContentType">
-        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
+        /// The request's <c>Accept</c> header value (a single media type, or a list of media ranges with quality values)
+        /// used to select the <see cref="IArgusBodySerializer"/> when the response has no <c>Content-Type</c>; the selected
+        /// serializer's content type is then set as <c>Content-Type</c>. A response that already has a <c>Content-Type</c> is
+        /// serialized with the serializer for that content type. Without a registry, or when nothing acceptable is registered,
+        /// the default serializer is used
         /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> used to signal cancellation
@@ -292,7 +297,11 @@ namespace ArgusTransfer.Serialization
         /// The <see cref="ArgusResponse"/> to serialize
         /// </param>
         /// <param name="acceptContentType">
-        /// The accept content type used to resolve the appropriate <see cref="IArgusBodySerializer"/>
+        /// The request's <c>Accept</c> header value (a single media type, or a list of media ranges with quality values)
+        /// used to select the <see cref="IArgusBodySerializer"/> when the response has no <c>Content-Type</c>; the selected
+        /// serializer's content type is then set as <c>Content-Type</c>. A response that already has a <c>Content-Type</c> is
+        /// serialized with the serializer for that content type. Without a registry, or when nothing acceptable is registered,
+        /// the default serializer is used
         /// </param>
         /// <param name="cancellationToken">
         /// The <see cref="CancellationToken"/> used to signal cancellation
@@ -308,12 +317,7 @@ namespace ArgusTransfer.Serialization
             ArgumentNullException.ThrowIfNull(stream);
             ArgumentNullException.ThrowIfNull(response);
 
-            var serializer = this.ResolveSerializer(acceptContentType);
-
-            if (!response.Headers.ContainsKey(ArgusHeaderNames.ContentType))
-            {
-                response.Headers[ArgusHeaderNames.ContentType] = serializer.ContentType;
-            }
+            var serializer = this.ResolveResponseSerializer(response, acceptContentType);
 
             return ArgusWireFormat.WriteAsync(stream, response, sb => AppendStatusLine(sb, response), serializer, this.contentEncodings, cancellationToken);
         }
@@ -519,6 +523,37 @@ namespace ArgusTransfer.Serialization
         private IArgusBodySerializer ResolveSerializer(string contentType)
         {
             return ArgusWireFormat.ResolveSerializer(this.bodySerializerRegistry, this.bodySerializer, contentType);
+        }
+
+        /// <summary>
+        /// Resolves the serializer for writing a response: the serializer for the response's <c>Content-Type</c> when it
+        /// has one; otherwise the serializer negotiated from <paramref name="accept"/> (falling back to the default
+        /// serializer), whose content type is then set as the response's <c>Content-Type</c>
+        /// </summary>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> to write
+        /// </param>
+        /// <param name="accept">
+        /// The request's <c>Accept</c> header value
+        /// </param>
+        /// <returns>
+        /// The <see cref="IArgusBodySerializer"/> to serialize the body with
+        /// </returns>
+        private IArgusBodySerializer ResolveResponseSerializer(ArgusResponse response, string accept)
+        {
+            var contentType = ArgusWireFormat.GetContentType(response);
+
+            if (contentType != null)
+            {
+                return this.ResolveSerializer(contentType);
+            }
+
+            var serializer = (this.bodySerializerRegistry == null ? null : ArgusContentNegotiation.SelectSerializer(this.bodySerializerRegistry, accept))
+                ?? this.bodySerializer;
+
+            response.Headers[ArgusHeaderNames.ContentType] = serializer.ContentType;
+
+            return serializer;
         }
     }
 }

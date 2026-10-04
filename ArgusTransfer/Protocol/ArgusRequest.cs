@@ -31,15 +31,6 @@ namespace ArgusTransfer.Protocol
     public class ArgusRequest : ArgusMessage
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="ArgusRequest"/> class
-        /// with default header values
-        /// </summary>
-        public ArgusRequest()
-        {
-            Headers[ArgusHeaderNames.Accept] = "text/plain";
-        }
-
-        /// <summary>
         /// The verb used to determine the type of operation
         /// </summary>
         public ArgusVerb Verb { get; set; }
@@ -57,7 +48,10 @@ namespace ArgusTransfer.Protocol
 
         /// <summary>
         /// Gets or sets the preferred content type(s) for the response, as specified
-        /// by the client via the Accept header (e.g. "application/json", "text/xml").
+        /// by the client via the Accept header (e.g. "application/json", or "application/json, text/plain;q=0.5").
+        /// The host selects the best registered serializer from the listed media ranges (quality values, <c>type/*</c>
+        /// and <c>*/*</c> are supported) and answers 406 Not Acceptable only when none is acceptable.
+        /// <c>null</c> (the default) means any media type: the host uses its default serializer.
         /// This is a convenience accessor over <c>Headers[ArgusHeaderNames.Accept]</c>.
         /// </summary>
         public string Accept
