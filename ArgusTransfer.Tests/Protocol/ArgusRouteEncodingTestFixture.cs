@@ -57,6 +57,16 @@ namespace ArgusTransfer.Tests.Protocol
         }
 
         [Test]
+        public void Verify_that_DecodePath_handles_a_lone_surrogate_followed_by_a_multibyte_character()
+        {
+            // A lone high surrogate followed by '€' must not be encoded as a pair (which would not fit the UTF-8 buffer)
+            var path = "/x%20\ud83d€";
+
+            Assert.That(() => ArgusRouteEncoding.DecodePath(path), Throws.Nothing);
+            Assert.That(ArgusRouteEncoding.DecodePath(path), Does.StartWith("/x ").And.EndsWith("€"));
+        }
+
+        [Test]
         public void Verify_that_DecodePath_never_decodes_an_encoded_slash()
         {
             Assert.That(ArgusRouteEncoding.DecodePath("/files/a%2Fb"), Is.EqualTo("/files/a%2Fb"));

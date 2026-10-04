@@ -93,25 +93,25 @@ namespace ArgusTransfer.Protocol
             using var bytes = new MemoryStream(path.Length);
             var utf8 = new byte[4];
 
-            for (var i = 0; i < path.Length; i++)
+            var position = 0;
+
+            while (position < path.Length)
             {
-                if (path[i] == '%'
-                    && i + 2 < path.Length
-                    && byte.TryParse(path.AsSpan(i + 1, 2), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value)
+                if (path[position] == '%'
+                    && position + 2 < path.Length
+                    && byte.TryParse(path.AsSpan(position + 1, 2), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value)
                     && value != (byte)'/')
                 {
                     bytes.WriteByte(value);
-                    i += 2;
+                    position += 3;
                     continue;
                 }
 
-                var count = Encoding.UTF8.GetBytes(path.AsSpan(i, char.IsHighSurrogate(path[i]) && i + 1 < path.Length ? 2 : 1), utf8);
+                // A surrogate pair is encoded together (4 bytes); any other character, including a lone surrogate, on its own
+                var charCount = position + 1 < path.Length && char.IsSurrogatePair(path[position], path[position + 1]) ? 2 : 1;
+                var count = Encoding.UTF8.GetBytes(path.AsSpan(position, charCount), utf8);
                 bytes.Write(utf8, 0, count);
-
-                if (count == 4)
-                {
-                    i++;
-                }
+                position += charCount;
             }
 
             return Encoding.UTF8.GetString(bytes.GetBuffer(), 0, (int)bytes.Length);
