@@ -133,6 +133,8 @@ Authentication: `ArgusAuthenticationMiddleware` calls the singleton `IArgusAuthe
 - **Nullable**: `disable` in both `ArgusTransfer` and `ArgusTransfer.Tests`
 - **XML doc comments**: required on all public types and members. **Never use `/// <inheritdoc />`** — always write the full `<summary>`, `<param>`, `<returns>`, and `<exception>` blocks on the implementation, even when they duplicate the interface.
 - **License header**: every `.cs` file starts with the Apache-2.0 copyright block.
+- **Logging in catch clauses**: always pass the caught exception to the logger (`logger.LogWarning(ex, "...")`), never log only a message (Sonar S6667).
+- **No assignments inside conditions**: read the next value before the loop and at the end of its body instead of `while ((x = Read()) != null)` (Sonar S1121).
 
 ## Testing Conventions
 
