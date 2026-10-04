@@ -108,7 +108,7 @@ namespace ArgusTransfer.Serialization
 
                 if (newLineIndex < 0)
                 {
-                    line.Write(this.buffer, this.position, this.length - this.position);
+                    await line.WriteAsync(this.buffer.AsMemory(this.position, this.length - this.position), cancellationToken);
                     this.position = this.length;
 
                     // Allow one extra byte for a '\r' that may precede the terminator
@@ -120,7 +120,7 @@ namespace ArgusTransfer.Serialization
                     continue;
                 }
 
-                line.Write(this.buffer, this.position, newLineIndex - this.position);
+                await line.WriteAsync(this.buffer.AsMemory(this.position, newLineIndex - this.position), cancellationToken);
                 this.position = newLineIndex + 1;
 
                 return Decode(line, maxLength);
