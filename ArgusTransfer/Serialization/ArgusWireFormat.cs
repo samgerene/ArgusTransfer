@@ -257,11 +257,12 @@ namespace ArgusTransfer.Serialization
         public static async Task ReadHeadersAndBodyAsync(IArgusMessageSource source, ArgusHeaderBudget headerBudget, ArgusMessage message, long maxBodySize, Func<string, IArgusBodySerializer> resolveSerializer, IEnumerable<IArgusContentEncoding> encodings, CancellationToken cancellationToken)
         {
             var contentLength = -1;
-            string line;
+            var line = await headerBudget.ReadLineAsync(source, cancellationToken);
 
-            while (!string.IsNullOrEmpty(line = await headerBudget.ReadLineAsync(source, cancellationToken)))
+            while (!string.IsNullOrEmpty(line))
             {
                 contentLength = ParseHeader(line, message, contentLength);
+                line = await headerBudget.ReadLineAsync(source, cancellationToken);
             }
 
             var encoding = ArgusCompression.ResolveReceivedContentEncoding(message, encodings);
@@ -362,11 +363,12 @@ namespace ArgusTransfer.Serialization
         public static void ReadHeadersAndBody(StringReader reader, ArgusMessage message, long maxBodySize, Func<string, IArgusBodySerializer> resolveSerializer)
         {
             var contentLength = -1;
-            string line;
+            var line = reader.ReadLine();
 
-            while (!string.IsNullOrEmpty(line = reader.ReadLine()))
+            while (!string.IsNullOrEmpty(line))
             {
                 contentLength = ParseHeader(line, message, contentLength);
+                line = reader.ReadLine();
             }
 
             EnsureNoContentEncoding(message);
