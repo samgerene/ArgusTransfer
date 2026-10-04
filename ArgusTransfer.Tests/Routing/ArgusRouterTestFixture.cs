@@ -427,5 +427,51 @@ namespace ArgusTransfer.Tests.Routing
 
             Assert.That(capturedToken, Is.EqualTo(cts.Token));
         }
+
+        [Test]
+        public void Verify_that_unknown_route_constraint_throws_at_registration()
+        {
+            ArgusHandlerDelegate handler = _ => Task.CompletedTask;
+
+            var exception = Assert.Throws<ArgumentException>(() => this.router.MapGet("/items/{id:Giud}", handler));
+
+            Assert.That(exception.ParamName, Is.EqualTo("routeTemplate"));
+            Assert.That(exception.Message, Does.Contain("'Giud'").And.Contain("Guid, ShortGuid"));
+
+            Assert.That(() => this.router.MapPost("/items/{id:}", handler), Throws.ArgumentException);
+            Assert.That(() => this.router.MapPut("/items/{:Guid}", handler), Throws.ArgumentException);
+            Assert.That(() => this.router.MapPatch("/items/{}", handler), Throws.ArgumentException);
+            Assert.That(() => this.router.MapDelete("/items/{ }", handler), Throws.ArgumentException);
+            Assert.That(() => this.router.MapHead(null, handler), Throws.ArgumentNullException);
+            Assert.That(() => this.router.MapGet("/items", null), Throws.ArgumentNullException);
+        }
+
+        [Test]
+        public async Task Verify_that_rejected_template_does_not_affect_other_routes()
+        {
+            ArgusHandlerDelegate handler = context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok };
+                return Task.CompletedTask;
+            };
+
+            Assert.That(() => this.router.MapGet("/items/{id:Giud}", handler), Throws.ArgumentException);
+            this.router.MapGet("/items/{name}", handler);
+
+            var context = new ArgusContext(new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items/widget" }, CancellationToken.None);
+            await this.router.RouteAsync(context);
+
+            Assert.That(context.Response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(context.RouteValues["name"], Is.EqualTo("widget"));
+        }
+
+        [Test]
+        public void Verify_that_valid_templates_with_constraints_are_accepted()
+        {
+            ArgusHandlerDelegate handler = _ => Task.CompletedTask;
+
+            Assert.That(() => this.router.MapGet("/items/{id:Guid}/parts/{partId:shortguid}/{name}", handler), Throws.Nothing);
+            Assert.That(() => this.router.MapGet("/", handler), Throws.Nothing);
+        }
     }
 }

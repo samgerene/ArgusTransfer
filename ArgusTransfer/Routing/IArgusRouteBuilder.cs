@@ -46,6 +46,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         IArgusEndpointConventionBuilder MapGet(string routeTemplate, ArgusHandlerDelegate handler);
 
         /// <summary>
@@ -60,6 +66,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         IArgusEndpointConventionBuilder MapPost(string routeTemplate, ArgusHandlerDelegate handler);
 
         /// <summary>
@@ -74,6 +86,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         IArgusEndpointConventionBuilder MapPut(string routeTemplate, ArgusHandlerDelegate handler);
 
         /// <summary>
@@ -88,6 +106,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         IArgusEndpointConventionBuilder MapPatch(string routeTemplate, ArgusHandlerDelegate handler);
 
         /// <summary>
@@ -102,6 +126,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         IArgusEndpointConventionBuilder MapHead(string routeTemplate, ArgusHandlerDelegate handler);
 
         /// <summary>
@@ -116,6 +146,12 @@ namespace ArgusTransfer.Routing
         /// <returns>
         /// An <see cref="IArgusEndpointConventionBuilder"/> for further configuration
         /// </returns>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> or <paramref name="handler"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="System.ArgumentException">
+        /// Thrown when <paramref name="routeTemplate"/> contains a parameter without a name or references an unknown route constraint
+        /// </exception>
         IArgusEndpointConventionBuilder MapDelete(string routeTemplate, ArgusHandlerDelegate handler);
     }
 }

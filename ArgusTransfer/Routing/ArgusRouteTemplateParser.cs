@@ -23,6 +23,7 @@ namespace ArgusTransfer.Routing
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
+    using System.Linq;
 
     /// <summary>
     /// Provides route template matching with parameter extraction
@@ -66,6 +67,53 @@ namespace ArgusTransfer.Routing
         }
 
         /// <summary>
+        /// Validates a route template so that errors surface when the route is registered instead of when a request
+        /// is matched against it
+        /// </summary>
+        /// <param name="routeTemplate">
+        /// The route template to validate (e.g. "/healthendpoint/{identifier:ShortGuid}")
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="routeTemplate"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when a parameter segment has an empty name or references an empty or unknown constraint name
+        /// </exception>
+        public static void Validate(string routeTemplate)
+        {
+            ArgumentNullException.ThrowIfNull(routeTemplate);
+
+            foreach (var segment in routeTemplate.Split('/'))
+            {
+                if (!segment.StartsWith('{') || !segment.EndsWith('}'))
+                {
+                    continue;
+                }
+
+                var paramContent = segment.Substring(1, segment.Length - 2);
+                var colonIndex = paramContent.IndexOf(':');
+                var paramName = colonIndex >= 0 ? paramContent.Substring(0, colonIndex) : paramContent;
+
+                if (string.IsNullOrWhiteSpace(paramName))
+                {
+                    throw new ArgumentException($"The route template '{routeTemplate}' contains a parameter without a name: '{segment}'.", nameof(routeTemplate));
+                }
+
+                if (colonIndex < 0)
+                {
+                    continue;
+                }
+
+                var constraint = paramContent.Substring(colonIndex + 1);
+
+                if (!Constraints.ContainsKey(constraint))
+                {
+                    throw new ArgumentException($"The route template '{routeTemplate}' references an unknown route constraint: '{constraint}'. Known constraints: {string.Join(", ", Constraints.Keys.Order(StringComparer.OrdinalIgnoreCase))}.", nameof(routeTemplate));
+                }
+            }
+        }
+
+        /// <summary>
         /// Attempts to match a route against a route template, extracting parameter values
         /// </summary>
         /// <param name="template">
@@ -81,7 +129,8 @@ namespace ArgusTransfer.Routing
         /// <c>true</c> if the route matches the template; otherwise, <c>false</c>
         /// </returns>
         /// <exception cref="InvalidOperationException">
-        /// Thrown when the route template references an unknown constraint name
+        /// Thrown when the route template references an unknown constraint name; cannot happen for templates
+        /// registered through <see cref="ArgusRouter"/>, which validates them with <see cref="Validate"/>
         /// </exception>
         public static bool TryMatch(string template, string route, out IReadOnlyDictionary<string, string> routeValues)
         {

@@ -71,7 +71,7 @@ Text-based request/response wire format transmitted over named pipes.
 
 ### Routing
 
-`ArgusRouter` matches verb + route template and dispatches to an `ArgusHandlerDelegate`. Supports literal segments, `{param}` parameters, `{param:Guid}` and `{param:ShortGuid}` constrained parameters (case-insensitive matching on literals). Modules implement `IArgusModule.AddRoutes(IArgusRouteBuilder)` to register endpoints.
+`ArgusRouter` matches verb + route template and dispatches to an `ArgusHandlerDelegate`. Supports literal segments, `{param}` parameters, `{param:Guid}` and `{param:ShortGuid}` constrained parameters (case-insensitive matching on literals). Modules implement `IArgusModule.AddRoutes(IArgusRouteBuilder)` to register endpoints. `Map*` validates the template at registration (`ArgusRouteTemplateParser.Validate`): an unknown or empty constraint name or a parameter without a name throws `ArgumentException`, a `null` template or handler `ArgumentNullException`, so a mistyped template fails at startup rather than during request matching.
 
 ### Serialization
 
