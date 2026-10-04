@@ -328,6 +328,10 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.ServiceUnavailable));
             Assert.That(response.Body, Does.Contain("timed out"));
+            Assert.That(ArgusProblemDetails.TryRead(response, out var problem), Is.True);
+            Assert.That(problem.Detail, Is.EqualTo(ArgusPipeHostBackgroundService.RequestTimeoutDetail));
+            Assert.That(problem.Instance, Is.EqualTo(request.CorrelationToken.ToString()));
+            Assert.That(response.CorrelationToken, Is.EqualTo(request.CorrelationToken));
         }
 
         [Test]
@@ -539,14 +543,19 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             // Second request: should be rejected with 503
             var client2 = new ArgusClient(pipeName);
-            var response2 = await client2.SendAsync(new ArgusRequest
+            var request2 = new ArgusRequest
             {
                 Verb = ArgusVerb.GET,
                 Route = "/slow"
-            });
+            };
+            var response2 = await client2.SendAsync(request2);
 
             Assert.That(response2.StatusCode, Is.EqualTo(ArgusStatusCode.ServiceUnavailable));
             Assert.That(response2.Body, Does.Contain("concurrency limit"));
+            Assert.That(ArgusProblemDetails.TryRead(response2, out var problem), Is.True);
+            Assert.That(problem.Detail, Is.EqualTo(ArgusPipeHostBackgroundService.ConcurrencyLimitDetail));
+            Assert.That(problem.Instance, Is.EqualTo(request2.CorrelationToken.ToString()));
+            Assert.That(response2.CorrelationToken, Is.EqualTo(request2.CorrelationToken));
             Assert.That(concurrencyService.RejectedRequestCount, Is.EqualTo(1));
 
             // Release the first request
@@ -754,9 +763,82 @@ namespace ArgusTransfer.Transport.Tests.Server
             var response = await client.SendAsync(request);
 
             Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.NotAcceptable));
+            Assert.That(response.Headers[ArgusHeaderNames.ContentType], Is.EqualTo(ArgusProblemDetails.ContentType));
+            Assert.That(ArgusProblemDetails.TryRead(response, out var problem), Is.True);
+            Assert.That(problem.Status, Is.EqualTo(406));
+            Assert.That(problem.Detail, Does.Contain("'application/xml'").And.Contain("Supported media types: text/plain"));
+            Assert.That(problem.Instance, Is.EqualTo(request.CorrelationToken.ToString()));
+            Assert.That(response.CorrelationToken, Is.EqualTo(request.CorrelationToken));
 
             await cts.CancelAsync();
             await acceptService.StopAsync(CancellationToken.None);
+        }
+
+        [Test]
+        public async Task Verify_that_built_in_error_responses_to_HEAD_requests_have_no_body()
+        {
+            var pipeName = $"argus-head-error-test-{Guid.NewGuid():N}";
+            var registry = new ArgusBodySerializerRegistry([new PlainTextArgusBodySerializer()]);
+
+            var router = new ArgusRouter();
+            router.MapHead("/slow", async context =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), context.RequestAborted);
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok };
+            });
+
+            var service = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                Options.Create(new ArgusPipeHostOptions { PipeName = pipeName, RequestTimeout = TimeSpan.FromMilliseconds(100) }),
+                registry);
+
+            using var cts = new CancellationTokenSource();
+            await service.StartAsync(cts.Token);
+
+            try
+            {
+                using var client = new ArgusClient(pipeName);
+
+                var notAcceptable = await client.SendAsync(new ArgusRequest { Verb = ArgusVerb.HEAD, Route = "/slow", Accept = "application/xml" });
+                var timedOut = await client.SendAsync(new ArgusRequest { Verb = ArgusVerb.HEAD, Route = "/slow" });
+
+                Assert.That(notAcceptable.StatusCode, Is.EqualTo(ArgusStatusCode.NotAcceptable));
+                Assert.That(notAcceptable.Body, Is.Null.Or.Empty);
+                Assert.That(timedOut.StatusCode, Is.EqualTo(ArgusStatusCode.ServiceUnavailable));
+                Assert.That(timedOut.Body, Is.Null.Or.Empty);
+            }
+            finally
+            {
+                await cts.CancelAsync();
+                await service.StopAsync(CancellationToken.None);
+            }
+        }
+
+        [Test]
+        public void Verify_that_CreateProblemResponse_uses_the_correlation_token_and_strips_the_body_for_HEAD()
+        {
+            var get = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/x" };
+            var head = new ArgusRequest { Verb = ArgusVerb.HEAD, Route = "/x" };
+
+            var forGet = ArgusPipeHostBackgroundService.CreateProblemResponse(ArgusStatusCode.ServiceUnavailable, "busy", get);
+            var forHead = ArgusPipeHostBackgroundService.CreateProblemResponse(ArgusStatusCode.ServiceUnavailable, "busy", head);
+            var unread = ArgusPipeHostBackgroundService.CreateProblemResponse(ArgusStatusCode.BadRequest, "malformed", null);
+
+            Assert.That(ArgusProblemDetails.TryRead(forGet, out var problem), Is.True);
+            Assert.That(problem.Status, Is.EqualTo(503));
+            Assert.That(problem.Title, Is.EqualTo("Service Unavailable"));
+            Assert.That(problem.Detail, Is.EqualTo("busy"));
+            Assert.That(problem.Instance, Is.EqualTo(get.CorrelationToken.ToString()));
+            Assert.That(forGet.CorrelationToken, Is.EqualTo(get.CorrelationToken));
+
+            Assert.That(forHead.Body, Is.Null);
+            Assert.That(forHead.StatusCode, Is.EqualTo(ArgusStatusCode.ServiceUnavailable));
+            Assert.That(forHead.CorrelationToken, Is.EqualTo(head.CorrelationToken));
+
+            Assert.That(ArgusProblemDetails.TryRead(unread, out var badRequest), Is.True);
+            Assert.That(badRequest.Detail, Is.EqualTo("malformed"));
+            Assert.That(badRequest.Instance, Is.Null);
         }
 
         [TestCase("application/json, text/plain", "application/json", "[application/json]ok")]
@@ -1163,6 +1245,12 @@ namespace ArgusTransfer.Transport.Tests.Server
             Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
             Assert.That(response.Body, Does.Contain("maximum allowed size"));
             Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(5)), "the client must not wait for its timeout");
+
+            // The request could not be read completely: a problem details response without an instance
+            Assert.That(ArgusProblemDetails.TryRead(response, out var problem), Is.True);
+            Assert.That(problem.Status, Is.EqualTo(400));
+            Assert.That(problem.Detail, Does.Contain("maximum allowed size"));
+            Assert.That(problem.Instance, Is.Null);
 
             await cts.CancelAsync();
             await hostService.StopAsync(CancellationToken.None);
