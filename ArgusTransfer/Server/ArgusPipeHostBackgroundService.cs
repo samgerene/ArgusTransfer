@@ -245,6 +245,7 @@ namespace ArgusTransfer.Server
                         catch (Exception ex) when ((ex is OperationCanceledException || ex is IOException) && readTimeoutCts.IsCancellationRequested && !requestToken.IsCancellationRequested)
                         {
                             this.logger.LogWarning(
+                                ex,
                                 "The client did not send a complete request within {RequestReadTimeout}; closing the connection.",
                                 this.options.RequestReadTimeout);
                             return;
