@@ -302,7 +302,7 @@ namespace ArgusTransfer.Serialization
         {
             sb.Append(request.Verb.ToString());
             sb.Append(' ');
-            sb.Append(request.Route);
+            sb.Append(ArgusRouteEncoding.EncodeRoute(request.Route));
             sb.Append(ArgusQueryStringHelper.BuildQueryString(request.QueryParameters));
             sb.Append(" ARGUS/1.0\r\n");
         }
@@ -328,7 +328,7 @@ namespace ArgusTransfer.Serialization
 
             var parts = requestLine.Split(' ');
 
-            if (parts.Length < 3)
+            if (parts.Length != 3)
             {
                 throw new FormatException($"Invalid request line: {requestLine}");
             }
@@ -344,9 +344,9 @@ namespace ArgusTransfer.Serialization
             var request = new ArgusRequest
             {
                 Verb = verb,
-                Route = questionMarkIndex >= 0
+                Route = ArgusRouteEncoding.DecodePath(questionMarkIndex >= 0
                     ? routeAndQuery.Substring(0, questionMarkIndex)
-                    : routeAndQuery
+                    : routeAndQuery)
             };
 
             if (questionMarkIndex >= 0 && questionMarkIndex < routeAndQuery.Length - 1)

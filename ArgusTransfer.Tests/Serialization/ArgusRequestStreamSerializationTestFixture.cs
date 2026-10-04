@@ -371,6 +371,85 @@ namespace ArgusTransfer.Tests.Serialization
                 Throws.TypeOf<ArgusProtocolException>().With.Message.Contains("maximum allowed size"));
         }
 
+        [TestCase("/items/a b")]
+        [TestCase("/discount/50%")]
+        [TestCase("/café/€")]
+        public async Task Verify_that_route_round_trips_unchanged(string route)
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = route };
+
+            using var stream = new MemoryStream();
+            await this.serializer.WriteAsync(stream, request);
+            stream.Position = 0;
+
+            var fromStream = await this.serializer.ReadAsync(stream, CancellationToken.None);
+            var fromText = this.serializer.Read(this.serializer.Write(request));
+
+            Assert.That(fromStream.Route, Is.EqualTo(route));
+            Assert.That(fromText.Route, Is.EqualTo(route));
+        }
+
+        [Test]
+        public async Task Verify_that_CRLF_in_route_cannot_inject_headers()
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items\r\nX-Injected: yes" };
+
+            using var stream = new MemoryStream();
+            await this.serializer.WriteAsync(stream, request);
+
+            var wire = Encoding.UTF8.GetString(stream.ToArray());
+            Assert.That(wire, Does.Not.Contain("\r\nX-Injected"));
+
+            stream.Position = 0;
+            var result = await this.serializer.ReadAsync(stream, CancellationToken.None);
+
+            Assert.That(result.Headers.ContainsKey("X-Injected"), Is.False);
+            Assert.That(result.Route, Is.EqualTo("/items\r\nX-Injected: yes"));
+        }
+
+        [Test]
+        public void Verify_that_query_embedded_in_route_is_still_parsed()
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items?name=a b&page=2" };
+
+            var result = this.serializer.Read(this.serializer.Write(request));
+
+            Assert.That(result.Route, Is.EqualTo("/items"));
+            Assert.That(result.QueryParameters["name"], Is.EqualTo("a b"));
+            Assert.That(result.QueryParameters["page"], Is.EqualTo("2"));
+        }
+
+        [TestCase("value\r\nX-Injected: yes")]
+        [TestCase("value\nX-Injected: yes")]
+        [TestCase("value\0")]
+        public void Verify_that_header_values_with_CR_LF_or_NUL_are_rejected(string value)
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items" };
+            request.Headers["X-Custom"] = value;
+
+            Assert.That(() => this.serializer.Write(request), Throws.TypeOf<InvalidOperationException>().With.Message.Contains("X-Custom"));
+            Assert.That(async () => await this.serializer.WriteAsync(new MemoryStream(), request), Throws.TypeOf<InvalidOperationException>());
+        }
+
+        [TestCase("X Custom")]
+        [TestCase("X:Custom")]
+        [TestCase("X-Custom\r\nInjected")]
+        [TestCase("")]
+        [TestCase("X-Café")]
+        public void Verify_that_invalid_header_names_are_rejected(string name)
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/items" };
+            request.Headers[name] = "value";
+
+            Assert.That(() => this.serializer.Write(request), Throws.TypeOf<InvalidOperationException>().With.Message.Contains("header name"));
+        }
+
+        [Test]
+        public void Verify_that_request_line_with_too_many_parts_is_rejected()
+        {
+            Assert.That(() => this.serializer.Read("GET /items/a b ARGUS/1.0\r\n\r\n"), Throws.TypeOf<FormatException>());
+        }
+
         [Test]
         public void Verify_that_MaxHeaderSize_defaults_to_32_KB_and_rejects_invalid_values()
         {
