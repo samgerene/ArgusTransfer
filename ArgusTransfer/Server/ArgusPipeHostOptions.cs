@@ -87,8 +87,10 @@ namespace ArgusTransfer.Server
 
         /// <summary>
         /// Gets or sets the maximum number of simultaneous client connections, including connections whose request is still
-        /// being received. Defaults to 100. When the limit is reached, the host stops creating pipe instances, so further
-        /// clients wait in <c>ConnectAsync</c> (subject to their own timeout) until a connection is closed. Together with
+        /// being received. Defaults to 100. When the limit is reached, the host stops accepting connections until one is
+        /// closed: on Windows further clients wait in <c>ConnectAsync</c>; on Linux and macOS, where named pipes are Unix
+        /// domain sockets, their connection is queued in the socket's listen backlog and is not read until a slot frees
+        /// up. In both cases the client's own timeout applies. Together with
         /// <see cref="MaxRequestHeaderSize"/> and <see cref="MaxRequestBodySize"/>, this bounds the memory used for requests.
         /// </summary>
         public int MaxConcurrentConnections { get; set; } = 100;

@@ -967,15 +967,24 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             var first = await ConnectRawAsync(pipeName);
 
-            // While the first client holds the only connection slot, no pipe instance is offered
-            Assert.That(async () => await ConnectRawAsync(pipeName, timeoutMilliseconds: 500), Throws.TypeOf<TimeoutException>());
+            // While the first client holds the only connection slot, the second client is not served. On Windows it waits
+            // in ConnectAsync (no pipe instance is offered); on Linux and macOS the connection is queued in the socket's
+            // listen backlog and is not accepted until a slot frees up
+            var secondClient = Task.Run(async () =>
+            {
+                await using var second = await ConnectRawAsync(pipeName, timeoutMilliseconds: 10_000);
+                await new ArgusRequestSerializer().WriteAsync(second, new ArgusRequest { Verb = ArgusVerb.GET, Route = "/unknown" });
+                return await new ArgusResponseSerializer().ReadAsync(second, CancellationToken.None);
+            });
+
+            var completedFirst = await Task.WhenAny(secondClient, Task.Delay(500));
+
+            Assert.That(completedFirst, Is.Not.SameAs(secondClient), "the second client must not be served while the first holds the only connection slot");
 
             await first.DisposeAsync();
 
-            // Once the first connection is closed, the next client can connect and is served
-            await using var second = await ConnectRawAsync(pipeName);
-            await new ArgusRequestSerializer().WriteAsync(second, new ArgusRequest { Verb = ArgusVerb.GET, Route = "/unknown" });
-            var response = await new ArgusResponseSerializer().ReadAsync(second, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            // Once the first connection is closed, the second client is served
+            var response = await secondClient.WaitAsync(TimeSpan.FromSeconds(5));
 
             Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.NotFound));
 
