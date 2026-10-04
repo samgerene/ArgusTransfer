@@ -260,5 +260,31 @@ namespace ArgusTransfer.Tests.Serialization
             Assert.That(async () => await this.serializer.WriteAsync(new MemoryStream(), (ArgusResponse)null), Throws.TypeOf<ArgumentNullException>());
             Assert.That(async () => await this.serializer.ReadAsync((Stream)null, CancellationToken.None), Throws.TypeOf<ArgumentNullException>());
         }
+
+        [Test]
+        public async Task Verify_that_ReadAsync_with_maxBodySize_rejects_larger_bodies_on_both_overloads()
+        {
+            var wire = "ARGUS/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\n01234567890123456789";
+
+            await Assert.ThatAsync(
+                () => this.serializer.ReadAsync(new MemoryStream(Encoding.UTF8.GetBytes(wire)), 10, CancellationToken.None),
+                Throws.InstanceOf<ArgusProtocolException>());
+
+            await Assert.ThatAsync(
+                () => this.serializer.ReadAsync(new StreamReader(new MemoryStream(Encoding.UTF8.GetBytes(wire))), 10, CancellationToken.None),
+                Throws.InstanceOf<ArgusProtocolException>());
+        }
+
+        [Test]
+        public async Task Verify_that_ReadAsync_with_maxBodySize_accepts_bodies_within_the_limit()
+        {
+            var wire = "ARGUS/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 10\r\n\r\n0123456789";
+
+            var fromStream = await this.serializer.ReadAsync(new MemoryStream(Encoding.UTF8.GetBytes(wire)), 10, CancellationToken.None);
+            var fromReader = await this.serializer.ReadAsync(new StreamReader(new MemoryStream(Encoding.UTF8.GetBytes(wire))), 10, CancellationToken.None);
+
+            Assert.That(fromStream.Body, Is.EqualTo("0123456789"));
+            Assert.That(fromReader.Body, Is.EqualTo("0123456789"));
+        }
     }
 }
