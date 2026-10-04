@@ -48,6 +48,18 @@ namespace ArgusTransfer.Server
     public class ArgusPipeHostBackgroundService : BackgroundService
     {
         /// <summary>
+        /// The <see cref="ArgusProblemDetails.Detail"/> of the 503 Service Unavailable problem details response returned when
+        /// <see cref="ArgusPipeHostOptions.MaxConcurrentRequests"/> is reached
+        /// </summary>
+        public const string ConcurrencyLimitDetail = "Server concurrency limit reached";
+
+        /// <summary>
+        /// The <see cref="ArgusProblemDetails.Detail"/> of the 503 Service Unavailable problem details response returned when a
+        /// request exceeds <see cref="ArgusPipeHostOptions.RequestTimeout"/>
+        /// </summary>
+        public const string RequestTimeoutDetail = "Request processing timed out";
+
+        /// <summary>
         /// The <see cref="ILogger{ArgusPipeHostBackgroundService}"/> used for logging
         /// </summary>
         private readonly ILogger<ArgusPipeHostBackgroundService> logger;
@@ -279,12 +291,7 @@ namespace ArgusTransfer.Server
                                 "Concurrency limit of {MaxConcurrentRequests} reached. Rejecting request {Verb} {Route} with 503.",
                                 this.options.MaxConcurrentRequests, request.Verb, request.Route);
 
-                            var rejectResponse = new ArgusResponse
-                            {
-                                StatusCode = ArgusStatusCode.ServiceUnavailable,
-                                CorrelationToken = request.CorrelationToken,
-                                Body = "Server concurrency limit reached"
-                            };
+                            var rejectResponse = CreateProblemResponse(ArgusStatusCode.ServiceUnavailable, ConcurrencyLimitDetail, request);
 
                             await this.responseSerializer.WriteAsync(serverStream, rejectResponse, requestToken);
                             return;
@@ -307,11 +314,11 @@ namespace ArgusTransfer.Server
                             }
                             else
                             {
-                                var notAcceptable = new ArgusResponse
-                                {
-                                    StatusCode = ArgusStatusCode.NotAcceptable,
-                                    CorrelationToken = request.CorrelationToken
-                                };
+                                var supported = string.Join(", ", this.bodySerializerRegistry.GetSerializers().Select(s => s.ContentType));
+                                var notAcceptable = CreateProblemResponse(
+                                    ArgusStatusCode.NotAcceptable,
+                                    $"None of the media types in the Accept header '{request.Accept}' can be produced. Supported media types: {supported}.",
+                                    request);
 
                                 await this.responseSerializer.WriteAsync(serverStream, notAcceptable, requestToken);
                                 return;
@@ -337,12 +344,7 @@ namespace ArgusTransfer.Server
                                 "Request {Verb} {Route} timed out after {Timeout}.",
                                 request.Verb, request.Route, this.options.RequestTimeout);
 
-                            var timeoutResponse = new ArgusResponse
-                            {
-                                StatusCode = ArgusStatusCode.ServiceUnavailable,
-                                CorrelationToken = request.CorrelationToken,
-                                Body = "Request processing timed out"
-                            };
+                            var timeoutResponse = CreateProblemResponse(ArgusStatusCode.ServiceUnavailable, RequestTimeoutDetail, request);
 
                             await this.responseSerializer.WriteAsync(serverStream, timeoutResponse, requestToken);
                             return;
@@ -388,11 +390,8 @@ namespace ArgusTransfer.Server
 
                         try
                         {
-                            var badRequest = new ArgusResponse
-                            {
-                                StatusCode = ArgusStatusCode.BadRequest,
-                                Body = ex.Message
-                            };
+                            // The request could not be read, so there is no correlation token or verb to use
+                            var badRequest = CreateProblemResponse(ArgusStatusCode.BadRequest, ex.Message, null);
 
                             await this.responseSerializer.WriteAsync(serverStream, badRequest, requestToken);
                         }
@@ -590,12 +589,7 @@ namespace ArgusTransfer.Server
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                return new ArgusResponse
-                {
-                    StatusCode = ArgusStatusCode.ServiceUnavailable,
-                    CorrelationToken = argusRequest.CorrelationToken,
-                    Body = "Request processing timed out"
-                };
+                return CreateProblemResponse(ArgusStatusCode.ServiceUnavailable, RequestTimeoutDetail, argusRequest);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -685,6 +679,43 @@ namespace ArgusTransfer.Server
             if (request.Verb == ArgusVerb.HEAD)
             {
                 response.Body = null;
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Creates one of the host's built-in error responses (400, 406, 503) as an <see cref="ArgusProblemDetails"/>
+        /// response, so clients handle a single error format (<see cref="ArgusProblemDetails.TryRead"/>). When the request was
+        /// read, its correlation token is used as the problem's instance and the response's correlation token, and a
+        /// <see cref="ArgusVerb.HEAD"/> request gets the response without a body
+        /// </summary>
+        /// <param name="statusCode">
+        /// The <see cref="ArgusStatusCode"/> of the response
+        /// </param>
+        /// <param name="detail">
+        /// The problem's detail
+        /// </param>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> being answered, or <c>null</c> when the request could not be read
+        /// </param>
+        /// <returns>
+        /// The problem details <see cref="ArgusResponse"/>
+        /// </returns>
+        internal static ArgusResponse CreateProblemResponse(ArgusStatusCode statusCode, string detail, ArgusRequest request)
+        {
+            var response = ArgusProblemDetails
+                .Create(statusCode, detail, instance: request?.CorrelationToken.ToString())
+                .ToResponse();
+
+            if (request != null)
+            {
+                response.CorrelationToken = request.CorrelationToken;
+
+                if (request.Verb == ArgusVerb.HEAD)
+                {
+                    response.Body = null;
+                }
             }
 
             return response;
