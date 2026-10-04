@@ -22,6 +22,7 @@ namespace ArgusTransfer.Transport.Tests.Server
 {
     using System;
     using System.Diagnostics;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -839,6 +840,117 @@ namespace ArgusTransfer.Transport.Tests.Server
 
             Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.InternalServerError));
             Assert.That(response.Body, Is.Null);
+        }
+
+        /// <summary>
+        /// Starts a host whose GET /work handler signals that it started and then runs <paramref name="work"/>, sends one
+        /// request in the background and waits until the handler is running
+        /// </summary>
+        private async Task<(ArgusPipeHostBackgroundService Host, CancellationTokenSource Cts, Task Request)> StartHostWithRunningRequestAsync(Func<ArgusContext, Task> work)
+        {
+            var pipeName = $"argus-shutdown-test-{Guid.NewGuid():N}";
+            var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var router = new ArgusRouter();
+            router.MapGet("/work", async context =>
+            {
+                handlerStarted.TrySetResult();
+                await work(context);
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok };
+            });
+
+            var hostService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                router,
+                Options.Create(new ArgusPipeHostOptions { PipeName = pipeName, ShutdownDrainTimeout = TimeSpan.FromMilliseconds(100) }),
+                new PlainTextArgusBodySerializer())
+            {
+                CancellationGracePeriod = TimeSpan.FromMilliseconds(200)
+            };
+
+            var cts = new CancellationTokenSource();
+            await hostService.StartAsync(cts.Token);
+
+            var client = new ArgusClient(pipeName);
+            var request = Task.Run(async () =>
+            {
+                try
+                {
+                    await client.GetAsync("/work", timeout: TimeSpan.FromSeconds(10));
+                }
+                catch (Exception ex) when (ex is System.IO.IOException or TimeoutException)
+                {
+                    // the host may close the connection during shutdown
+                }
+                finally
+                {
+                    client.Dispose();
+                }
+            });
+
+            await handlerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            return (hostService, cts, request);
+        }
+
+        [Test]
+        public async Task Verify_that_request_ignoring_cancellation_finishes_without_fault_after_shutdown()
+        {
+            // The handler ignores RequestAborted and keeps running past the drain timeout and the grace period
+            var (hostService, cts, request) = await this.StartHostWithRunningRequestAsync(_ => Task.Delay(1500));
+            var requestTasks = hostService.GetActiveRequestTasks();
+
+            Assert.That(requestTasks, Has.Count.EqualTo(1));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+
+            // When the handler finally completes, its request task releases the semaphore; that must not fault
+            var requestTask = requestTasks.Single();
+            await Task.WhenAny(requestTask, Task.Delay(TimeSpan.FromSeconds(10)));
+
+            Assert.That(requestTask.IsCompleted, Is.True);
+            Assert.That(requestTask.IsFaulted, Is.False, () => $"request task faulted: {requestTask.Exception?.GetBaseException()}");
+
+            this.mockLogger.Verify(
+                l => l.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((state, _) => state.ToString().Contains("did not finish after cancellation")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Once);
+
+            await request.WaitAsync(TimeSpan.FromSeconds(10));
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_request_honouring_cancellation_lets_shutdown_dispose_resources()
+        {
+            // The handler stops as soon as the drain timeout cancels RequestAborted
+            var (hostService, cts, request) = await this.StartHostWithRunningRequestAsync(context => Task.Delay(Timeout.Infinite, context.RequestAborted));
+            var requestTasks = hostService.GetActiveRequestTasks();
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+
+            var requestTask = requestTasks.Single();
+
+            Assert.That(requestTask.IsCompleted, Is.True, "the cancelled request finishes within the grace period");
+            Assert.That(requestTask.IsFaulted, Is.False);
+
+            this.mockLogger.Verify(
+                l => l.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((state, _) => state.ToString().Contains("did not finish after cancellation")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                Times.Never);
+
+            await request.WaitAsync(TimeSpan.FromSeconds(10));
+            cts.Dispose();
         }
 
         [Test]
