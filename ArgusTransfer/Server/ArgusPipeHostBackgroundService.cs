@@ -268,7 +268,9 @@ namespace ArgusTransfer.Server
                             return;
                         }
 
-                        if (!await this.concurrencySemaphore.WaitAsync(0))
+                        // Non-blocking check: a timeout of 0 completes immediately, and a request that was already read is still
+                        // processed during the shutdown drain, so no cancellation token applies here
+                        if (!await this.concurrencySemaphore.WaitAsync(0, CancellationToken.None))
                         {
                             Interlocked.Increment(ref this.rejectedRequestCount);
 
