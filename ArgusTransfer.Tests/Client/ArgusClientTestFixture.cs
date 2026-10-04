@@ -797,6 +797,24 @@ namespace ArgusTransfer.Tests.Client
         }
 
         [Test]
+        public async Task Verify_that_GetAsync_sends_null_query_parameter_value_as_empty_value()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Route, Is.EqualTo("/items"));
+                Assert.That(r.QueryParameters["filter"], Is.EqualTo(string.Empty));
+            }, ArgusStatusCode.Ok, "ok");
+
+            using var client = new ArgusClient(pipeName);
+
+            var response = await client.GetAsync("/items", new Dictionary<string, string> { ["filter"] = null });
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
         public async Task Verify_that_GetEnsureSuccessAsync_with_query_parameters_sends_query_parameters()
         {
             var pipeName = $"argus-test-{Guid.NewGuid()}";
