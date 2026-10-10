@@ -168,5 +168,21 @@ namespace ArgusTransfer.Tests.Protocol
 
             Assert.That(target["flag"], Is.EqualTo(string.Empty));
         }
+
+        [Test]
+        public void Verify_that_BuildQueryString_writes_null_value_as_empty_value()
+        {
+            var parameters = new Dictionary<string, string> { ["filter"] = null, ["page"] = "2" };
+
+            var result = ArgusQueryStringHelper.BuildQueryString(parameters);
+
+            Assert.That(result, Is.EqualTo("?filter=&page=2"));
+
+            var parsed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            ArgusQueryStringHelper.ParseQueryString(result.Substring(1), parsed);
+
+            Assert.That(parsed["filter"], Is.EqualTo(string.Empty));
+            Assert.That(parsed["page"], Is.EqualTo("2"));
+        }
     }
 }

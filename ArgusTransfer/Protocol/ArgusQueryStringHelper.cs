@@ -38,7 +38,8 @@ namespace ArgusTransfer.Protocol
         /// </param>
         /// <returns>
         /// An empty string when the dictionary is empty, or a query string
-        /// prefixed with '?' (e.g. "?key1=val1&amp;key2=val2") with percent-encoded keys and values
+        /// prefixed with '?' (e.g. "?key1=val1&amp;key2=val2") with percent-encoded keys and values;
+        /// a <c>null</c> value is written as an empty value (<c>key=</c>)
         /// </returns>
         internal static string BuildQueryString(Dictionary<string, string> queryParameters)
         {
@@ -61,7 +62,11 @@ namespace ArgusTransfer.Protocol
 
                 sb.Append(Uri.EscapeDataString(kvp.Key));
                 sb.Append('=');
-                sb.Append(Uri.EscapeDataString(kvp.Value));
+                // A null value is written as an empty value ("key="), the same as string.Empty
+                if (kvp.Value != null)
+                {
+                    sb.Append(Uri.EscapeDataString(kvp.Value));
+                }
 
                 first = false;
             }
