@@ -1492,6 +1492,28 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public async Task Verify_that_request_with_unsupported_protocol_version_over_the_pipe_returns_BadRequest()
+        {
+            var pipeName = $"argus-version-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(new ArgusRouter(), new ArgusPipeHostOptions { PipeName = pipeName });
+
+            using var pipe = new System.IO.Pipes.NamedPipeClientStream(".", pipeName, System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+            await pipe.ConnectAsync(5000);
+
+            await pipe.WriteAsync(System.Text.Encoding.ASCII.GetBytes("GET /items ARGUS/2.0\r\n\r\n"));
+
+            var response = await new ArgusResponseSerializer().ReadAsync(pipe, CancellationToken.None);
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.BadRequest));
+            Assert.That(ArgusProblemDetails.TryRead(response, out var problem), Is.True);
+            Assert.That(problem.Detail, Is.EqualTo("Unsupported protocol version: 'ARGUS/2.0'; expected 'ARGUS/1.0'."));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
         public async Task Verify_that_malformed_request_over_the_pipe_returns_BadRequest()
         {
             var pipeName = $"argus-malformed-test-{Guid.NewGuid():N}";

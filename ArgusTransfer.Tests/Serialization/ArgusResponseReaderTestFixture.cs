@@ -65,6 +65,26 @@ namespace ArgusTransfer.Tests.Serialization
                 Throws.TypeOf<FormatException>());
         }
 
+        [TestCase("HTTP/1.1")]
+        [TestCase("ARGUS/2.0")]
+        [TestCase("ARGUS/1.1")]
+        [TestCase("argus/1.0")]
+        [TestCase("ARGUS/1.0x")]
+        public void Verify_that_Read_throws_FormatException_for_unsupported_protocol_version(string version)
+        {
+            Assert.That(() => this.serializer.Read($"{version} 200 OK\r\n\r\n"),
+                Throws.TypeOf<FormatException>().With.Message.Contains("Unsupported protocol version"));
+        }
+
+        [Test]
+        public void Verify_that_Stream_overload_throws_FormatException_for_unsupported_protocol_version()
+        {
+            using var stream = new System.IO.MemoryStream(System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"));
+
+            Assert.That(async () => await this.serializer.ReadAsync(stream, System.Threading.CancellationToken.None),
+                Throws.TypeOf<FormatException>().With.Message.EqualTo("Unsupported protocol version: 'HTTP/1.1'; expected 'ARGUS/1.0'."));
+        }
+
         [Test]
         public void Verify_that_Read_throws_FormatException_for_non_integer_status_code()
         {

@@ -304,7 +304,9 @@ namespace ArgusTransfer.Serialization
             sb.Append(' ');
             sb.Append(ArgusRouteEncoding.EncodeRoute(request.Route));
             sb.Append(ArgusQueryStringHelper.BuildQueryString(request.QueryParameters));
-            sb.Append(" ARGUS/1.0\r\n");
+            sb.Append(' ');
+            sb.Append(ArgusWireFormat.ProtocolVersion);
+            sb.Append("\r\n");
         }
 
         /// <summary>
@@ -317,7 +319,7 @@ namespace ArgusTransfer.Serialization
         /// A new <see cref="ArgusRequest"/> with the verb, route and query parameters set
         /// </returns>
         /// <exception cref="FormatException">
-        /// Thrown when the request line is missing or malformed, or the verb is unknown
+        /// Thrown when the request line is missing or malformed, the protocol version is not ARGUS/1.0, or the verb is unknown
         /// </exception>
         private static ArgusRequest ParseRequestLine(string requestLine)
         {
@@ -332,6 +334,8 @@ namespace ArgusTransfer.Serialization
             {
                 throw new FormatException($"Invalid request line: {requestLine}");
             }
+
+            ArgusWireFormat.EnsureProtocolVersion(parts[2]);
 
             if (!Enum.TryParse<ArgusVerb>(parts[0], true, out var verb))
             {

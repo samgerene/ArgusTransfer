@@ -467,7 +467,8 @@ namespace ArgusTransfer.Serialization
         /// </param>
         private static void AppendStatusLine(StringBuilder sb, ArgusResponse response)
         {
-            sb.Append("ARGUS/1.0 ");
+            sb.Append(ArgusWireFormat.ProtocolVersion);
+            sb.Append(' ');
             sb.Append(((int)response.StatusCode).ToString(CultureInfo.InvariantCulture));
             sb.Append(' ');
             sb.Append(response.StatusCode.ToReasonPhrase());
@@ -507,7 +508,7 @@ namespace ArgusTransfer.Serialization
         /// A new <see cref="ArgusResponse"/> with the status code set
         /// </returns>
         /// <exception cref="FormatException">
-        /// Thrown when the status line is missing or malformed, or the status code is unknown
+        /// Thrown when the status line is missing or malformed, the protocol version is not ARGUS/1.0, or the status code is unknown
         /// </exception>
         private static ArgusResponse ParseStatusLine(string statusLine)
         {
@@ -522,6 +523,8 @@ namespace ArgusTransfer.Serialization
             {
                 throw new FormatException($"Invalid status line: {statusLine}");
             }
+
+            ArgusWireFormat.EnsureProtocolVersion(statusLine.Substring(0, firstSpace));
 
             var afterVersion = statusLine.Substring(firstSpace + 1);
             var secondSpace = afterVersion.IndexOf(' ');
