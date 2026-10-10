@@ -48,10 +48,34 @@ namespace ArgusTransfer.Serialization
         public const int DefaultMaxHeaderSize = 32 * 1024;
 
         /// <summary>
+        /// The protocol version token written to and required in every request line and status line
+        /// </summary>
+        public const string ProtocolVersion = "ARGUS/1.0";
+
+        /// <summary>
         /// The error message for a compressed body on a text-based read or write path
         /// </summary>
         private const string TextFormContentEncodingMessage =
             "A body with a Content-Encoding is binary and can only be written and read with the Stream overloads.";
+
+        /// <summary>
+        /// Verifies that the version token of a received request line or status line is <see cref="ProtocolVersion"/>.
+        /// The comparison is exact (case-sensitive): there is one protocol version, so anything else comes from a
+        /// non-Argus peer or an incompatible version and is rejected instead of being processed as ARGUS/1.0.
+        /// </summary>
+        /// <param name="version">
+        /// The version token of the received line
+        /// </param>
+        /// <exception cref="FormatException">
+        /// Thrown when <paramref name="version"/> is not <see cref="ProtocolVersion"/>
+        /// </exception>
+        public static void EnsureProtocolVersion(string version)
+        {
+            if (!string.Equals(version, ProtocolVersion, StringComparison.Ordinal))
+            {
+                throw new FormatException($"Unsupported protocol version: '{version}'; expected '{ProtocolVersion}'.");
+            }
+        }
 
         /// <summary>
         /// Appends the correlation token, timestamp and custom headers of a message
