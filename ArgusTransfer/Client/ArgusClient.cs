@@ -187,16 +187,22 @@ namespace ArgusTransfer.Client
         /// </returns>
         /// <remarks>
         /// When <see cref="RetryPolicy"/> is set, attempts that fail with a transient error are retried
-        /// as described on <see cref="ArgusRetryPolicy"/>, within the same timeout
+        /// as described on <see cref="ArgusRetryPolicy"/>, within the same timeout. The <paramref name="request"/> is not
+        /// modified: the headers added for <see cref="Compression"/> are only sent, so the request can be reused.
         /// </remarks>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="request"/> is <c>null</c>
+        /// </exception>
         /// <exception cref="TimeoutException">
         /// Thrown when the request, including any retries, does not complete within the timeout
         /// </exception>
         public async Task<ArgusResponse> SendAsync(ArgusRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(this.disposed, this);
+            ArgumentNullException.ThrowIfNull(request);
 
-            ArgusCompression.ApplyToRequest(request, this.compression);
+            // The compression headers go on a per-call copy, so the caller's request is not modified
+            var requestToSend = ArgusCompression.CreateRequestToSend(request, this.compression);
 
             var effectiveTimeout = timeout ?? this.DefaultTimeout;
             using var timeoutCts = new CancellationTokenSource(effectiveTimeout);
@@ -222,7 +228,7 @@ namespace ArgusTransfer.Client
 
                         requestSent = true;
 
-                        return await this.ExchangeAsync(pipeClient, request, linkedCts.Token);
+                        return await this.ExchangeAsync(pipeClient, requestToSend, linkedCts.Token);
                     }
                     catch (Exception ex) when (CanRetry(retryPolicy, ex, request, requestSent, bodyStreamStart, retryAttempt, linkedCts.Token))
                     {

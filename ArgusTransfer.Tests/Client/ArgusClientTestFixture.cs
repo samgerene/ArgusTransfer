@@ -1251,6 +1251,40 @@ namespace ArgusTransfer.Tests.Client
         }
 
         [Test]
+        public void Verify_that_SendAsync_throws_ArgumentNullException_for_a_null_request()
+        {
+            using var client = new ArgusClient("argus-test");
+
+            Assert.That(async () => await client.SendAsync(null), Throws.TypeOf<ArgumentNullException>());
+            Assert.That(async () => await client.SendEnsureSuccessAsync(null), Throws.TypeOf<ArgumentNullException>());
+        }
+
+        [Test]
+        public async Task Verify_that_SendAsync_with_compression_does_not_modify_the_request()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var serverTask = this.RunFakeServerAsync(pipeName, r =>
+            {
+                Assert.That(r.Headers[ArgusHeaderNames.AcceptEncoding], Is.EqualTo("gzip"));
+                Assert.That(r.Headers["X-Custom"], Is.EqualTo("value"));
+            }, ArgusStatusCode.Ok, "ok");
+
+            using var client = new ArgusClient(pipeName);
+            client.Compression.Enabled = true;
+
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/items", Body = "tiny" };
+            request.Headers["X-Custom"] = "value";
+
+            var response = await client.SendAsync(request);
+
+            await serverTask;
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(request.Headers, Has.Count.EqualTo(1));
+            Assert.That(request.Headers.ContainsKey(ArgusHeaderNames.AcceptEncoding), Is.False);
+            Assert.That(request.Headers.ContainsKey(ArgusHeaderNames.ContentEncoding), Is.False);
+        }
+
+        [Test]
         public void Verify_that_Compression_is_disabled_by_default_and_null_restores_defaults()
         {
             using var client = new ArgusClient("argus-test");

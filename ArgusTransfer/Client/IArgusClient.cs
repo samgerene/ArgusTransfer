@@ -52,6 +52,9 @@ namespace ArgusTransfer.Client
         /// <returns>
         /// The <see cref="ArgusResponse"/> received from the server
         /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="request"/> is <c>null</c>
+        /// </exception>
         Task<ArgusResponse> SendAsync(ArgusRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
 
         /// <summary>

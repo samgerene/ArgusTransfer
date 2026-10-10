@@ -142,6 +142,56 @@ namespace ArgusTransfer.Tests.Serialization
         }
 
         [Test]
+        public void Verify_that_CreateRequestToSend_returns_the_request_itself_when_disabled()
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/", Body = new string('x', 5000) };
+
+            var result = ArgusCompression.CreateRequestToSend(request, new ArgusCompressionOptions());
+
+            Assert.That(result, Is.SameAs(request));
+            Assert.That(request.Headers, Is.Empty);
+        }
+
+        [Test]
+        public void Verify_that_CreateRequestToSend_adds_the_headers_to_a_copy_and_leaves_the_request_unchanged()
+        {
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/items", Body = new string('x', 5000) };
+            request.Headers["X-Custom"] = "value";
+            request.QueryParameters["page"] = "2";
+
+            var result = ArgusCompression.CreateRequestToSend(request, EnabledOptions());
+
+            Assert.That(result, Is.Not.SameAs(request));
+            Assert.That(result.Headers[ArgusHeaderNames.AcceptEncoding], Is.EqualTo("gzip"));
+            Assert.That(result.Headers[ArgusHeaderNames.ContentEncoding], Is.EqualTo("gzip"));
+            Assert.That(result.Headers["X-Custom"], Is.EqualTo("value"));
+            Assert.That(result.Verb, Is.EqualTo(ArgusVerb.POST));
+            Assert.That(result.Route, Is.EqualTo("/items"));
+            Assert.That(result.QueryParameters["page"], Is.EqualTo("2"));
+            Assert.That(result.CorrelationToken, Is.EqualTo(request.CorrelationToken));
+            Assert.That(result.Timestamp, Is.EqualTo(request.Timestamp));
+            Assert.That(result.Body, Is.EqualTo(request.Body));
+
+            Assert.That(request.Headers, Has.Count.EqualTo(1));
+            Assert.That(request.Headers.ContainsKey(ArgusHeaderNames.AcceptEncoding), Is.False);
+            Assert.That(request.Headers.ContainsKey(ArgusHeaderNames.ContentEncoding), Is.False);
+        }
+
+        [Test]
+        public void Verify_that_CreateRequestToSend_shares_the_body_stream_with_the_copy()
+        {
+            var bodyStream = new MemoryStream(new byte[5000]);
+            var request = new ArgusRequest { Verb = ArgusVerb.POST, Route = "/", BodyStream = bodyStream };
+
+            var result = ArgusCompression.CreateRequestToSend(request, EnabledOptions());
+
+            Assert.That(result.BodyStream, Is.SameAs(bodyStream));
+            Assert.That(result.IsStreamed, Is.True);
+            Assert.That(result.Headers[ArgusHeaderNames.ContentEncoding], Is.EqualTo("gzip"));
+            Assert.That(request.Headers, Is.Empty);
+        }
+
+        [Test]
         public void Verify_that_ApplyToResponse_compresses_large_accepted_response()
         {
             var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/" };
