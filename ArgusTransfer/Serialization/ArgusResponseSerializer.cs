@@ -357,7 +357,7 @@ namespace ArgusTransfer.Serialization
         /// Thrown when the stream ends before a status line is received, for example because the connection was closed
         /// </exception>
         /// <exception cref="FormatException">
-        /// Thrown when the status line is empty or malformed
+        /// Thrown when the status line is empty or malformed, or the protocol version is not ARGUS/1.0
         /// </exception>
         public Task<ArgusResponse> ReadAsync(StreamReader reader, CancellationToken cancellationToken)
         {
@@ -383,7 +383,7 @@ namespace ArgusTransfer.Serialization
         /// Thrown when the stream ends before a status line is received, for example because the connection was closed
         /// </exception>
         /// <exception cref="FormatException">
-        /// Thrown when the status line is empty or malformed
+        /// Thrown when the status line is empty or malformed, or the protocol version is not ARGUS/1.0
         /// </exception>
         /// <exception cref="InvalidOperationException">
         /// Thrown when the body exceeds <paramref name="maxBodySize"/>
@@ -413,7 +413,7 @@ namespace ArgusTransfer.Serialization
         /// Thrown when the stream ends before a status line or the complete body was received, for example because the connection was closed
         /// </exception>
         /// <exception cref="FormatException">
-        /// Thrown when the status line is empty or malformed, or a chunk is malformed
+        /// Thrown when the status line is empty or malformed, the protocol version is not ARGUS/1.0, or a chunk is malformed
         /// </exception>
         public Task<ArgusResponse> ReadAsync(Stream stream, CancellationToken cancellationToken)
         {
@@ -446,7 +446,7 @@ namespace ArgusTransfer.Serialization
         /// Thrown when the stream ends before a status line or the complete body was received, for example because the connection was closed
         /// </exception>
         /// <exception cref="FormatException">
-        /// Thrown when the status line is empty or malformed, or a chunk is malformed
+        /// Thrown when the status line is empty or malformed, the protocol version is not ARGUS/1.0, or a chunk is malformed
         /// </exception>
         /// <exception cref="InvalidOperationException">
         /// Thrown when the body or its decompressed size exceeds <paramref name="maxBodySize"/>

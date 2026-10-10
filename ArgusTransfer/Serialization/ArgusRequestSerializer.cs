@@ -276,7 +276,7 @@ namespace ArgusTransfer.Serialization
         /// Thrown when <paramref name="stream"/> is <c>null</c>
         /// </exception>
         /// <exception cref="FormatException">
-        /// Thrown when the request line is missing or malformed, or a chunk is malformed
+        /// Thrown when the request line is missing or malformed, the protocol version is not ARGUS/1.0, or a chunk is malformed
         /// </exception>
         /// <exception cref="InvalidOperationException">
         /// Thrown when the body exceeds <paramref name="maxBodySize"/>
