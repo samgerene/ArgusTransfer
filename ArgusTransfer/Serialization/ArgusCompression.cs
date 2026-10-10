@@ -87,6 +87,62 @@ namespace ArgusTransfer.Serialization
         }
 
         /// <summary>
+        /// Creates the request that is written to the pipe for one call. The caller's request is never modified: when
+        /// compression is enabled the headers of <see cref="ApplyToRequest"/> are applied to a copy, which shares the body
+        /// (and a streamed body's <see cref="Stream"/>) with the original.
+        /// </summary>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> passed in by the caller
+        /// </param>
+        /// <param name="options">
+        /// The <see cref="ArgusCompressionOptions"/> to apply
+        /// </param>
+        /// <returns>
+        /// <paramref name="request"/> itself when compression is disabled; otherwise a copy with the compression headers
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when <see cref="ArgusCompressionOptions.PreferredEncoding"/> is not one of the registered encodings
+        /// </exception>
+        public static ArgusRequest CreateRequestToSend(ArgusRequest request, ArgusCompressionOptions options)
+        {
+            if (!options.Enabled)
+            {
+                return request;
+            }
+
+            var copy = new ArgusRequest
+            {
+                Verb = request.Verb,
+                Route = request.Route,
+                CorrelationToken = request.CorrelationToken,
+                Timestamp = request.Timestamp
+            };
+
+            if (request.IsStreamed)
+            {
+                copy.BodyStream = request.BodyStream;
+            }
+            else
+            {
+                copy.Body = request.Body;
+            }
+
+            foreach (var header in request.Headers)
+            {
+                copy.Headers[header.Key] = header.Value;
+            }
+
+            foreach (var queryParameter in request.QueryParameters)
+            {
+                copy.QueryParameters[queryParameter.Key] = queryParameter.Value;
+            }
+
+            ApplyToRequest(copy, options);
+
+            return copy;
+        }
+
+        /// <summary>
         /// Prepares a response for sending: when compression is enabled, the response has no <c>Content-Encoding</c> yet,
         /// its body is at least <see cref="ArgusCompressionOptions.MinimumBodySize"/> bytes and the request accepts one of the
         /// supported encodings, adds a <c>Content-Encoding</c> header naming that encoding
