@@ -51,7 +51,8 @@ namespace ArgusTransfer.Middleware
 
         /// <summary>
         /// Logs the incoming request, invokes the next middleware in the pipeline,
-        /// and logs the response with elapsed time
+        /// and logs the response with elapsed time. When the rest of the pipeline throws (including cancellation),
+        /// a warning with the elapsed time is logged instead and the exception propagates unchanged.
         /// </summary>
         /// <param name="context">
         /// The <see cref="ArgusContext"/> for the current request
@@ -72,17 +73,38 @@ namespace ArgusTransfer.Middleware
                 context.Request.Route,
                 context.CorrelationToken);
 
-            await next(context);
+            var completed = false;
 
-            stopwatch.Stop();
+            try
+            {
+                await next(context);
+                completed = true;
+            }
+            finally
+            {
+                stopwatch.Stop();
 
-            this.logger.LogInformation(
-                "ARGUS {Verb} {Route} [{CorrelationToken}] -> {StatusCode} in {ElapsedMs}ms",
-                context.Request.Verb,
-                context.Request.Route,
-                context.CorrelationToken,
-                context.Response?.StatusCode,
-                stopwatch.ElapsedMilliseconds);
+                if (completed)
+                {
+                    this.logger.LogInformation(
+                        "ARGUS {Verb} {Route} [{CorrelationToken}] -> {StatusCode} in {ElapsedMs}ms",
+                        context.Request.Verb,
+                        context.Request.Route,
+                        context.CorrelationToken,
+                        context.Response?.StatusCode,
+                        stopwatch.ElapsedMilliseconds);
+                }
+                else
+                {
+                    // The exception itself is not logged here: it propagates to the exception handler or the host, which log it
+                    this.logger.LogWarning(
+                        "ARGUS {Verb} {Route} [{CorrelationToken}] -> failed in {ElapsedMs}ms",
+                        context.Request.Verb,
+                        context.Request.Route,
+                        context.CorrelationToken,
+                        stopwatch.ElapsedMilliseconds);
+                }
+            }
         }
     }
 }

@@ -142,6 +142,67 @@ namespace ArgusTransfer.Tests.Middleware
         }
 
         [Test]
+        public void Verify_that_middleware_logs_a_failure_entry_and_rethrows_when_next_throws()
+        {
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.POST,
+                Route = "/items"
+            };
+
+            var context = new ArgusContext(request, CancellationToken.None);
+            var expectedToken = context.CorrelationToken.ToString();
+            var exception = new System.InvalidOperationException("boom");
+
+            Assert.That(
+                async () => await this.middleware.InvokeAsync(context, _ => throw exception),
+                Throws.Exception.SameAs(exception));
+
+            this.mockLogger.Verify(
+                x => x.Log(
+                    LogLevel.Information,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("ARGUS POST /items")),
+                    null,
+                    It.IsAny<System.Func<It.IsAnyType, System.Exception, string>>()),
+                Times.Once);
+
+            this.mockLogger.Verify(
+                x => x.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((o, t) => o.ToString().Contains($"ARGUS POST /items [{expectedToken}] -> failed in ") && o.ToString().EndsWith("ms")),
+                    null,
+                    It.IsAny<System.Func<It.IsAnyType, System.Exception, string>>()),
+                Times.Once);
+        }
+
+        [Test]
+        public void Verify_that_middleware_logs_a_failure_entry_when_next_is_cancelled()
+        {
+            var request = new ArgusRequest
+            {
+                Verb = ArgusVerb.GET,
+                Route = "/slow"
+            };
+
+            var context = new ArgusContext(request, CancellationToken.None);
+
+            Assert.That(
+                async () => await this.middleware.InvokeAsync(context, _ => Task.FromCanceled(new CancellationToken(true))),
+                Throws.InstanceOf<System.OperationCanceledException>());
+
+            this.mockLogger.Verify(
+                x => x.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("ARGUS GET /slow") && o.ToString().Contains("-> failed in ")),
+                    null,
+                    It.IsAny<System.Func<It.IsAnyType, System.Exception, string>>()),
+                Times.Once);
+        }
+
+        [Test]
         public async Task Verify_that_middleware_integrates_with_router_pipeline()
         {
             var router = new ArgusRouter();
