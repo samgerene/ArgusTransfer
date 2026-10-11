@@ -14,7 +14,7 @@ assignees: []
 ### Prerequisites
 
 - [ ] I have written a descriptive issue title
-- [ ] I have verified that I am running the latest version of the Argus Health
+- [ ] I have verified that I am running the latest version of ArgusTransfer
 - [ ] I have searched [open](https://github.com/samgerene/ArgusTransfer/issues) and [closed](https://github.com/samgerene/ArgusTransfer/issues?q=is%3Aissue+is%3Aclosed) issues to ensure it has not already been reported
 
 ### Description
