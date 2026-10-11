@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-11
+
 ### Added
 
 - `ArgusProblemDetails`: a structured error response format in the style of RFC 7807 Problem Details ([#29](https://github.com/samgerene/ArgusTransfer/issues/29)).
@@ -22,14 +24,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - **Behavior change:** `ArgusPipeHostOptions` validates its values when they are set. A host configured with a zero or negative limit, a request timeout shorter than one millisecond, a negative `ShutdownDrainTimeout`, a timeout longer than about 49.7 days or an empty `PipeName` now fails at startup with an exception that names the option, instead of failing later. A negative `MaxRequestBodySize` is rejected; use `0` for no limit. Use `Timeout.InfiniteTimeSpan` for no timeout ([#67](https://github.com/samgerene/ArgusTransfer/issues/67)).
-- The host answers only request-format violations with 400, through `ArgusProtocolException`; other failures are server faults ([#63](https://github.com/samgerene/ArgusTransfer/issues/63)).
-- Routes are percent-encoded on the wire, and header names and values are validated ([#69](https://github.com/samgerene/ArgusTransfer/issues/69)).
-- Route templates are validated at registration, so a mistyped template fails at startup ([#73](https://github.com/samgerene/ArgusTransfer/issues/73)).
+- **Behavior change:** The host answers only request-format violations with 400, through `ArgusProtocolException`; other failures are server faults ([#63](https://github.com/samgerene/ArgusTransfer/issues/63)).
+- **Behavior change:** Routes are percent-encoded on the wire and decoded by the host, so a client and a host of different versions disagree on a route that contains `%`. Header names and values are validated ([#69](https://github.com/samgerene/ArgusTransfer/issues/69)).
+- **Behavior change:** Route templates are validated at registration, so a mistyped template fails at startup instead of never matching ([#73](https://github.com/samgerene/ArgusTransfer/issues/73)).
 - Route templates are parsed and middleware pipelines composed once, instead of for every request ([#74](https://github.com/samgerene/ArgusTransfer/issues/74)).
-- The response serializer is negotiated from the `Accept` header ([#75](https://github.com/samgerene/ArgusTransfer/issues/75)).
-- The host's built-in 400, 406 and 503 responses are problem details ([#77](https://github.com/samgerene/ArgusTransfer/issues/77)).
+- **Behavior change:** The response serializer is negotiated from the `Accept` header, and a new `ArgusRequest` no longer sets `Accept: text/plain`; without an `Accept` header the host uses its default serializer ([#75](https://github.com/samgerene/ArgusTransfer/issues/75)).
+- **Behavior change:** The host's built-in 400, 406 and 503 responses are problem details (`application/problem+json`) instead of plain text ([#77](https://github.com/samgerene/ArgusTransfer/issues/77)).
 - `ArgusClient.SendAsync` leaves the caller's request unchanged and validates it ([#79](https://github.com/samgerene/ArgusTransfer/issues/79)).
-- The protocol version in request and status lines is validated ([#81](https://github.com/samgerene/ArgusTransfer/issues/81)).
+- **Behavior change:** The protocol version in request and status lines is validated; anything other than `ARGUS/1.0` is rejected ([#81](https://github.com/samgerene/ArgusTransfer/issues/81)).
 - Documented why `IArgusClient` is `IDisposable` and what `ArgusClient.Dispose` does ([#82](https://github.com/samgerene/ArgusTransfer/issues/82)).
 - The README is restructured into a landing page with a verified quick start ([#61](https://github.com/samgerene/ArgusTransfer/issues/61)).
 - The sample project demonstrates the current feature set: JSON with a `Content-Type`, problem details for invalid input (a malformed body returns 400 instead of 500), the exception handler, authentication, a retry policy and compression. The tests run it end to end ([#57](https://github.com/samgerene/ArgusTransfer/issues/57)).
@@ -130,7 +132,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Initial version.
 
-[Unreleased]: https://github.com/samgerene/ArgusTransfer/compare/1.2.1...development
+[Unreleased]: https://github.com/samgerene/ArgusTransfer/compare/1.3.0...development
+[1.3.0]: https://github.com/samgerene/ArgusTransfer/compare/1.2.1...1.3.0
 [1.2.1]: https://github.com/samgerene/ArgusTransfer/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/samgerene/ArgusTransfer/compare/1.1.0...1.2.0
 [1.1.0]: https://github.com/samgerene/ArgusTransfer/compare/1.0.2...1.1.0
