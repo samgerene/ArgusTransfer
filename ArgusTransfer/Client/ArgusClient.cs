@@ -38,6 +38,11 @@ namespace ArgusTransfer.Client
     /// A low-level client that sends an <see cref="ArgusRequest"/> and receives an <see cref="ArgusResponse"/>
     /// over a named pipe using the ARGUS/1.0 wire protocol
     /// </summary>
+    /// <remarks>
+    /// The client holds no resources between requests: each request creates and disposes its own pipe connection.
+    /// <see cref="Dispose()"/> therefore releases nothing; it exists because <see cref="IArgusClient"/> reserves
+    /// <see cref="IDisposable"/> for implementations that do hold resources, such as pooled connections.
+    /// </remarks>
     public class ArgusClient : IArgusClient
     {
         /// <summary>
@@ -192,6 +197,9 @@ namespace ArgusTransfer.Client
         /// </remarks>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="request"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="ObjectDisposedException">
+        /// Thrown when the client has been disposed
         /// </exception>
         /// <exception cref="TimeoutException">
         /// Thrown when the request, including any retries, does not complete within the timeout
@@ -892,6 +900,11 @@ namespace ArgusTransfer.Client
         /// <summary>
         /// Disposes the <see cref="ArgusClient"/>
         /// </summary>
+        /// <remarks>
+        /// Marks the client as disposed, after which <see cref="SendAsync"/> and the methods built on it throw
+        /// <see cref="ObjectDisposedException"/>. No resources are released, because the client holds none between
+        /// requests; a request that is in progress is not interrupted. Calling it more than once has no effect.
+        /// </remarks>
         public void Dispose()
         {
             this.Dispose(true);
@@ -904,6 +917,10 @@ namespace ArgusTransfer.Client
         /// <param name="disposing">
         /// <c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources
         /// </param>
+        /// <remarks>
+        /// The <see cref="ArgusClient"/> itself has nothing to release and only records that it is disposed. A derived
+        /// class that holds resources overrides this method, releases them and calls the base implementation.
+        /// </remarks>
         protected virtual void Dispose(bool disposing)
         {
             if (!this.disposed)
