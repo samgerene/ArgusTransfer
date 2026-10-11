@@ -140,7 +140,7 @@ Authentication: `ArgusAuthenticationMiddleware` calls the singleton `IArgusAuthe
 - **LangVersion**: `14.0`
 - **Nullable**: `disable` in both `ArgusTransfer` and `ArgusTransfer.Tests`
 - **XML doc comments**: required on all public types and members. **Never use `/// <inheritdoc />`** — always write the full `<summary>`, `<param>`, `<returns>`, and `<exception>` blocks on the implementation, even when they duplicate the interface.
-- **License header**: every `.cs` file starts with the Apache-2.0 copyright block.
+- **License header**: every `.cs` file starts with the Apache-2.0 copyright block, with `<copyright file="{its own file name}">` and `Copyright (c) 2025-2026 Sam Gerené`. `LicenseHeaderTestFixture` checks this, and that the header starts on the first line, for every source file in the three project directories (a new project must be added to its `ProjectDirectories`); the ReSharper template is in `ArgusTransfer.sln.DotSettings`.
 - **Logging in catch clauses**: always pass the caught exception to the logger (`logger.LogWarning(ex, "...")`), never log only a message (Sonar S6667).
 - **No assignments inside conditions**: read the next value before the loop and at the end of its body instead of `while ((x = Read()) != null)` (Sonar S1121).
 - **Don't update a `for` loop's counter in its body**: use a `while` loop with an explicit position when the step varies (Sonar S127).
