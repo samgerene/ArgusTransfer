@@ -1,0 +1,142 @@
+# EditorConfig for ArgusTransfer - states the conventions of CLAUDE.md and .github/CONTRIBUTING.md
+# so that the editor shows them and 'dotnet format --verify-no-changes' and the build enforce them.
+# https://editorconfig.org
+
+root = true
+
+##########################################
+# All files
+##########################################
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{cs,csproj,props,sln}]
+# pinned to CRLF on every platform by .gitattributes
+end_of_line = crlf
+
+[*.{yml,yaml,json}]
+indent_size = 2
+
+[*.md]
+# two trailing spaces are a line break in Markdown
+trim_trailing_whitespace = false
+
+##########################################
+# C# files
+##########################################
+
+[*.cs]
+indent_size = 4
+tab_width = 4
+
+# --- file header (CLAUDE.md: License header); IDE0073 also checks the file name in the header ---
+file_header_template = ------------------------------------------------------------------------------------------------\n<copyright file="{fileName}">\n\n  Copyright (c) 2025-2026 Sam Gerené\n  SPDX-License-Identifier: Apache-2.0\n\n</copyright>\n------------------------------------------------------------------------------------------------
+dotnet_diagnostic.IDE0073.severity = warning
+
+# --- layout: Allman braces ---
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+dotnet_diagnostic.IDE0055.severity = warning
+
+# --- using directives: inside the namespace, System first, a blank line between groups ---
+csharp_using_directive_placement = inside_namespace:warning
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = true
+dotnet_diagnostic.IDE0065.severity = warning
+
+# --- block-scoped namespaces ---
+csharp_style_namespace_declarations = block_scoped:warning
+dotnet_diagnostic.IDE0160.severity = warning
+
+# --- 'this.' for instance members ---
+dotnet_style_qualification_for_field = true:warning
+dotnet_style_qualification_for_property = true:warning
+dotnet_style_qualification_for_method = true:warning
+dotnet_style_qualification_for_event = true:warning
+dotnet_diagnostic.IDE0009.severity = warning
+
+# --- language keywords instead of framework type names (int, string, not Int32, String) ---
+dotnet_style_predefined_type_for_locals_parameters_members = true:warning
+dotnet_style_predefined_type_for_member_access = true:warning
+dotnet_diagnostic.IDE0049.severity = warning
+
+# --- always braces, also for a single line ---
+csharp_prefer_braces = true:warning
+dotnet_diagnostic.IDE0011.severity = warning
+
+# --- 'var' unless the inferred type is not obvious ---
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+# --- naming; Roslyn applies the first matching rule, so the specific ones come first ---
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+dotnet_naming_style.camel_case_style.capitalization = camel_case
+dotnet_naming_style.interface_style.capitalization = pascal_case
+dotnet_naming_style.interface_style.required_prefix = I
+dotnet_naming_style.type_parameter_style.capitalization = pascal_case
+dotnet_naming_style.type_parameter_style.required_prefix = T
+
+dotnet_naming_symbols.private_const_fields_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_const_fields_symbols.applicable_accessibilities = private, private_protected
+dotnet_naming_symbols.private_const_fields_symbols.required_modifiers = const
+dotnet_naming_symbols.private_static_readonly_fields_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly_fields_symbols.applicable_accessibilities = private, private_protected
+dotnet_naming_symbols.private_static_readonly_fields_symbols.required_modifiers = static, readonly
+dotnet_naming_symbols.private_fields_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_fields_symbols.applicable_accessibilities = private, private_protected
+dotnet_naming_symbols.non_private_fields_symbols.applicable_kinds = field
+dotnet_naming_symbols.non_private_fields_symbols.applicable_accessibilities = public, internal, protected, protected_internal
+dotnet_naming_symbols.interfaces_symbols.applicable_kinds = interface
+dotnet_naming_symbols.interfaces_symbols.applicable_accessibilities = *
+dotnet_naming_symbols.type_parameters_symbols.applicable_kinds = type_parameter
+dotnet_naming_symbols.type_parameters_symbols.applicable_accessibilities = *
+dotnet_naming_symbols.methods_symbols.applicable_kinds = method, local_function
+dotnet_naming_symbols.methods_symbols.applicable_accessibilities = *
+dotnet_naming_symbols.types_and_members_symbols.applicable_kinds = namespace, class, struct, enum, delegate, property, event
+dotnet_naming_symbols.types_and_members_symbols.applicable_accessibilities = *
+dotnet_naming_symbols.parameters_and_locals_symbols.applicable_kinds = parameter, local
+dotnet_naming_symbols.parameters_and_locals_symbols.applicable_accessibilities = *
+
+dotnet_naming_rule.private_const_fields_are_pascal_case.symbols = private_const_fields_symbols
+dotnet_naming_rule.private_const_fields_are_pascal_case.style = pascal_case_style
+dotnet_naming_rule.private_const_fields_are_pascal_case.severity = warning
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.symbols = private_static_readonly_fields_symbols
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.style = pascal_case_style
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.severity = warning
+dotnet_naming_rule.private_fields_are_camel_case.symbols = private_fields_symbols
+dotnet_naming_rule.private_fields_are_camel_case.style = camel_case_style
+dotnet_naming_rule.private_fields_are_camel_case.severity = warning
+dotnet_naming_rule.non_private_fields_are_pascal_case.symbols = non_private_fields_symbols
+dotnet_naming_rule.non_private_fields_are_pascal_case.style = pascal_case_style
+dotnet_naming_rule.non_private_fields_are_pascal_case.severity = warning
+dotnet_naming_rule.interfaces_are_prefixed.symbols = interfaces_symbols
+dotnet_naming_rule.interfaces_are_prefixed.style = interface_style
+dotnet_naming_rule.interfaces_are_prefixed.severity = warning
+dotnet_naming_rule.type_parameters_are_prefixed.symbols = type_parameters_symbols
+dotnet_naming_rule.type_parameters_are_prefixed.style = type_parameter_style
+dotnet_naming_rule.type_parameters_are_prefixed.severity = warning
+dotnet_naming_rule.methods_are_pascal_case.symbols = methods_symbols
+dotnet_naming_rule.methods_are_pascal_case.style = pascal_case_style
+dotnet_naming_rule.methods_are_pascal_case.severity = warning
+dotnet_naming_rule.types_and_members_are_pascal_case.symbols = types_and_members_symbols
+dotnet_naming_rule.types_and_members_are_pascal_case.style = pascal_case_style
+dotnet_naming_rule.types_and_members_are_pascal_case.severity = warning
+dotnet_naming_rule.parameters_and_locals_are_camel_case.symbols = parameters_and_locals_symbols
+dotnet_naming_rule.parameters_and_locals_are_camel_case.style = camel_case_style
+dotnet_naming_rule.parameters_and_locals_are_camel_case.severity = warning
+dotnet_diagnostic.IDE1006.severity = warning
+
+##########################################
+# Tests - test methods are named Verify_that_{scenario_in_snake_case} (CLAUDE.md: Testing Conventions)
+##########################################
+
+[ArgusTransfer.Tests/**.cs]
+dotnet_naming_rule.methods_are_pascal_case.severity = none

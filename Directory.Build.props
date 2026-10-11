@@ -1,0 +1,10 @@
+<Project>
+    <!--
+      Solution-wide build properties.
+      EnforceCodeStyleInBuild makes the build report the code-style rules (IDExxxx) that the
+      .editorconfig sets to warning, so 'dotnet build -warnaserror' fails on a violation.
+    -->
+    <PropertyGroup>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    </PropertyGroup>
+</Project>

@@ -1,22 +1,11 @@
-// -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusPipeHostBackgroundService.cs">
+// ------------------------------------------------------------------------------------------------
+// <copyright file="ArgusPipeHostBackgroundService.cs">
 //
-//     Copyright (c) 2025-2026 Sam Gerené
+//   Copyright (c) 2025-2026 Sam Gerené
+//   SPDX-License-Identifier: Apache-2.0
 //
-//     Licensed under the Apache License, Version 2.0 (the "License");
-//     you may not use this file except in compliance with the License.
-//     You may obtain a copy of the License at
-//
-//         http://www.apache.org/licenses/LICENSE-2.0
-//
-//     Unless required by applicable law or agreed to in writing, software
-//     distributed under the License is distributed on an "AS IS" BASIS,
-//     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//     See the License for the specific language governing permissions and
-//     limitations under the License.
-//
-//   </copyright>
-//   ------------------------------------------------------------------------------------------------
+// </copyright>
+// ------------------------------------------------------------------------------------------------
 
 namespace ArgusTransfer.Server
 {
@@ -386,7 +375,7 @@ namespace ArgusTransfer.Server
                     {
                         // Only violations by the request itself (limits, unsupported or corrupt Content-Encoding, a malformed
                         // request) are answered with 400; their messages describe the client's own input
-                        logger.LogWarning(ex, "Request rejected: {Message}", ex.Message);
+                        this.logger.LogWarning(ex, "Request rejected: {Message}", ex.Message);
 
                         try
                         {
@@ -402,7 +391,7 @@ namespace ArgusTransfer.Server
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Pipe request handling failed.");
+                        this.logger.LogError(ex, "Pipe request handling failed.");
                     }
                     finally
                     {
