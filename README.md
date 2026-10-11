@@ -26,7 +26,7 @@ Use it when an HTTP server is too heavy, not allowed, or would open a network po
 - **Content negotiation** -- pluggable body serializers selected by `Content-Type` and `Accept`. [Serialization](https://github.com/samgerene/ArgusTransfer/wiki/Serialization)
 - **Hosting** -- integrates with `Microsoft.Extensions.Hosting` and dependency injection, with concurrency limits, request timeouts, graceful shutdown and Windows pipe security for services. [Server Configuration](https://github.com/samgerene/ArgusTransfer/wiki/Server-Configuration)
 
-Requires .NET 10. Developed on Windows and tested on Linux in CI; on Linux and macOS, .NET named pipes are Unix domain sockets, and pipe ACLs (`PipeSecurity`) apply to Windows only.
+Requires .NET 10. Developed on Windows and tested on Linux and Windows in CI; on Linux and macOS, .NET named pipes are Unix domain sockets, and pipe ACLs (`PipeSecurity`) apply to Windows only.
 
 ## Install
 
@@ -82,7 +82,7 @@ public class HelloModule : IArgusModule
 }
 ```
 
-The [Quick Start guide](https://github.com/samgerene/ArgusTransfer/wiki/Quick-Start) walks through a separate server and client, and the [sample project](https://github.com/samgerene/ArgusTransfer/tree/development/ArgusTransfer.Sample) shows a complete CRUD module.
+The [Quick Start guide](https://github.com/samgerene/ArgusTransfer/wiki/Quick-Start) walks through a separate server and client, and the [sample project](https://github.com/samgerene/ArgusTransfer/tree/development/ArgusTransfer.Sample) shows a complete CRUD module with JSON bodies, problem details, authentication, a client retry policy and compression.
 
 ## Documentation
 
