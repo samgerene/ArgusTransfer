@@ -1278,6 +1278,26 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public async Task Verify_that_a_MaxRequestBodySize_of_zero_accepts_a_body_larger_than_the_default_limit()
+        {
+            var pipeName = $"argus-no-body-limit-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(CreateEchoRouter(), new ArgusPipeHostOptions { PipeName = pipeName, MaxRequestBodySize = 0 });
+
+            using var client = new ArgusClient(pipeName);
+
+            // A 2 MB body: twice the default limit of 1 MB
+            var body = new string('x', 2_000_000);
+            var response = await client.PostAsync("/echo", body, timeout: TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Has.Length.EqualTo(body.Length));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
         public async Task Verify_that_oversized_headers_sent_by_ArgusClient_get_BadRequest_promptly()
         {
             var pipeName = $"argus-early-response-header-test-{Guid.NewGuid():N}";
