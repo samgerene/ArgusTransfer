@@ -54,6 +54,10 @@ ArgusTransfer/
 └── Server/          – ArgusPipeHostBackgroundService, ArgusPipeHostOptions
 ```
 
+### Sample
+
+`ArgusTransfer.Sample` shows the recommended patterns (#57): JSON bodies with `Content-Type: application/json` (its own pass-through `JsonArgusBodySerializer`), problem details for invalid input instead of letting `JsonException` become a 500, `AddArgusExceptionHandler`, API key authentication with one `AllowAnonymous()` endpoint, a client retry policy and compression. All registrations live in `Program.ConfigureServices(services, pipeName)` so the tests use exactly what `Main` uses. `SampleClientService` checks the status of every response and throws when it is not the expected one; `ArgusTransfer.Tests/Sample` runs it end to end and tests the module over a pipe. When a feature changes a recommended pattern, update the sample, these tests and the module excerpt in the wiki page "Routing And Modules".
+
 ## Architecture
 
 ### IPC Protocol (ARGUS/1.0)

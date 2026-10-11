@@ -21,7 +21,6 @@
 namespace ArgusTransfer.Sample
 {
     using System;
-    using System.Diagnostics.CodeAnalysis;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -32,10 +31,9 @@ namespace ArgusTransfer.Sample
     using Microsoft.Extensions.Hosting;
 
     /// <summary>
-    /// Background service that acts as a CLI client, executing all CRUD verbs
-    /// sequentially against the sample pipe server and printing results
+    /// Background service that acts as a CLI client: it sends a sequence of requests to the sample pipe server,
+    /// prints each result and checks that the server answered with the expected status
     /// </summary>
-    [ExcludeFromCodeCoverage]
     public class SampleClientService : BackgroundService
     {
         /// <summary>
@@ -81,7 +79,7 @@ namespace ArgusTransfer.Sample
         }
 
         /// <summary>
-        /// Executes the sample CRUD demo sequence
+        /// Executes the sample demo sequence
         /// </summary>
         /// <param name="stoppingToken">
         /// The <see cref="CancellationToken"/> used to signal cancellation
@@ -89,54 +87,51 @@ namespace ArgusTransfer.Sample
         /// <returns>
         /// An awaitable <see cref="Task"/>
         /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the server answers a step with another status than the expected one
+        /// </exception>
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            await Task.Delay(1000, stoppingToken);
-
+            // There is no need to wait for the pipe host: the client's connect waits for the pipe, within the request timeout
             Console.WriteLine("=== ArgusTransfer Sample ===");
             Console.WriteLine();
 
-            // 1. GET /sampleitems — empty list
-            Console.WriteLine("--- Step 1: List all items (expect empty) ---");
-            var response = await this.client.GetAsync("/sampleitems", cancellationToken: stoppingToken);
-            PrintResponse("GET", "/sampleitems", response);
+            Console.WriteLine("--- Step 1: List all items; this endpoint allows anonymous callers ---");
+            var request = CreateRequest(ArgusVerb.GET, "/sampleitems", authenticate: false);
+            await this.SendAsync(request, ArgusStatusCode.Ok, stoppingToken);
 
-            // 2. POST /sampleitems — create a widget
-            Console.WriteLine("--- Step 2: Create a new item ---");
+            Console.WriteLine("--- Step 2: Create an item without credentials (expect 401 problem details) ---");
             var newItem = new { name = "Widget", description = "A sample widget" };
-            var json = JsonSerializer.Serialize(newItem, SerializerOptions);
-            response = await this.client.PostAsync("/sampleitems", json, cancellationToken: stoppingToken);
-            PrintResponse("POST", "/sampleitems", response);
+            request = CreateRequest(ArgusVerb.POST, "/sampleitems", JsonSerializer.Serialize(newItem, SerializerOptions), authenticate: false);
+            await this.SendAsync(request, ArgusStatusCode.Unauthorized, stoppingToken);
+
+            Console.WriteLine("--- Step 3: Create an item from malformed JSON (expect 400 problem details) ---");
+            request = CreateRequest(ArgusVerb.POST, "/sampleitems", "{ \"name\": ");
+            await this.SendAsync(request, ArgusStatusCode.BadRequest, stoppingToken);
+
+            Console.WriteLine("--- Step 4: Create a new item ---");
+            request = CreateRequest(ArgusVerb.POST, "/sampleitems", JsonSerializer.Serialize(newItem, SerializerOptions));
+            var response = await this.SendAsync(request, ArgusStatusCode.Created, stoppingToken);
 
             var created = JsonSerializer.Deserialize<SampleItem>(response.Body, DeserializerOptions);
             var id = created.Id;
 
-            // 3. GET /sampleitems/{id} — read it back
-            Console.WriteLine("--- Step 3: Read the created item ---");
-            response = await this.client.GetAsync($"/sampleitems/{id}", cancellationToken: stoppingToken);
-            PrintResponse("GET", $"/sampleitems/{id}", response);
+            Console.WriteLine("--- Step 5: Read the created item ---");
+            request = CreateRequest(ArgusVerb.GET, $"/sampleitems/{id}");
+            await this.SendAsync(request, ArgusStatusCode.Ok, stoppingToken);
 
-            // 4. PUT /sampleitems/{id} — update it
-            Console.WriteLine("--- Step 4: Update the item ---");
+            Console.WriteLine("--- Step 6: Update the item ---");
             var updatedItem = new { name = "Updated Widget", description = "An updated sample widget" };
-            var updatedJson = JsonSerializer.Serialize(updatedItem, SerializerOptions);
-            response = await this.client.PutAsync($"/sampleitems/{id}", updatedJson, cancellationToken: stoppingToken);
-            PrintResponse("PUT", $"/sampleitems/{id}", response);
+            request = CreateRequest(ArgusVerb.PUT, $"/sampleitems/{id}", JsonSerializer.Serialize(updatedItem, SerializerOptions));
+            await this.SendAsync(request, ArgusStatusCode.Ok, stoppingToken);
 
-            // 5. GET /sampleitems/{id} — verify update
-            Console.WriteLine("--- Step 5: Verify the update ---");
-            response = await this.client.GetAsync($"/sampleitems/{id}", cancellationToken: stoppingToken);
-            PrintResponse("GET", $"/sampleitems/{id}", response);
+            Console.WriteLine("--- Step 7: Delete the item ---");
+            request = CreateRequest(ArgusVerb.DELETE, $"/sampleitems/{id}");
+            await this.SendAsync(request, ArgusStatusCode.Ok, stoppingToken);
 
-            // 6. DELETE /sampleitems/{id} — delete it
-            Console.WriteLine("--- Step 6: Delete the item ---");
-            response = await this.client.DeleteAsync($"/sampleitems/{id}", cancellationToken: stoppingToken);
-            PrintResponse("DELETE", $"/sampleitems/{id}", response);
-
-            // 7. GET /sampleitems — verify empty list
-            Console.WriteLine("--- Step 7: List all items (expect empty) ---");
-            response = await this.client.GetAsync("/sampleitems", cancellationToken: stoppingToken);
-            PrintResponse("GET", "/sampleitems", response);
+            Console.WriteLine("--- Step 8: Read the deleted item (expect 404 problem details) ---");
+            request = CreateRequest(ArgusVerb.GET, $"/sampleitems/{id}");
+            await this.SendAsync(request, ArgusStatusCode.NotFound, stoppingToken);
 
             Console.WriteLine("=== Demo Complete ===");
 
@@ -144,16 +139,98 @@ namespace ArgusTransfer.Sample
         }
 
         /// <summary>
-        /// Prints the verb, route, status code, and response body to the console
+        /// Creates a request that asks for a JSON response, optionally with a JSON body and the credentials of the sample
         /// </summary>
-        /// <param name="verb">The HTTP verb used</param>
-        /// <param name="route">The route requested</param>
-        /// <param name="response">The <see cref="ArgusResponse"/> received</param>
-        private static void PrintResponse(string verb, string route, ArgusResponse response)
+        /// <param name="verb">
+        /// The <see cref="ArgusVerb"/> of the request
+        /// </param>
+        /// <param name="route">
+        /// The route of the request
+        /// </param>
+        /// <param name="json">
+        /// The JSON body, or <c>null</c> for a request without a body
+        /// </param>
+        /// <param name="authenticate">
+        /// <c>true</c> to send the API key of the sample in the <c>Authorization</c> header
+        /// </param>
+        /// <returns>
+        /// The <see cref="ArgusRequest"/>
+        /// </returns>
+        private static ArgusRequest CreateRequest(ArgusVerb verb, string route, string json = null, bool authenticate = true)
         {
-            Console.WriteLine($"{verb} {route} -> {(int)response.StatusCode} {response.StatusCode}");
+            var request = new ArgusRequest
+            {
+                Verb = verb,
+                Route = route,
+                Accept = JsonArgusBodySerializer.JsonContentType
+            };
 
-            if (!string.IsNullOrEmpty(response.Body))
+            if (json != null)
+            {
+                request.Body = json;
+                request.Headers[ArgusHeaderNames.ContentType] = JsonArgusBodySerializer.JsonContentType;
+            }
+
+            if (authenticate)
+            {
+                request.SetAuthorization(SampleApiKeyAuthenticationHandler.Scheme, SampleApiKeyAuthenticationHandler.SampleApiKey);
+            }
+
+            return request;
+        }
+
+        /// <summary>
+        /// Sends the request, prints the response and checks its status
+        /// </summary>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> to send
+        /// </param>
+        /// <param name="expectedStatusCode">
+        /// The <see cref="ArgusStatusCode"/> the server is expected to answer with
+        /// </param>
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task{ArgusResponse}"/> with the response of the server
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the server answers with another status than <paramref name="expectedStatusCode"/>
+        /// </exception>
+        private async Task<ArgusResponse> SendAsync(ArgusRequest request, ArgusStatusCode expectedStatusCode, CancellationToken cancellationToken)
+        {
+            var response = await this.client.SendAsync(request, cancellationToken: cancellationToken);
+
+            PrintResponse(request, response);
+
+            if (response.StatusCode != expectedStatusCode)
+            {
+                throw new InvalidOperationException(
+                    $"{request.Verb} {request.Route} returned {(int)response.StatusCode} {response.StatusCode}; expected {(int)expectedStatusCode} {expectedStatusCode}.");
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Prints the verb, route and status code, followed by the problem details of an error response or the body of
+        /// any other response
+        /// </summary>
+        /// <param name="request">
+        /// The <see cref="ArgusRequest"/> that was sent
+        /// </param>
+        /// <param name="response">
+        /// The <see cref="ArgusResponse"/> received
+        /// </param>
+        private static void PrintResponse(ArgusRequest request, ArgusResponse response)
+        {
+            Console.WriteLine($"{request.Verb} {request.Route} -> {(int)response.StatusCode} {response.StatusCode}");
+
+            if (ArgusProblemDetails.TryRead(response, out var problem))
+            {
+                Console.WriteLine($"{problem.Title}: {problem.Detail}");
+            }
+            else if (!string.IsNullOrEmpty(response.Body))
             {
                 Console.WriteLine(response.Body);
             }
