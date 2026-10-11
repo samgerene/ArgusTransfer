@@ -22,18 +22,19 @@ namespace ArgusTransfer.Sample
 {
     using System;
     using System.Collections.Concurrent;
-    using System.Diagnostics.CodeAnalysis;
     using System.Linq;
     using System.Text.Json;
     using System.Threading.Tasks;
 
+    using ArgusTransfer.Authentication;
     using ArgusTransfer.Protocol;
     using ArgusTransfer.Routing;
 
     /// <summary>
-    /// Argus module that registers CRUD routes for <see cref="SampleItem"/> resources
+    /// Argus module that registers CRUD routes for <see cref="SampleItem"/> resources. Listing the items is open to
+    /// every caller; the other routes require an authenticated caller. Successful responses are JSON, errors are
+    /// <see cref="ArgusProblemDetails"/>.
     /// </summary>
-    [ExcludeFromCodeCoverage]
     public class SampleItemModule : IArgusModule
     {
         /// <summary>
@@ -60,20 +61,13 @@ namespace ArgusTransfer.Sample
         /// </param>
         public void AddRoutes(IArgusRouteBuilder app)
         {
+            // Every endpoint requires an authenticated caller unless it opts out
             app.MapGet("/sampleitems", context =>
             {
-                var items = Store.Values.ToList();
-                var json = JsonSerializer.Serialize(items, SerializerOptions);
-
-                context.Response = new ArgusResponse
-                {
-
-                    StatusCode = ArgusStatusCode.Ok,
-                    Body = json
-                };
+                context.Response = CreateJsonResponse(ArgusStatusCode.Ok, Store.Values.ToList());
 
                 return Task.CompletedTask;
-            });
+            }).AllowAnonymous();
 
             app.MapGet("/sampleitems/{id:Guid}", context =>
             {
@@ -81,37 +75,25 @@ namespace ArgusTransfer.Sample
 
                 if (Store.TryGetValue(id, out var item))
                 {
-                    context.Response = new ArgusResponse
-                    {
-
-                        StatusCode = ArgusStatusCode.Ok,
-                        Body = JsonSerializer.Serialize(item, SerializerOptions)
-                    };
-
-                    return Task.CompletedTask;
+                    context.Response = CreateJsonResponse(ArgusStatusCode.Ok, item);
                 }
-
-                context.Response = new ArgusResponse
+                else
                 {
-
-                    StatusCode = ArgusStatusCode.NotFound
-                };
+                    NotFound(context, id);
+                }
 
                 return Task.CompletedTask;
             });
 
             app.MapPost("/sampleitems", context =>
             {
-                var item = JsonSerializer.Deserialize<SampleItem>(context.Request.Body, SerializerOptions);
-                item.Id = Guid.NewGuid();
-                Store[item.Id] = item;
-
-                context.Response = new ArgusResponse
+                if (TryReadItem(context, out var item))
                 {
+                    item.Id = Guid.NewGuid();
+                    Store[item.Id] = item;
 
-                    StatusCode = ArgusStatusCode.Created,
-                    Body = JsonSerializer.Serialize(item, SerializerOptions)
-                };
+                    context.Response = CreateJsonResponse(ArgusStatusCode.Created, item);
+                }
 
                 return Task.CompletedTask;
             });
@@ -122,25 +104,15 @@ namespace ArgusTransfer.Sample
 
                 if (!Store.ContainsKey(id))
                 {
-                    context.Response = new ArgusResponse
-                    {
-
-                        StatusCode = ArgusStatusCode.NotFound
-                    };
-
-                    return Task.CompletedTask;
+                    NotFound(context, id);
                 }
-
-                var item = JsonSerializer.Deserialize<SampleItem>(context.Request.Body, SerializerOptions);
-                item.Id = id;
-                Store[id] = item;
-
-                context.Response = new ArgusResponse
+                else if (TryReadItem(context, out var item))
                 {
+                    item.Id = id;
+                    Store[id] = item;
 
-                    StatusCode = ArgusStatusCode.Ok,
-                    Body = JsonSerializer.Serialize(item, SerializerOptions)
-                };
+                    context.Response = CreateJsonResponse(ArgusStatusCode.Ok, item);
+                }
 
                 return Task.CompletedTask;
             });
@@ -151,24 +123,101 @@ namespace ArgusTransfer.Sample
 
                 if (Store.TryRemove(id, out var item))
                 {
-                    context.Response = new ArgusResponse
-                    {
-
-                        StatusCode = ArgusStatusCode.Ok,
-                        Body = JsonSerializer.Serialize(item, SerializerOptions)
-                    };
-
-                    return Task.CompletedTask;
+                    context.Response = CreateJsonResponse(ArgusStatusCode.Ok, item);
                 }
-
-                context.Response = new ArgusResponse
+                else
                 {
-
-                    StatusCode = ArgusStatusCode.NotFound
-                };
+                    NotFound(context, id);
+                }
 
                 return Task.CompletedTask;
             });
+        }
+
+        /// <summary>
+        /// Creates a response with a JSON body and the matching <c>Content-Type</c>
+        /// </summary>
+        /// <param name="statusCode">
+        /// The <see cref="ArgusStatusCode"/> of the response
+        /// </param>
+        /// <param name="value">
+        /// The value to serialize as the body
+        /// </param>
+        /// <returns>
+        /// The <see cref="ArgusResponse"/>
+        /// </returns>
+        private static ArgusResponse CreateJsonResponse(ArgusStatusCode statusCode, object value)
+        {
+            var response = new ArgusResponse
+            {
+                StatusCode = statusCode,
+                Body = JsonSerializer.Serialize(value, SerializerOptions)
+            };
+
+            response.Headers[ArgusHeaderNames.ContentType] = JsonArgusBodySerializer.JsonContentType;
+
+            return response;
+        }
+
+        /// <summary>
+        /// Answers the request with a 404 problem details response
+        /// </summary>
+        /// <param name="context">
+        /// The <see cref="ArgusContext"/> of the request
+        /// </param>
+        /// <param name="id">
+        /// The identifier that was not found
+        /// </param>
+        private static void NotFound(ArgusContext context, Guid id)
+        {
+            context.Problem(ArgusStatusCode.NotFound, $"No sample item with id {id} exists.");
+        }
+
+        /// <summary>
+        /// Reads the <see cref="SampleItem"/> from the body of the request. A body that is not valid is the caller's
+        /// mistake, so it is answered with a 400 or 422 problem details response; letting the exception escape
+        /// would turn it into a 500.
+        /// </summary>
+        /// <param name="context">
+        /// The <see cref="ArgusContext"/> of the request; its response is set when the body is not valid
+        /// </param>
+        /// <param name="item">
+        /// The <see cref="SampleItem"/> that was read, or <c>null</c> when the body is not valid
+        /// </param>
+        /// <returns>
+        /// <c>true</c> when the body holds a valid <see cref="SampleItem"/>; otherwise <c>false</c>
+        /// </returns>
+        private static bool TryReadItem(ArgusContext context, out SampleItem item)
+        {
+            item = null;
+
+            try
+            {
+                item = JsonSerializer.Deserialize<SampleItem>(context.Request.Body ?? string.Empty, SerializerOptions);
+            }
+            catch (JsonException exception)
+            {
+                context.Problem(ArgusStatusCode.BadRequest, $"The request body is not valid JSON: {exception.Message}");
+
+                return false;
+            }
+
+            if (item == null)
+            {
+                context.Problem(ArgusStatusCode.BadRequest, "The request body must be a JSON object that describes a sample item.");
+
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(item.Name))
+            {
+                item = null;
+                context.Problem(ArgusStatusCode.UnprocessableEntity, "The name of a sample item must not be empty.");
+
+                return false;
+            }
+
+            return true;
         }
     }
 }

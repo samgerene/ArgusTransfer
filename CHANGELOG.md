@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The protocol version in request and status lines is validated ([#81](https://github.com/samgerene/ArgusTransfer/issues/81)).
 - Documented why `IArgusClient` is `IDisposable` and what `ArgusClient.Dispose` does ([#82](https://github.com/samgerene/ArgusTransfer/issues/82)).
 - The README is restructured into a landing page with a verified quick start ([#61](https://github.com/samgerene/ArgusTransfer/issues/61)).
+- The sample project demonstrates the current feature set: JSON with a `Content-Type`, problem details for invalid input (a malformed body returns 400 instead of 500), the exception handler, authentication, a retry policy and compression. The tests run it end to end ([#57](https://github.com/samgerene/ArgusTransfer/issues/57)).
 - Updated the dependencies.
 
 ### Fixed

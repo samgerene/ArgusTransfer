@@ -39,6 +39,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\ArgusTransfer\ArgusTransfer.csproj" />
+      <ProjectReference Include="..\ArgusTransfer.Sample\ArgusTransfer.Sample.csproj" />
     </ItemGroup>
     
 </Project>

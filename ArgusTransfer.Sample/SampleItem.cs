@@ -21,12 +21,10 @@
 namespace ArgusTransfer.Sample
 {
     using System;
-    using System.Diagnostics.CodeAnalysis;
 
     /// <summary>
     /// A simple POCO model used by the sample CRUD routes
     /// </summary>
-    [ExcludeFromCodeCoverage]
     public class SampleItem
     {
         /// <summary>
