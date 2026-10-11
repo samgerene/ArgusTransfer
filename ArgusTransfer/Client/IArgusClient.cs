@@ -32,6 +32,13 @@ namespace ArgusTransfer.Client
     /// Defines the contract for a client that sends an <see cref="ArgusRequest"/> and receives
     /// an <see cref="ArgusResponse"/> over a named pipe using the ARGUS/1.0 wire protocol
     /// </summary>
+    /// <remarks>
+    /// The contract derives from <see cref="IDisposable"/> so that an implementation can hold resources between
+    /// requests, such as pooled pipe connections, without a breaking change. <see cref="ArgusClient"/> holds none:
+    /// it creates and disposes a pipe connection per request, so disposing it releases nothing and only makes
+    /// later requests throw <see cref="ObjectDisposedException"/>. Dispose a client you created anyway, so that
+    /// your code remains correct for implementations that do hold resources.
+    /// </remarks>
     public interface IArgusClient : IDisposable
     {
         /// <summary>
@@ -54,6 +61,9 @@ namespace ArgusTransfer.Client
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="request"/> is <c>null</c>
+        /// </exception>
+        /// <exception cref="ObjectDisposedException">
+        /// Thrown when the client has been disposed
         /// </exception>
         Task<ArgusResponse> SendAsync(ArgusRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
 

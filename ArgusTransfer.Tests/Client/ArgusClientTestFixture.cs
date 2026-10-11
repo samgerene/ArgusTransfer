@@ -705,6 +705,70 @@ namespace ArgusTransfer.Tests.Client
         }
 
         [Test]
+        public void Verify_that_SendAsync_throws_ObjectDisposedException_after_Dispose()
+        {
+            var client = new ArgusClient("test-pipe");
+
+            client.Dispose();
+
+            Assert.That(
+                async () => await client.SendAsync(new ArgusRequest { Verb = ArgusVerb.GET, Route = "/test" }),
+                Throws.TypeOf<ObjectDisposedException>());
+        }
+
+        [Test]
+        public void Verify_that_convenience_methods_throw_ObjectDisposedException_after_Dispose()
+        {
+            var client = new ArgusClient("test-pipe");
+
+            client.Dispose();
+
+            Assert.That(async () => await client.GetAsync("/test"), Throws.TypeOf<ObjectDisposedException>());
+            Assert.That(async () => await client.PostEnsureSuccessAsync("/test", "body"), Throws.TypeOf<ObjectDisposedException>());
+        }
+
+        [Test]
+        public async Task Verify_that_Dispose_does_not_interrupt_a_request_in_progress()
+        {
+            var pipeName = $"argus-test-{Guid.NewGuid()}";
+            var requestReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var clientDisposed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var serverTask = Task.Run(async () =>
+            {
+                using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut);
+                await server.WaitForConnectionAsync();
+
+                var reader = new StreamReader(server, new UTF8Encoding(false));
+                var writer = new StreamWriter(server, new UTF8Encoding(false)) { AutoFlush = false };
+
+                var request = await this.requestSerializer.ReadAsync(reader, CancellationToken.None);
+                requestReceived.SetResult();
+                await clientDisposed.Task;
+
+                var response = new ArgusResponse
+                {
+                    CorrelationToken = request.CorrelationToken,
+                    StatusCode = ArgusStatusCode.Ok
+                };
+
+                this.responseSerializer.Write(writer, response);
+            });
+
+            var client = new ArgusClient(pipeName);
+            var responseTask = client.GetAsync("/test");
+
+            await requestReceived.Task;
+            client.Dispose();
+            clientDisposed.SetResult();
+
+            var clientResponse = await responseTask;
+            await serverTask;
+
+            Assert.That(clientResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+        }
+
+        [Test]
         public async Task Verify_that_GetEnsureSuccessAsync_returns_response_when_status_is_2xx()
         {
             var pipeName = $"argus-test-{Guid.NewGuid()}";
