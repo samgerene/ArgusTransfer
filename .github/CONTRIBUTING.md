@@ -61,5 +61,19 @@ And remember; **A pull-request with tests is a pull-request that's likely to be 
 - Put `using` statements inside namespace.
 - Pay attention to whitespace and extra blank lines
 - Absolutely **no** regions
+- Start every `.cs` file with the short copyright header shown below, with the `file="..."` attribute equal to the name of the file:
 
-> If you are a ReSharper user, you can make use of our `.DotSettings` file to ensure you cover as many of our style guidelines as possible. There may be some style guidelines which are not covered by the file, so please pay attention to the style of existing code.
+```csharp
+// ------------------------------------------------------------------------------------------------
+// <copyright file="MyClass.cs">
+//
+//   Copyright (c) 2025-2026 Sam Gerené
+//   SPDX-License-Identifier: Apache-2.0
+//
+// </copyright>
+// ------------------------------------------------------------------------------------------------
+```
+
+The `.editorconfig` in the root of the repository states these guidelines, so Visual Studio, Rider and VS Code show violations while you type. Before you send a pull request, run `dotnet format ArgusTransfer.sln` to apply them (it also adds the header to a new file) and `dotnet build ArgusTransfer.sln -warnaserror` to check them; the build of a pull request runs `dotnet format ArgusTransfer.sln --verify-no-changes`.
+
+> If you are a ReSharper or Rider user, the `.DotSettings` file adds the file header template and the naming rules for ReSharper; ReSharper and Rider read the `.editorconfig` as well. Some style guidelines are not covered by either file (regions, descriptive names), so please pay attention to the style of existing code.

@@ -29,8 +29,8 @@ After making code changes, follow this verification sequence before considering 
 
 1. **Build and inspect warnings**: Run `dotnet build ArgusTransfer.sln`. Inspect the output for all warnings (CSxxxx, CAxxxx, IDExxxx). Fix all warnings before proceeding.
 2. **Run tests**: Run `dotnet test ArgusTransfer.sln`. All tests must pass.
-3. **Format check**: Run `dotnet format ArgusTransfer.sln --verify-no-changes`. Fix any formatting violations reported.
-4. **Final strict build**: Run `dotnet build ArgusTransfer.sln -warnaserror` as a final pass. The build must succeed with zero warnings and zero errors.
+3. **Format check**: Run `dotnet format ArgusTransfer.sln --verify-no-changes`. It checks the rules of `.editorconfig`: whitespace, line endings, encoding, the order of `using` directives, the file header and the code-style rules set to `warning`. Run `dotnet format ArgusTransfer.sln` to fix what it reports; the `Build` job in `CodeQuality.yml` runs the same check.
+4. **Final strict build**: Run `dotnet build ArgusTransfer.sln -warnaserror` as a final pass. The build must succeed with zero warnings and zero errors. `Directory.Build.props` sets `EnforceCodeStyleInBuild`, so the build also reports the code-style rules (IDExxxx) of `.editorconfig`.
 
 ## Solution Structure
 
@@ -147,7 +147,8 @@ Authentication: `ArgusAuthenticationMiddleware` calls the singleton `IArgusAuthe
 - **LangVersion**: `14.0`
 - **Nullable**: `disable` in both `ArgusTransfer` and `ArgusTransfer.Tests`
 - **XML doc comments**: required on all public types and members. **Never use `/// <inheritdoc />`** — always write the full `<summary>`, `<param>`, `<returns>`, and `<exception>` blocks on the implementation, even when they duplicate the interface.
-- **License header**: every `.cs` file starts with the Apache-2.0 copyright block, with `<copyright file="{its own file name}">` and `Copyright (c) 2025-2026 Sam Gerené`. `LicenseHeaderTestFixture` checks this, and that the header starts on the first line, for every source file in the three project directories (a new project must be added to its `ProjectDirectories`); the ReSharper template is in `ArgusTransfer.sln.DotSettings`.
+- **Style rules**: `.editorconfig` states the conventions of `.github/CONTRIBUTING.md` (usings inside the namespace, `this.`, braces, block-scoped namespaces, type keywords, naming) as warnings. A new convention that a Roslyn rule can check goes there, not only in this file. `.gitattributes` pins `.cs` and project files to CRLF on every platform.
+- **License header**: every `.cs` file starts with the short copyright block: `<copyright file="{its own file name}">`, `Copyright (c) 2025-2026 Sam Gerené` and `SPDX-License-Identifier: Apache-2.0`. The `file_header_template` in `.editorconfig` defines it and IDE0073 checks it, including the file name; `dotnet format` writes it into a new file. The ReSharper template in `ArgusTransfer.sln.DotSettings` must stay the same text. The template cannot contain `;` or `#`: they start a comment in `.editorconfig`.
 - **Logging in catch clauses**: always pass the caught exception to the logger (`logger.LogWarning(ex, "...")`), never log only a message (Sonar S6667).
 - **No assignments inside conditions**: read the next value before the loop and at the end of its body instead of `while ((x = Read()) != null)` (Sonar S1121).
 - **Don't update a `for` loop's counter in its body**: use a `while` loop with an explicit position when the step varies (Sonar S127).

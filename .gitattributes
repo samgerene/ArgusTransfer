@@ -1,0 +1,13 @@
+# Line-ending policy, independent of a contributor's git configuration (core.autocrlf).
+# Text files are stored with LF in the repository.
+* text=auto
+
+# C# sources and the project files are CRLF in the working tree on every platform. The .editorconfig
+# states the same (end_of_line = crlf), so 'dotnet format --verify-no-changes' gives the same result
+# on Windows, Linux and macOS.
+*.cs     text eol=crlf
+*.csproj text eol=crlf
+*.props  text eol=crlf
+*.sln    text eol=crlf
+
+*.png binary

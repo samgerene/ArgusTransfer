@@ -47,6 +47,11 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}  
         run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
 
+      # Checks the rules of .editorconfig: whitespace, line endings, encoding, using order, the file header and code style.
+      # Last, so that a violation does not stop the analysis above.
+      - name: Verify formatting
+        run: dotnet format ArgusTransfer.sln --no-restore --verify-no-changes
+
   # Named pipes behave differently on Windows (unbuffered pipe instances instead of Unix domain sockets), and some
   # tests only run there ([Platform("Win")]). Analysis and coverage stay in the Linux job above.
   test-windows:
