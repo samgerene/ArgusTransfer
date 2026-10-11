@@ -86,6 +86,17 @@ namespace ArgusTransfer.Server
         public TimeSpan RequestReadTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
         /// <summary>
+        /// Gets or sets the maximum time the host may take to send a complete response -- status line, headers and
+        /// body -- to the client. Defaults to 30 seconds. The pipe is unbuffered, so the host can only send as fast as the
+        /// client reads; when the timeout expires, the host logs a warning and closes the connection, so a client that
+        /// does not read its response, or reads it too slowly, cannot hold a connection indefinitely. The timeout is a
+        /// budget for the whole response and not an idle timeout: for a streamed body it also counts the time the
+        /// handler's stream takes to produce the data. Increase it, or disable it, on a host that streams large or
+        /// long-lived responses. Set to <see cref="Timeout.InfiniteTimeSpan"/> to disable the timeout.
+        /// </summary>
+        public TimeSpan ResponseWriteTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+        /// <summary>
         /// Gets or sets the maximum number of simultaneous client connections, including connections whose request is still
         /// being received. Defaults to 100. When the limit is reached, the host does not read new connections until one is
         /// closed. Depending on the platform, further clients either wait in <c>ConnectAsync</c> or connect immediately

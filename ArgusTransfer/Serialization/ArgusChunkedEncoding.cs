@@ -77,7 +77,7 @@ namespace ArgusTransfer.Serialization
         /// </returns>
         internal static async Task WriteChunkedAsync(Stream source, Stream destination, IArgusContentEncoding encoding = null, CancellationToken cancellationToken = default)
         {
-            await using var chunked = new ArgusChunkedWriteStream(destination);
+            await using var chunked = new ArgusChunkedWriteStream(destination, cancellationToken);
 
             if (encoding == null)
             {

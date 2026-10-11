@@ -21,8 +21,10 @@
 namespace ArgusTransfer.Tests.Serialization
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using System.Text;
+    using System.Threading;
     using System.Threading.Tasks;
 
     using ArgusTransfer.Serialization;
@@ -74,6 +76,92 @@ namespace ArgusTransfer.Tests.Serialization
             Assert.That(() => chunked.Seek(0, SeekOrigin.Begin), Throws.TypeOf<NotSupportedException>());
             Assert.That(() => chunked.SetLength(0), Throws.TypeOf<NotSupportedException>());
             Assert.That(() => chunked.Flush(), Throws.Nothing);
+        }
+
+        [Test]
+        public async Task Verify_that_write_without_a_token_uses_the_token_passed_to_the_constructor()
+        {
+            using var cts = new CancellationTokenSource();
+            using var destination = new TokenRecordingStream();
+            await using var chunked = new ArgusChunkedWriteStream(destination, cts.Token);
+
+            await chunked.WriteAsync(Encoding.ASCII.GetBytes("abc").AsMemory());
+
+            Assert.That(destination.Tokens, Has.Count.EqualTo(3));
+            Assert.That(destination.Tokens, Has.All.EqualTo(cts.Token));
+        }
+
+        [Test]
+        public async Task Verify_that_write_with_a_token_uses_that_token()
+        {
+            using var constructorCts = new CancellationTokenSource();
+            using var writeCts = new CancellationTokenSource();
+            using var destination = new TokenRecordingStream();
+            await using var chunked = new ArgusChunkedWriteStream(destination, constructorCts.Token);
+
+            await chunked.WriteAsync(Encoding.ASCII.GetBytes("abc").AsMemory(), writeCts.Token);
+
+            Assert.That(destination.Tokens, Has.Count.EqualTo(3));
+            Assert.That(destination.Tokens, Has.All.EqualTo(writeCts.Token));
+        }
+
+        [Test]
+        public async Task Verify_that_cancelling_the_constructor_token_cancels_a_write_without_a_token()
+        {
+            using var cts = new CancellationTokenSource();
+            using var destination = new MemoryStream();
+            await using var chunked = new ArgusChunkedWriteStream(destination, cts.Token);
+
+            await cts.CancelAsync();
+
+            Assert.That(
+                async () => await chunked.WriteAsync(Encoding.ASCII.GetBytes("abc").AsMemory()),
+                Throws.InstanceOf<OperationCanceledException>());
+            Assert.That(destination.Length, Is.Zero);
+        }
+
+        [Test]
+        public async Task Verify_that_compressed_chunked_writing_passes_the_token_to_every_write()
+        {
+            using var cts = new CancellationTokenSource();
+            using var destination = new TokenRecordingStream();
+
+            // The compression stream writes its last block when it is disposed, without a token of its own; on an
+            // unbuffered pipe that write must still be cancellable
+            await ArgusChunkedEncoding.WriteChunkedAsync(new MemoryStream(new byte[200]), destination, new GZipArgusContentEncoding(), cts.Token);
+
+            Assert.That(destination.Tokens, Is.Not.Empty);
+            Assert.That(destination.Tokens, Has.All.EqualTo(cts.Token));
+        }
+
+        /// <summary>
+        /// A <see cref="MemoryStream"/> that records the <see cref="CancellationToken"/> of every asynchronous write
+        /// </summary>
+        private sealed class TokenRecordingStream : MemoryStream
+        {
+            /// <summary>
+            /// Gets the tokens of the asynchronous writes, in the order of the writes
+            /// </summary>
+            public List<CancellationToken> Tokens { get; } = new List<CancellationToken>();
+
+            /// <summary>
+            /// Records the token and writes the bytes
+            /// </summary>
+            /// <param name="buffer">
+            /// The data to write
+            /// </param>
+            /// <param name="cancellationToken">
+            /// The <see cref="CancellationToken"/> to record
+            /// </param>
+            /// <returns>
+            /// A <see cref="ValueTask"/> representing the asynchronous operation
+            /// </returns>
+            public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                this.Tokens.Add(cancellationToken);
+
+                return base.WriteAsync(buffer, cancellationToken);
+            }
         }
     }
 }

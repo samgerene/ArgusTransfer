@@ -44,14 +44,26 @@ namespace ArgusTransfer.Serialization
         private readonly Stream destination;
 
         /// <summary>
+        /// The <see cref="CancellationToken"/> of the operation the stream is used in, applied to asynchronous writes whose
+        /// caller passes no token
+        /// </summary>
+        private readonly CancellationToken cancellationToken;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ArgusChunkedWriteStream"/> class
         /// </summary>
         /// <param name="destination">
         /// The <see cref="Stream"/> that receives the chunks
         /// </param>
-        public ArgusChunkedWriteStream(Stream destination)
+        /// <param name="cancellationToken">
+        /// The <see cref="CancellationToken"/> of the operation the stream is used in. It is applied to asynchronous
+        /// writes whose caller passes no token of its own, such as the final block a compression stream writes when it
+        /// is disposed, so that those writes can be cancelled as well
+        /// </param>
+        public ArgusChunkedWriteStream(Stream destination, CancellationToken cancellationToken = default)
         {
             this.destination = destination;
+            this.cancellationToken = cancellationToken;
         }
 
         /// <summary>
@@ -154,7 +166,8 @@ namespace ArgusTransfer.Serialization
         /// The data to write
         /// </param>
         /// <param name="cancellationToken">
-        /// The <see cref="CancellationToken"/> used to signal cancellation
+        /// The <see cref="CancellationToken"/> used to signal cancellation. When it cannot be cancelled, the token passed
+        /// to the constructor is used instead
         /// </param>
         /// <returns>
         /// A <see cref="ValueTask"/> representing the asynchronous operation
@@ -166,9 +179,12 @@ namespace ArgusTransfer.Serialization
                 return;
             }
 
-            await this.destination.WriteAsync(SizeLine(buffer.Length).AsMemory(), cancellationToken);
-            await this.destination.WriteAsync(buffer, cancellationToken);
-            await this.destination.WriteAsync(CrLf.AsMemory(), cancellationToken);
+            // A compression stream writes its last block when it is disposed and passes no token then
+            var token = cancellationToken.CanBeCanceled ? cancellationToken : this.cancellationToken;
+
+            await this.destination.WriteAsync(SizeLine(buffer.Length).AsMemory(), token);
+            await this.destination.WriteAsync(buffer, token);
+            await this.destination.WriteAsync(CrLf.AsMemory(), token);
         }
 
         /// <summary>
