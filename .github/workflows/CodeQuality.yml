@@ -46,3 +46,24 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}  
         run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
+  # Named pipes behave differently on Windows (unbuffered pipe instances instead of Unix domain sockets), and some
+  # tests only run there ([Platform("Win")]). Analysis and coverage stay in the Linux job above.
+  test-windows:
+    name: Test (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v5.1.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore ArgusTransfer.sln
+
+      - name: Build
+        run: dotnet build ArgusTransfer.sln --no-restore
+
+      - name: Run Tests
+        run: dotnet test ArgusTransfer.sln --no-restore --no-build --verbosity normal

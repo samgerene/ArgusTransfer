@@ -293,7 +293,7 @@ namespace ArgusTransfer.Server
 
                             var rejectResponse = CreateProblemResponse(ArgusStatusCode.ServiceUnavailable, ConcurrencyLimitDetail, request);
 
-                            await this.responseSerializer.WriteAsync(serverStream, rejectResponse, requestToken);
+                            await this.WriteResponseAsync(token => this.responseSerializer.WriteAsync(serverStream, rejectResponse, token), requestToken);
                             return;
                         }
 
@@ -320,7 +320,7 @@ namespace ArgusTransfer.Server
                                     $"None of the media types in the Accept header '{request.Accept}' can be produced. Supported media types: {supported}.",
                                     request);
 
-                                await this.responseSerializer.WriteAsync(serverStream, notAcceptable, requestToken);
+                                await this.WriteResponseAsync(token => this.responseSerializer.WriteAsync(serverStream, notAcceptable, token), requestToken);
                                 return;
                             }
                         }
@@ -346,7 +346,7 @@ namespace ArgusTransfer.Server
 
                             var timeoutResponse = CreateProblemResponse(ArgusStatusCode.ServiceUnavailable, RequestTimeoutDetail, request);
 
-                            await this.responseSerializer.WriteAsync(serverStream, timeoutResponse, requestToken);
+                            await this.WriteResponseAsync(token => this.responseSerializer.WriteAsync(serverStream, timeoutResponse, token), requestToken);
                             return;
                         }
                         catch (OperationCanceledException)
@@ -380,7 +380,7 @@ namespace ArgusTransfer.Server
 
                         ArgusCompression.ApplyToResponse(request, context.Response, this.compression);
 
-                        await this.responseSerializer.WriteAsync(serverStream, context.Response, negotiatedContentType, requestToken);
+                        await this.WriteResponseAsync(token => this.responseSerializer.WriteAsync(serverStream, context.Response, negotiatedContentType, token), requestToken);
                     }
                     catch (Exception ex) when (ex is ArgusProtocolException or FormatException)
                     {
@@ -393,7 +393,7 @@ namespace ArgusTransfer.Server
                             // The request could not be read, so there is no correlation token or verb to use
                             var badRequest = CreateProblemResponse(ArgusStatusCode.BadRequest, ex.Message, null);
 
-                            await this.responseSerializer.WriteAsync(serverStream, badRequest, requestToken);
+                            await this.WriteResponseAsync(token => this.responseSerializer.WriteAsync(serverStream, badRequest, token), requestToken);
                         }
                         catch
                         {
@@ -420,6 +420,44 @@ namespace ArgusTransfer.Server
                 var taskId = task.Id;
                 this.activeRequests[taskId] = task;
                 _ = task.ContinueWith(_ => this.activeRequests.TryRemove(taskId, out _), TaskContinuationOptions.ExecuteSynchronously);
+            }
+        }
+
+        /// <summary>
+        /// Writes a response to the client within <see cref="ArgusPipeHostOptions.ResponseWriteTimeout"/>. The host's pipe is
+        /// unbuffered, so a write only completes when the client reads it; without the timeout a client that never reads
+        /// its response would hold the connection and its slots until the host stops. The timeout is a budget for the whole
+        /// response, so for a streamed body it includes the time the handler's stream takes to produce the data. When the
+        /// timeout expires, a warning is logged and the method returns, after which the caller closes the connection.
+        /// </summary>
+        /// <param name="write">
+        /// Writes the response, observing the <see cref="CancellationToken"/> it is given
+        /// </param>
+        /// <param name="requestToken">
+        /// The <see cref="CancellationToken"/> that is cancelled when the shutdown drain expires
+        /// </param>
+        /// <returns>
+        /// An awaitable <see cref="Task"/>
+        /// </returns>
+        private async Task WriteResponseAsync(Func<CancellationToken, Task> write, CancellationToken requestToken)
+        {
+            using var writeTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(requestToken);
+
+            if (this.options.ResponseWriteTimeout != Timeout.InfiniteTimeSpan)
+            {
+                writeTimeoutCts.CancelAfter(this.options.ResponseWriteTimeout);
+            }
+
+            try
+            {
+                await write(writeTimeoutCts.Token);
+            }
+            catch (Exception ex) when ((ex is OperationCanceledException || ex is IOException) && writeTimeoutCts.IsCancellationRequested && !requestToken.IsCancellationRequested)
+            {
+                this.logger.LogWarning(
+                    ex,
+                    "The response was not sent within {ResponseWriteTimeout}; closing the connection.",
+                    this.options.ResponseWriteTimeout);
             }
         }
 

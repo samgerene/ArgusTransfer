@@ -1452,6 +1452,573 @@ namespace ArgusTransfer.Transport.Tests.Server
         }
 
         [Test]
+        public void Verify_that_ResponseWriteTimeout_defaults_to_30_seconds()
+        {
+            Assert.That(new ArgusPipeHostOptions().ResponseWriteTimeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
+        }
+
+        /// <summary>
+        /// The size of a response body that no pipe or socket buffer can hold, so writing it blocks on every platform until
+        /// the client reads
+        /// </summary>
+        private const int UnbufferableBodySize = 8 * 1024 * 1024;
+
+        private const string ResponseNotSentWarning = "The response was not sent within";
+
+        private static ArgusRouter CreateLargeResponseRouter()
+        {
+            var router = new ArgusRouter();
+
+            router.MapGet("/large", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = new string('a', UnbufferableBodySize) };
+                return Task.CompletedTask;
+            });
+
+            router.MapGet("/small", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = "ok" };
+                return Task.CompletedTask;
+            });
+
+            return router;
+        }
+
+        private static async Task<System.IO.Pipes.NamedPipeClientStream> SendRequestWithoutReadingAsync(string pipeName, string route, string accept = null)
+        {
+            var pipe = await ConnectRawAsync(pipeName);
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = route };
+
+            if (accept != null)
+            {
+                request.Accept = accept;
+            }
+
+            await new ArgusRequestSerializer().WriteAsync(pipe, request);
+
+            return pipe;
+        }
+
+        private int CountWarnings(string text)
+        {
+            return this.mockLogger.Invocations.Count(invocation =>
+                invocation.Arguments.Count > 2
+                && invocation.Arguments[0] is LogLevel.Warning
+                && invocation.Arguments[2].ToString().Contains(text));
+        }
+
+        private async Task<bool> WaitForWarningAsync(string text)
+        {
+            var stopwatch = Stopwatch.StartNew();
+
+            while (this.CountWarnings(text) == 0 && stopwatch.Elapsed < TimeSpan.FromSeconds(5))
+            {
+                await Task.Delay(25);
+            }
+
+            return this.CountWarnings(text) > 0;
+        }
+
+        [Test]
+        public async Task Verify_that_client_that_never_reads_the_response_is_disconnected_after_ResponseWriteTimeout()
+        {
+            var pipeName = $"argus-unread-response-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(
+                CreateLargeResponseRouter(),
+                new ArgusPipeHostOptions { PipeName = pipeName, MaxConcurrentConnections = 1, MaxConcurrentRequests = 1, ResponseWriteTimeout = TimeSpan.FromMilliseconds(300) });
+
+            // The client sends a valid request and then never reads the response, holding the only connection slot and
+            // the only request slot
+            await using var silent = await SendRequestWithoutReadingAsync(pipeName, "/large");
+
+            // The host must give up on the response and free both slots, so that another client is served: it would
+            // otherwise wait for the connection slot, or get a 503 for the request slot
+            using var client = new ArgusClient(pipeName);
+            var response = await client.GetAsync("/small", timeout: TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Is.EqualTo("ok"));
+            Assert.That(this.CountWarnings(ResponseNotSentWarning), Is.EqualTo(1));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_client_that_stops_reading_the_response_sees_the_connection_closed()
+        {
+            var pipeName = $"argus-partial-response-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(
+                CreateLargeResponseRouter(),
+                new ArgusPipeHostOptions { PipeName = pipeName, ResponseWriteTimeout = TimeSpan.FromMilliseconds(300) });
+
+            await using var pipe = await SendRequestWithoutReadingAsync(pipeName, "/large");
+
+            // Read the start of the response, then stop reading until the timeout has expired
+            var buffer = new byte[1024];
+            var total = await pipe.ReadAsync(buffer).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.That(total, Is.GreaterThan(0));
+            Assert.That(await this.WaitForWarningAsync(ResponseNotSentWarning), Is.True);
+
+            // What the host had already sent can still be read; then the stream ends before the complete body arrived
+            var read = total;
+
+            try
+            {
+                while (read > 0)
+                {
+                    read = await pipe.ReadAsync(buffer).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+                    total += read;
+                }
+            }
+            catch (System.IO.IOException)
+            {
+                // a closed connection may also surface as a broken pipe
+            }
+
+            Assert.That(total, Is.LessThan(UnbufferableBodySize));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_slow_reader_receives_the_complete_response_when_ResponseWriteTimeout_is_infinite()
+        {
+            var pipeName = $"argus-slow-reader-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(
+                CreateLargeResponseRouter(),
+                new ArgusPipeHostOptions { PipeName = pipeName, ResponseWriteTimeout = Timeout.InfiniteTimeSpan });
+
+            await using var pipe = await SendRequestWithoutReadingAsync(pipeName, "/large");
+
+            await Task.Delay(500);
+
+            var response = await new ArgusResponseSerializer().ReadAsync(pipe, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Has.Length.EqualTo(UnbufferableBodySize));
+            Assert.That(this.CountWarnings(ResponseNotSentWarning), Is.Zero);
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_response_read_within_ResponseWriteTimeout_is_not_cut_off()
+        {
+            var pipeName = $"argus-timely-reader-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(
+                CreateLargeResponseRouter(),
+                new ArgusPipeHostOptions { PipeName = pipeName, ResponseWriteTimeout = TimeSpan.FromSeconds(10) });
+
+            await using var pipe = await SendRequestWithoutReadingAsync(pipeName, "/large");
+
+            await Task.Delay(300);
+
+            var response = await new ArgusResponseSerializer().ReadAsync(pipe, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.That(response.Body, Has.Length.EqualTo(UnbufferableBodySize));
+            Assert.That(this.CountWarnings(ResponseNotSentWarning), Is.Zero);
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        // The tests below cover the host's small built-in responses. They run on Windows only: there the pipe has no
+        // buffer, so even a small response blocks until the client reads. On Linux and macOS the socket buffers a small
+        // response and the write completes without a reader, so there is nothing to time out.
+
+        [Test]
+        [Platform("Win")]
+        public async Task Verify_that_unread_BadRequest_response_times_out_after_ResponseWriteTimeout()
+        {
+            var pipeName = $"argus-unread-400-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(
+                new ArgusRouter(),
+                new ArgusPipeHostOptions { PipeName = pipeName, ResponseWriteTimeout = TimeSpan.FromMilliseconds(300) });
+
+            await using var pipe = await ConnectRawAsync(pipeName);
+            await pipe.WriteAsync(System.Text.Encoding.ASCII.GetBytes("GET /items HTTP/1.1\r\n\r\n"));
+
+            Assert.That(await this.WaitForWarningAsync(ResponseNotSentWarning), Is.True);
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        [Platform("Win")]
+        public async Task Verify_that_unread_concurrency_limit_response_times_out_after_ResponseWriteTimeout()
+        {
+            var pipeName = $"argus-unread-503-test-{Guid.NewGuid():N}";
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var router = new ArgusRouter();
+            router.MapGet("/slow", async context =>
+            {
+                await release.Task;
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok };
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(
+                router,
+                new ArgusPipeHostOptions { PipeName = pipeName, MaxConcurrentRequests = 1, ResponseWriteTimeout = TimeSpan.FromMilliseconds(300) });
+
+            // The first request occupies the only processing slot
+            using var client = new ArgusClient(pipeName);
+            var firstRequest = client.GetAsync("/slow", timeout: TimeSpan.FromSeconds(10));
+            var stopwatch = Stopwatch.StartNew();
+
+            while (hostService.CurrentRequestCount == 0 && stopwatch.Elapsed < TimeSpan.FromSeconds(5))
+            {
+                await Task.Delay(25);
+            }
+
+            // The second request is rejected with 503, which its client never reads
+            await using var silent = await SendRequestWithoutReadingAsync(pipeName, "/slow");
+
+            Assert.That(await this.WaitForWarningAsync(ResponseNotSentWarning), Is.True);
+            Assert.That(hostService.RejectedRequestCount, Is.EqualTo(1));
+
+            release.SetResult();
+            var firstResponse = await firstRequest;
+
+            Assert.That(firstResponse.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        [Platform("Win")]
+        public async Task Verify_that_unread_request_timeout_response_times_out_after_ResponseWriteTimeout()
+        {
+            var pipeName = $"argus-unread-timeout-test-{Guid.NewGuid():N}";
+
+            var router = new ArgusRouter();
+            router.MapGet("/slow", async context =>
+            {
+                await Task.Delay(Timeout.Infinite, context.RequestAborted);
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(
+                router,
+                new ArgusPipeHostOptions { PipeName = pipeName, RequestTimeout = TimeSpan.FromMilliseconds(100), ResponseWriteTimeout = TimeSpan.FromMilliseconds(300) });
+
+            await using var silent = await SendRequestWithoutReadingAsync(pipeName, "/slow");
+
+            Assert.That(await this.WaitForWarningAsync(ResponseNotSentWarning), Is.True);
+            Assert.That(this.CountWarnings("timed out after"), Is.EqualTo(1));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        [Platform("Win")]
+        public async Task Verify_that_unread_NotAcceptable_response_times_out_after_ResponseWriteTimeout()
+        {
+            var pipeName = $"argus-unread-406-test-{Guid.NewGuid():N}";
+
+            var hostService = new ArgusPipeHostBackgroundService(
+                this.mockLogger.Object,
+                new ArgusRouter(),
+                Options.Create(new ArgusPipeHostOptions { PipeName = pipeName, ResponseWriteTimeout = TimeSpan.FromMilliseconds(300) }),
+                new ArgusBodySerializerRegistry(new[] { new PlainTextArgusBodySerializer() }));
+
+            using var cts = new CancellationTokenSource();
+            await hostService.StartAsync(cts.Token);
+
+            await using var silent = await SendRequestWithoutReadingAsync(pipeName, "/items", accept: "application/xml");
+
+            Assert.That(await this.WaitForWarningAsync(ResponseNotSentWarning), Is.True);
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+        }
+
+        [Test]
+        [Platform("Win")]
+        public async Task Verify_that_compressed_streamed_response_that_is_read_partially_times_out_after_ResponseWriteTimeout()
+        {
+            var pipeName = $"argus-unread-gzip-test-{Guid.NewGuid():N}";
+
+            var router = new ArgusRouter();
+            router.MapGet("/stream", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, BodyStream = new System.IO.MemoryStream(new byte[200]) };
+                return Task.CompletedTask;
+            });
+
+            var options = new ArgusPipeHostOptions { PipeName = pipeName, MaxConcurrentConnections = 1, ResponseWriteTimeout = TimeSpan.FromMilliseconds(300) };
+            options.Compression.Enabled = true;
+            options.Compression.MinimumBodySize = 0;
+
+            var (hostService, cts) = await this.StartHostAsync(router, options);
+
+            await using var pipe = await ConnectRawAsync(pipeName);
+            var request = new ArgusRequest { Verb = ArgusVerb.GET, Route = "/stream" };
+            request.Headers[ArgusHeaderNames.AcceptEncoding] = "gzip";
+            await new ArgusRequestSerializer().WriteAsync(pipe, request);
+
+            // Read the header block and the first chunk, then stop. What remains is the last compressed block, which the
+            // compression stream writes when it is disposed, without a cancellation token of its own
+            var head = await ReadUntilAsync(pipe, "\r\n\r\n");
+            var sizeLine = await ReadUntilAsync(pipe, "\r\n");
+            var chunkSize = int.Parse(sizeLine.Trim(), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture);
+            await pipe.ReadExactlyAsync(new byte[chunkSize + 2]).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.That(head, Does.Contain("Content-Encoding: gzip"));
+            Assert.That(await this.WaitForWarningAsync(ResponseNotSentWarning), Is.True);
+
+            // The connection slot is free again
+            using var client = new ArgusClient(pipeName);
+            var response = await client.GetAsync("/stream", timeout: TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_streamed_response_that_is_not_read_times_out_after_ResponseWriteTimeout()
+        {
+            var pipeName = $"argus-unread-stream-test-{Guid.NewGuid():N}";
+
+            var router = CreateLargeResponseRouter();
+            router.MapGet("/stream", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, BodyStream = new System.IO.MemoryStream(new byte[UnbufferableBodySize]) };
+                return Task.CompletedTask;
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(
+                router,
+                new ArgusPipeHostOptions { PipeName = pipeName, MaxConcurrentConnections = 1, ResponseWriteTimeout = TimeSpan.FromMilliseconds(300) });
+
+            // A streamed body is sent as many chunk writes instead of one write; the timeout must reach those as well
+            await using var silent = await SendRequestWithoutReadingAsync(pipeName, "/stream");
+
+            using var client = new ArgusClient(pipeName);
+            var response = await client.GetAsync("/small", timeout: TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(this.CountWarnings(ResponseNotSentWarning), Is.EqualTo(1));
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_client_disconnecting_during_the_response_is_not_logged_as_a_write_timeout()
+        {
+            var pipeName = $"argus-disconnect-during-write-test-{Guid.NewGuid():N}";
+            var (hostService, cts) = await this.StartHostAsync(
+                CreateLargeResponseRouter(),
+                new ArgusPipeHostOptions { PipeName = pipeName, ResponseWriteTimeout = TimeSpan.FromSeconds(10) });
+
+            var pipe = await SendRequestWithoutReadingAsync(pipeName, "/large");
+
+            // Let the host start writing the response, which blocks because nothing is read
+            await Task.Delay(200);
+
+            Assert.That(hostService.GetActiveRequestTasks(), Has.Count.EqualTo(1));
+
+            await pipe.DisposeAsync();
+
+            var stopwatch = Stopwatch.StartNew();
+
+            while (hostService.GetActiveRequestTasks().Count > 0 && stopwatch.Elapsed < TimeSpan.FromSeconds(5))
+            {
+                await Task.Delay(25);
+            }
+
+            // The write failed because the client went away, long before the timeout: that is not a write timeout
+            Assert.That(hostService.GetActiveRequestTasks(), Is.Empty);
+            Assert.That(this.CountWarnings(ResponseNotSentWarning), Is.Zero);
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_handler_running_longer_than_ResponseWriteTimeout_still_gets_its_response_written()
+        {
+            var pipeName = $"argus-slow-handler-test-{Guid.NewGuid():N}";
+
+            var router = new ArgusRouter();
+            router.MapGet("/slow", async context =>
+            {
+                await Task.Delay(600, context.RequestAborted);
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = "done" };
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(
+                router,
+                new ArgusPipeHostOptions { PipeName = pipeName, ResponseWriteTimeout = TimeSpan.FromMilliseconds(200) });
+
+            // The timeout starts when the response is written; the time the handler takes is bounded by RequestTimeout
+            using var client = new ArgusClient(pipeName);
+            var response = await client.GetAsync("/slow", timeout: TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(ArgusStatusCode.Ok));
+            Assert.That(response.Body, Is.EqualTo("done"));
+            Assert.That(this.CountWarnings(ResponseNotSentWarning), Is.Zero);
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_StopAsync_cancels_a_response_write_that_the_client_never_reads()
+        {
+            var pipeName = $"argus-unread-shutdown-test-{Guid.NewGuid():N}";
+            var handlerCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var router = new ArgusRouter();
+            router.MapGet("/large", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, Body = new string('a', UnbufferableBodySize) };
+                handlerCompleted.SetResult();
+                return Task.CompletedTask;
+            });
+
+            // Without a write timeout, only the shutdown drain can end the blocked write
+            var (hostService, cts) = await this.StartHostAsync(
+                router,
+                new ArgusPipeHostOptions { PipeName = pipeName, ResponseWriteTimeout = Timeout.InfiniteTimeSpan, ShutdownDrainTimeout = TimeSpan.FromMilliseconds(100) });
+
+            hostService.CancellationGracePeriod = TimeSpan.FromSeconds(5);
+
+            await using var silent = await SendRequestWithoutReadingAsync(pipeName, "/large");
+            await handlerCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(100);
+
+            var requestTasks = hostService.GetActiveRequestTasks();
+
+            Assert.That(requestTasks, Has.Count.EqualTo(1));
+            Assert.That(requestTasks.Single().IsCompleted, Is.False, "the response write must be blocked on the client that does not read");
+
+            var stopwatch = Stopwatch.StartNew();
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+
+            Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(3)), "the drain must cancel the write well within the grace period");
+            Assert.That(requestTasks.Single().IsCompletedSuccessfully, Is.True);
+            Assert.That(this.CountWarnings(ResponseNotSentWarning), Is.Zero, "a write cancelled by shutdown is not a write timeout");
+            Assert.That(this.CountWarnings("did not finish after cancellation"), Is.Zero);
+
+            cts.Dispose();
+        }
+
+        [Test]
+        public async Task Verify_that_response_streamed_from_a_stalled_source_is_cut_off_after_ResponseWriteTimeout()
+        {
+            var pipeName = $"argus-stalled-source-test-{Guid.NewGuid():N}";
+
+            var router = new ArgusRouter();
+            router.MapGet("/stream", context =>
+            {
+                context.Response = new ArgusResponse { StatusCode = ArgusStatusCode.Ok, BodyStream = new StalledStream() };
+                return Task.CompletedTask;
+            });
+
+            var (hostService, cts) = await this.StartHostAsync(
+                router,
+                new ArgusPipeHostOptions { PipeName = pipeName, ResponseWriteTimeout = TimeSpan.FromMilliseconds(300) });
+
+            // The timeout is a budget for the whole response: the client reads promptly, but the handler's stream stops
+            // producing data, so the response is cut off and the client sees the connection closed
+            using var client = new ArgusClient(pipeName);
+
+            Assert.That(
+                async () => await client.GetAsync("/stream", timeout: TimeSpan.FromSeconds(10)),
+                Throws.InstanceOf<System.IO.IOException>());
+            Assert.That(await this.WaitForWarningAsync(ResponseNotSentWarning), Is.True);
+
+            await cts.CancelAsync();
+            await hostService.StopAsync(CancellationToken.None);
+            cts.Dispose();
+        }
+
+        /// <summary>
+        /// A read-only <see cref="System.IO.Stream"/> that produces one byte and then no more data until the read is cancelled
+        /// </summary>
+        private sealed class StalledStream : System.IO.Stream
+        {
+            private bool firstByteRead;
+
+            public override bool CanRead => true;
+
+            public override bool CanSeek => false;
+
+            public override bool CanWrite => false;
+
+            public override long Length => throw new NotSupportedException();
+
+            public override long Position
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+
+            public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                if (this.firstByteRead)
+                {
+                    await Task.Delay(Timeout.Infinite, cancellationToken);
+                }
+
+                this.firstByteRead = true;
+                buffer.Span[0] = (byte)'a';
+
+                return 1;
+            }
+
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            public override void Flush()
+            {
+                // nothing to flush
+            }
+
+            public override long Seek(long offset, System.IO.SeekOrigin origin) => throw new NotSupportedException();
+
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        }
+
+        private static async Task<string> ReadUntilAsync(System.IO.Stream stream, string terminator)
+        {
+            // One byte at a time, so that nothing beyond the terminator is taken from the pipe
+            var text = new System.Text.StringBuilder();
+            var buffer = new byte[1];
+
+            while (!text.ToString().EndsWith(terminator, StringComparison.Ordinal))
+            {
+                await stream.ReadExactlyAsync(buffer).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+                text.Append((char)buffer[0]);
+            }
+
+            return text.ToString();
+        }
+
+        [Test]
         public void Verify_that_MaxRequestHeaderSize_defaults_to_32_KB()
         {
             Assert.That(new ArgusPipeHostOptions().MaxRequestHeaderSize, Is.EqualTo(32 * 1024));
