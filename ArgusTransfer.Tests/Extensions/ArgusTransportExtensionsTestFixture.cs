@@ -21,7 +21,9 @@
 namespace ArgusTransfer.Tests.Extensions
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
+    using System.Reflection;
 
     using ArgusTransfer.Client;
     using ArgusTransfer.Extensions;
@@ -30,6 +32,7 @@ namespace ArgusTransfer.Tests.Extensions
     using ArgusTransfer.Serialization;
     using ArgusTransfer.Server;
 
+    using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Logging;
@@ -333,6 +336,51 @@ namespace ArgusTransfer.Tests.Extensions
             var hostedServices = provider.GetServices<IHostedService>().ToList();
 
             Assert.That(hostedServices.OfType<ArgusPipeHostBackgroundService>().Count(), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Verify_that_AddArgusPipeHost_with_an_invalid_option_fails_when_the_host_is_created()
+        {
+            var services = new ServiceCollection();
+
+            services.AddLogging();
+            services.AddSingleton<ArgusRouter>();
+            services.AddArgusPipeHost(options => options.RequestReadTimeout = TimeSpan.FromSeconds(-30));
+
+            var provider = services.BuildServiceProvider();
+
+            // The generic host resolves its hosted services when it starts, so the invalid option stops the startup with
+            // an exception that names it, instead of failing every request later
+            Assert.That(
+                () => provider.GetServices<IHostedService>().ToList(),
+                Throws.TypeOf<ArgumentOutOfRangeException>().With.Message.Contains(nameof(ArgusPipeHostOptions.RequestReadTimeout)));
+            Assert.That(
+                () => provider.GetRequiredService<IOptions<ArgusPipeHostOptions>>().Value,
+                Throws.TypeOf<ArgumentOutOfRangeException>());
+        }
+
+        [Test]
+        public void Verify_that_an_invalid_option_bound_from_configuration_fails_with_an_exception_that_names_the_option()
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string> { ["Argus:RequestReadTimeout"] = "-00:00:30" })
+                .Build();
+
+            var services = new ServiceCollection();
+
+            services.AddLogging();
+            services.AddSingleton<ArgusRouter>();
+            services.Configure<ArgusPipeHostOptions>(configuration.GetSection("Argus"));
+            services.AddArgusPipeHost();
+
+            var provider = services.BuildServiceProvider();
+
+            // The configuration binder sets the option through reflection, which wraps the exception of the setter
+            Assert.That(
+                () => provider.GetServices<IHostedService>().ToList(),
+                Throws.TypeOf<TargetInvocationException>()
+                    .With.InnerException.TypeOf<ArgumentOutOfRangeException>()
+                    .And.InnerException.Message.Contains(nameof(ArgusPipeHostOptions.RequestReadTimeout)));
         }
 
         [Test]
