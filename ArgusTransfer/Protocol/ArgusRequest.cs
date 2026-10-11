@@ -1,22 +1,11 @@
-﻿// -------------------------------------------------------------------------------------------------
-//   <copyright file="ArgusRequest.cs">
-// 
-//     Copyright (c) 2025-2026 Sam Gerené
-// 
-//     Licensed under the Apache License, Version 2.0 (the "License");
-//     you may not use this file except in compliance with the License.
-//     You may obtain a copy of the License at
-// 
-//         http://www.apache.org/licenses/LICENSE-2.0
-// 
-//     Unless required by applicable law or agreed to in writing, software
-//     distributed under the License is distributed on an "AS IS" BASIS,
-//     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//     See the License for the specific language governing permissions and
-//     limitations under the License.
-// 
-//   </copyright>
-//   ------------------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+// <copyright file="ArgusRequest.cs">
+//
+//   Copyright (c) 2025-2026 Sam Gerené
+//   SPDX-License-Identifier: Apache-2.0
+//
+// </copyright>
+// ------------------------------------------------------------------------------------------------
 
 namespace ArgusTransfer.Protocol
 {
@@ -56,16 +45,16 @@ namespace ArgusTransfer.Protocol
         /// </summary>
         public string Accept
         {
-            get => Headers.TryGetValue(ArgusHeaderNames.Accept, out var value) ? value : null;
+            get => this.Headers.TryGetValue(ArgusHeaderNames.Accept, out var value) ? value : null;
             set
             {
                 if (string.IsNullOrEmpty(value))
                 {
-                    Headers.Remove(ArgusHeaderNames.Accept);
+                    this.Headers.Remove(ArgusHeaderNames.Accept);
                 }
                 else
                 {
-                    Headers[ArgusHeaderNames.Accept] = value;
+                    this.Headers[ArgusHeaderNames.Accept] = value;
                 }
             }
         }
@@ -80,17 +69,17 @@ namespace ArgusTransfer.Protocol
         /// </exception>
         public string Authorization
         {
-            get => Headers.TryGetValue(ArgusHeaderNames.Authorization, out var value) ? value : null;
+            get => this.Headers.TryGetValue(ArgusHeaderNames.Authorization, out var value) ? value : null;
             set
             {
                 if (string.IsNullOrWhiteSpace(value))
                 {
-                    Headers.Remove(ArgusHeaderNames.Authorization);
+                    this.Headers.Remove(ArgusHeaderNames.Authorization);
                     return;
                 }
 
                 EnsureNoLineBreaks(value, nameof(value));
-                Headers[ArgusHeaderNames.Authorization] = value.Trim();
+                this.Headers[ArgusHeaderNames.Authorization] = value.Trim();
             }
         }
 
